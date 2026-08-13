@@ -258,7 +258,7 @@ function renderToday(){
     : '<ul class="list">'+sorted.map(function(i){ return '<li class="row"><button class="check" data-act="s-toggle" data-id="'+i.id+'">✓</button><span class="row-text">'+esc(i.text)+'</span><button class="star '+(i.star?"on":"")+'" data-act="s-star" data-id="'+i.id+'">'+(i.star?"★":"☆")+'</button><button class="del" data-act="s-del" data-id="'+i.id+'">✕</button></li>'; }).join("")
       + done.map(function(i){ return '<li class="row done"><button class="check on" data-act="s-toggle" data-id="'+i.id+'">✓</button><span class="row-text">'+esc(i.text)+'</span><button class="del" data-act="s-del" data-id="'+i.id+'">✕</button></li>'; }).join("")+'</ul>';
   view().innerHTML='<div class="page">'
-    + '<header class="today-hero"><div class="today-date">'+esc(dateStr)+'</div><h1 class="today-greet">'+greet+', 이랑님.</h1><p class="today-line">오늘 할 일 '+open.length+'건'+(open.length?" 남았어요.":"이 없어요.")+(todayEv.length?" · 오늘 일정 "+todayEv.length+"건.":"")+'</p></header>'
+    + '<header class="today-hero"><div class="today-date">'+esc(dateStr)+'</div><h1 class="today-greet">'+greet+', 이랑님. 👋</h1><p class="today-line">오늘 할 일 '+open.length+'건'+(open.length?" 남았어요.":"이 없어요.")+(todayEv.length?" · 오늘 일정 "+todayEv.length+"건.":"")+'</p></header>'
     + '<section class="stat-row">'
     +   '<button class="stat" data-act="tab" data-id="articles"><span class="stat-num">'+inProg+'</span><span class="stat-lbl">작성 중 기고글</span></button>'
     +   '<button class="stat" data-act="tab" data-id="mfds"><span class="stat-num">'+mfdsOpen+'</span><span class="stat-lbl">진행 중 식약처 업무</span></button>'

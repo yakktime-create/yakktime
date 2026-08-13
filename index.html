@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<title>이랑 업무 데스크</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="loading-overlay" id="loading">
+  <div class="loading-text">연결 중<span class="loading-dot">.</span><span class="loading-dot">.</span><span class="loading-dot">.</span></div>
+</div>
+<div class="sync-toast" id="sync-toast"></div>
+
+<!-- 로그인 화면 -->
+<div id="login-screen" style="display:none;">
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--paper);padding:20px;">
+    <div style="width:100%;max-width:360px;">
+      <div style="text-align:center;margin-bottom:32px;">
+        <div style="display:inline-grid;place-items:center;width:52px;height:52px;border-radius:14px;background:var(--accent);color:#fff;font-size:28px;font-weight:600;margin-bottom:14px;">℞</div>
+        <div style="font-size:22px;font-weight:680;letter-spacing:-.02em;font-family:Georgia,serif;">이랑 업무 데스크</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px;letter-spacing:.14em;text-transform:uppercase;">personal hub</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:28px;">
+        <div style="font-size:15px;font-weight:600;margin-bottom:18px;">로그인</div>
+        <input class="input" id="login-email" type="email" placeholder="이메일" style="width:100%;margin-bottom:10px;" />
+        <input class="input" id="login-pw" type="password" placeholder="비밀번호" style="width:100%;margin-bottom:16px;" />
+        <div id="login-err" style="display:none;color:var(--brick);font-size:12.5px;margin-bottom:12px;"></div>
+        <button class="btn" id="login-btn" style="width:100%;justify-content:center;">로그인</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 메인 앱 (로그인 후 보임) -->
+<div id="app" style="display:none;">
+  <nav class="rail">
+    <div class="brand"><span class="brand-mark">℞</span><div><div class="brand-title">이랑 업무 데스크</div><div class="brand-sub">personal hub</div></div></div>
+    <div class="rail-tabs" id="tabs"></div>
+    <div class="rail-foot">
+      <button class="foot-btn" data-act="export">데이터 백업(내보내기)</button>
+      <button class="foot-btn" data-act="import">백업 불러오기</button>
+      <button class="foot-btn" data-act="logout" style="color:var(--brick);border-color:var(--brick);">로그아웃</button>
+    </div>
+  </nav>
+  <main class="main"><div id="view"></div></main>
+</div>
+<input type="file" id="file" accept="application/json" style="display:none" />
+<input type="file" id="docfile" style="display:none" />
+<input type="file" id="docxfile" accept=".docx" style="display:none" />
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+</body>
+</html>

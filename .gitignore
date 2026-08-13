@@ -1,0 +1,4 @@
+.DS_Store
+OPUS 4.8 생성/
+*.log
+node_modules/

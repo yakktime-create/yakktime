@@ -1210,6 +1210,47 @@ function saveLawPages(lawId,pages){
   return chunk();
 }
 
+/* 조문 판별 규칙이 나아질 때마다 다시 올리지 않아도 되게,
+ * 이미 저장된 쪽 텍스트만으로 조문 정보를 다시 계산한다 (PDF 안 받음). */
+function lawReindex(id){
+  if(lawBusy) return;
+  var l=S.laws.find(function(x){ return x.id===id; });
+  if(!l) return;
+  lawBusy=true; render();
+  showToast("쪽을 읽는 중...");
+  withAuthRetry(function(){
+    return sb.from("law_pages").select("id,law_id,page,content").eq("law_id",id).order("page");
+  }).then(function(res){
+    if(res.error) throw new Error("쪽을 읽지 못했어요: "+res.error.message);
+    var rows=res.data||[];
+    if(!rows.length) throw new Error("저장된 쪽이 없어요.");
+    var carry="";
+    rows.forEach(function(r){
+      r.article=carry||null;
+      var a=findArticles(r.content||"");
+      if(a.length) carry=a[a.length-1].label;
+    });
+    var i=0;
+    function chunk(){
+      if(i>=rows.length) return Promise.resolve();
+      var part=rows.slice(i,i+50); i+=50;
+      showToast("조문 계산 "+Math.min(i,rows.length)+"/"+rows.length+"쪽");
+      return withAuthRetry(function(){ return sb.from("law_pages").upsert(part); }).then(function(r2){
+        if(r2.error) throw new Error("저장 실패: "+r2.error.message);
+        return chunk();
+      });
+    }
+    return chunk();
+  }).then(function(){
+    lawBusy=false; lawArtCol=true;
+    if(lawQuery) lawSearch(); else render();
+    showToast("✓ 조문 정보를 다시 계산했어요");
+  }).catch(function(err){
+    lawBusy=false; render();
+    showToast((err&&err.message)||"다시 계산하지 못했어요.",true);
+  });
+}
+
 function lawName(id){
   var l=S.laws.find(function(x){ return x.id===id; });
   return l?l.name:"(삭제된 법령)";
@@ -1332,17 +1373,41 @@ function openLawPdf(id,page){
  *   괄호 제목을 조건으로 걸면 참조와 머리말이 깔끔하게 갈린다.
  * PDF에서 뽑은 글자는 띄어쓰기가 들쭉날쭉해서(제 12 조 ( 보관 )) 공백을 허용한다. */
 var ART_RE=/제\s*(\d+)\s*조(?:\s*의\s*(\d+))?\s*\(\s*([^()]{1,40}?)\s*\)/g;
+/* 별표는 "■ 법령명 [별표 6의2] <개정 …> 의약품등 수입관리 기준 (제60조 관련)" 꼴 */
+var BP_RE=/\[\s*별\s*표\s*(\d+)(?:\s*의\s*(\d+))?\s*\]\s*(?:<[^<>]{0,40}>\s*)?([^()\[\]<>]{0,40}?)\s*(?=\(|\[|$)/g;
 var HANG="①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";
 
-/* 한 쪽 안의 조문 머리말 위치를 모두 찾는다 (쪽마다 한 번만 계산) */
+/* 괄호 안이 제목이 아니라 다른 조문을 가리키는 참조인 경우를 걸러낸다.
+ * 행정처분 기준 같은 표에서 "법 제47조(이 규칙 제62조)" 처럼
+ * 근거법령 칸이 통째로 머리말처럼 보이는 일이 있다. */
+function isRefTitle(t){
+  var c=t.replace(/\s+/g,"");
+  if(!c) return true;
+  if(/제\d+조/.test(c)) return true;              /* "이 규칙 제62조" */
+  if(/^(이|같은)(규칙|법|영|고시)/.test(c)) return true;
+  if(/^\d+$/.test(c)) return true;
+  return false;
+}
+
+/* 한 쪽 안의 조문·별표 머리말 위치를 모두 찾는다 (쪽마다 한 번만 계산) */
 function findArticles(text){
   var out=[], m;
   ART_RE.lastIndex=0;
   while((m=ART_RE.exec(text))!==null){
+    var title=m[3].replace(/\s+/g," ").trim();
+    if(isRefTitle(title)) continue;
     out.push({ at:m.index, end:m.index+m[0].length,
-      label:"제"+m[1]+"조"+(m[2]?"의"+m[2]:"")+"("+m[3].replace(/\s+/g," ").trim()+")" });
+      label:"제"+m[1]+"조"+(m[2]?"의"+m[2]:"")+"("+title+")" });
     if(out.length>200) break;
   }
+  BP_RE.lastIndex=0;
+  while((m=BP_RE.exec(text))!==null){
+    var t2=(m[3]||"").replace(/\s+/g," ").trim();
+    out.push({ at:m.index, end:m.index+m[0].length, table:true,
+      label:"별표 "+m[1]+(m[2]?"의"+m[2]:"")+(t2.length>1?"("+t2+")":"") });
+    if(out.length>220) break;
+  }
+  out.sort(function(a,b){ return a.at-b.at; });
   return out;
 }
 
@@ -1368,7 +1433,7 @@ function articleAt(arts,text,at,carried){
  * PDF에서 뽑으면 전부 한 줄로 이어져 읽기가 어렵다. */
 
 var META_RE=/<[^<>]{0,60}>|\[[^\[\]]{0,60}\]/g;          /* <개정 2024. 12. 30.> [본조신설 …] */
-var RUNHEAD_RE=/^법제처\s*\d+\s*국가법령정보센터\s*/;      /* 쪽마다 반복되는 머리글 */
+var RUNHEAD_RE=/^(?:법제처\s*\d+\s*국가법령정보센터|■[^\[]{0,60}(?=\[))\s*/;  /* 쪽마다 반복되는 머리글 */
 
 /* 끊을 자리 찾기 — 날짜(<개정 2022. 12. 29.>)를 호로 오인하지 않도록
  * < > 나 [ ] 안쪽은 아예 건너뛴다 */
@@ -1481,70 +1546,6 @@ function openLawPdf(id,page){
   });
 }
 
-/* ---------- 조문 찾기 ----------
- * 추출된 텍스트에서 "제12조(보관)" 같은 조문 머리말을 찾아,
- * 검색어가 어느 조 안에 있는지 알려준다.
- *
- * 제목이 붙은 괄호를 반드시 요구하는 이유:
- *   "제31조제2항에 따라" 처럼 다른 조를 가리키는 말이 본문에 흔한데,
- *   조문 머리말은 법제처 문서에서 항상 "제N조(제목)" 꼴이다.
- *   괄호 제목을 조건으로 걸면 참조와 머리말이 깔끔하게 갈린다.
- * PDF에서 뽑은 글자는 띄어쓰기가 들쭉날쭉해서(제 12 조 ( 보관 )) 공백을 허용한다. */
-var ART_RE=/제\s*(\d+)\s*조(?:\s*의\s*(\d+))?\s*\(\s*([^()]{1,40}?)\s*\)/g;
-var HANG="①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";
-
-/* 한 쪽 안의 조문 머리말 위치를 모두 찾는다 (쪽마다 한 번만 계산) */
-function findArticles(text){
-  var out=[], m;
-  ART_RE.lastIndex=0;
-  while((m=ART_RE.exec(text))!==null){
-    out.push({ at:m.index, end:m.index+m[0].length,
-      label:"제"+m[1]+"조"+(m[2]?"의"+m[2]:"")+"("+m[3].replace(/\s+/g," ").trim()+")" });
-    if(out.length>200) break;
-  }
-  return out;
-}
-
-/* 그 위치가 속한 조문 + 항(①②③...)
- * 이 쪽에 머리말이 없으면 앞 쪽에서 이어진 조(carried)를 쓴다.
- * 조 하나가 여러 쪽에 걸치는 게 보통이라 이게 없으면 대부분의 결과에 조가 안 붙는다. */
-function articleAt(arts,text,at,carried){
-  var found=null, label=null, from=0;
-  for(var i=0;i<arts.length;i++){ if(arts[i].at<=at) found=arts[i]; else break; }
-  if(found){ label=found.label; from=found.end; }
-  else if(carried){ label=carried; from=0; }
-  else return null;
-  var hang="";
-  for(var j=at;j>from;j--){
-    if(HANG.indexOf(text.charAt(j))>=0){ hang=text.charAt(j); break; }
-  }
-  return label+(hang?" "+hang:"");
-}
-
-/* 본문에서 조문 머리말은 굵게, 검색어는 형광펜 — 한 번에 처리한다 */
-function decorateLawText(text,q){
-  var ranges=findArticles(text).map(function(a){ return {s:a.at,e:a.end,t:"art"}; });
-  if(q&&q.length>=2){
-    var lt=text.toLowerCase(), lq=q.toLowerCase(), from=0;
-    while(true){
-      var at=lt.indexOf(lq,from); if(at<0) break;
-      var e=at+q.length;
-      /* 조문 머리말과 겹치면 형광펜은 건너뛴다 */
-      var clash=ranges.some(function(r){ return r.t==="art"&&at<r.e&&e>r.s; });
-      if(!clash) ranges.push({s:at,e:e,t:"q"});
-      from=e;
-    }
-  }
-  ranges.sort(function(a,b){ return a.s-b.s; });
-  var out="", pos=0;
-  ranges.forEach(function(r){
-    if(r.s<pos) return;
-    out+=esc(text.slice(pos,r.s));
-    out+=(r.t==="art"?'<b class="lv-art">':'<mark>')+esc(text.slice(r.s,r.e))+(r.t==="art"?'</b>':'</mark>');
-    pos=r.e;
-  });
-  return out+esc(text.slice(pos));
-}
 
 function renderLawModal(){
   var el=document.getElementById("law-modal"); if(!el) return;
@@ -1568,6 +1569,9 @@ function renderLawModal(){
   var artBar=head0
     ? '<div class="lv-arts">'+esc(head0)+(tail0!==head0?'  ~  '+esc(tail0):'')+'</div>'
     : '';
+  /* 별표는 대개 표·서식이라 글자만 뽑으면 칸 구분이 사라진다 */
+  if(head0.indexOf("별표")===0)
+    artBar+='<div class="lv-hint">표로 된 쪽이면 글자만으로는 칸이 구분되지 않아요. 정확한 형태는 PDF 원문을 보세요.</div>';
 
   el.innerHTML='<div class="lv-back" data-act="lv-close"></div>'
     + '<div class="lv-panel" role="dialog">'
@@ -1662,6 +1666,7 @@ function renderLaws(){
         + '<span class="doc-ic file">▤</span>'
         + '<span class="law-name" data-act="edit" data-table="laws" data-field="name" data-id="'+l.id+'" title="눌러서 이름 수정">'+esc(l.name)+'</span>'
         + '<span class="law-pages">'+(l.pages||0)+'쪽</span>'
+        + '<button class="link-btn" data-act="law-reindex" data-id="'+l.id+'" title="조문 판별을 다시 돌립니다">조문 다시 계산</button>'
         + '<button class="doc-act" data-act="law-pdf" data-id="'+l.id+'" data-page="1">PDF ↗</button>'
         + '<button class="del doc-del" data-act="law-del" data-id="'+l.id+'" title="삭제">✕</button></div>';
     }).join("")+'</div>';
@@ -1785,6 +1790,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "law-search": lawSearch(); break;
     case "law-list": lawListOpen=!lawListOpen; render(); break;
     case "law-view": openLawView(id,parseInt(el.getAttribute("data-page"),10)||1); break;
+    case "law-reindex": lawReindex(id); break;
     case "law-pdf": openLawPdf(id,parseInt(el.getAttribute("data-page"),10)||1); break;
     case "lv-close": closeLawView(); break;
     case "lv-prev": lawViewStep(-1); break;

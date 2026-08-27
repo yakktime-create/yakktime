@@ -631,13 +631,15 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 .lv-text mark{background:#F7E7A8;color:var(--ink);font-weight:700;border-radius:3px;padding:1px 2px;}
 
 /* 조 → 항 → 호 → 목 을 들여쓰기로 보여준다 (글자는 그대로) */
-.lp{margin:0 0 10px;}
+/* 단계는 들여쓰기로만 구분한다 — 단계마다 글자 크기를 줄이면
+ * 문단마다 크기가 달라져 지저분해 보인다 */
+.lp{margin:0 0 11px;}
 .lp0{margin-top:20px;padding-top:16px;border-top:1px solid var(--line);}
 .lp0:first-child{margin-top:0;padding-top:0;border-top:none;}
-.lp1{margin-left:14px;}
-.lp2{margin-left:32px;font-size:13.5px;}
-.lp3{margin-left:50px;font-size:13.5px;color:#4E5B53;}
-.lp4{margin-left:68px;font-size:13px;color:#5A6760;}
+.lp1{margin-left:16px;}
+.lp2{margin-left:34px;}
+.lp3{margin-left:52px;}
+.lp4{margin-left:70px;}
 .lp-art{display:block;margin-bottom:7px;font-size:15px;font-weight:750;color:var(--blue-deep);
   letter-spacing:-.01em;}
 .lp-meta{color:#93A09A;font-size:11.5px;}

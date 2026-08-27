@@ -1444,6 +1444,26 @@ var META_RE=/<[^<>]{0,60}>|\[[^\[\]]{0,60}\]/g;          /* <개정 2024. 12. 30
 var MOK="가나다라마바사아자차카타파하거너더러머버서어저처커터퍼허고노도로모보소오조초코토포호";
 var RUNHEAD_RE=/^(?:법제처\s*\d+\s*국가법령정보센터|■[^\[]{0,60}(?=\[))\s*/;  /* 쪽마다 반복되는 머리글 */
 
+/* 별표 안의 절 제목 — "5.2 제조관리", "4.3 제품관리기준서" 꼴.
+ * 제목 길이는 14자에서 끊는다. 뒤에 이어지는 본문까지 굵어지지 않게. */
+var SEC_RE=/^(\d{1,2}(?:\.\d{1,2}){1,2})\s+(?=[가-힣])/;
+function secHeadLen(text,at){
+  var m=SEC_RE.exec(text.slice(at,at+14));
+  if(!m) return 0;
+  var pos=at+m[0].length, len=m[0].length, title=0;
+  while(pos<text.length&&title<14){
+    var sp=text.indexOf(" ",pos);
+    var tok=(sp<0?text.slice(pos):text.slice(pos,sp));
+    if(!tok||!/^[가-힣()ㆍ·]/.test(tok)) break;   /* "품질 ( 보증 ) 부서" 처럼 괄호가 낀 제목 */
+    /* 다음이 목·호 표시면 제목 끝 */
+    if(tok.length===1&&MOK.indexOf(tok)>=0) break;
+    if(title+tok.length>14) break;
+    title+=tok.length+1; len+=tok.length+(sp<0?0:1);
+    pos=(sp<0?text.length:sp+1);
+  }
+  return len;
+}
+
 /* 끊을 자리 찾기 — 날짜(<개정 2022. 12. 29.>)를 호로 오인하지 않도록
  * < > 나 [ ] 안쪽은 아예 건너뛴다 */
 function lawBreaks(text){
@@ -1454,6 +1474,19 @@ function lawBreaks(text){
 
   var pts=[];
   findArticles(text).forEach(function(a){ if(!inSkip(a.at)) pts.push({at:a.at,lv:0,len:a.end-a.at}); });
+
+  /* 절 제목 (5.2 제조관리). 화면에만 쓰고 조문 판별에는 넣지 않는다 —
+   * 넣으면 "별표 3" 같은 상위 맥락이 절 제목으로 덮여버린다. */
+  for(var si=0;si<text.length;si++){
+    if(inSkip(si)) continue;
+    if(si>0&&!/\s/.test(text.charAt(si-1))) continue;
+    if(!/\d/.test(text.charAt(si))) continue;
+    /* "별표 1 제 7.1 호다목" 처럼 조문 참조 안의 숫자는 제목이 아니다 */
+    var before=text.slice(Math.max(0,si-3),si).replace(/\s+/g,"");
+    if(before.slice(-1)==="제") continue;
+    var sl=secHeadLen(text,si);
+    if(sl>0) pts.push({at:si,lv:0,len:sl});
+  }
 
   for(var i=0;i<text.length;i++){
     if(inSkip(i)) continue;

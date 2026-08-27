@@ -19,6 +19,7 @@ var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 function pad(n){ return (n<10?"0":"")+n; }
 function keyOf(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+function tomorrow(){ var d=new Date(); d.setDate(d.getDate()+1); return d; }
 
 /* ========== 동기화 토스트 ========== */
 var _toastTimer=null;
@@ -158,6 +159,8 @@ function toLocal(table,row){
     /* events */
     if(k==="event_date") lk="key";
     else if(k==="event_time") lk="time";
+    /* schedule */
+    else if(k==="due_date") lk="due";
     /* archive */
     else if(k==="needs_check") lk="needsCheck";
     /* archive+docs 공통 */
@@ -179,6 +182,8 @@ function toRemote(table,item){
     /* events */
     if(k==="key"&&table==="events") rk="event_date";
     else if(k==="time"&&table==="events") rk="event_time";
+    /* schedule */
+    else if(k==="due"&&table==="schedule") rk="due_date";
     /* archive */
     else if(k==="needsCheck") rk="needs_check";
     /* archive+docs 공통 */
@@ -321,13 +326,63 @@ function segValue(name){ var on=document.querySelector('[data-seg="'+name+'"] .s
 function val(id){ var e=document.getElementById(id); return e?e.value:""; }
 function evSort(a,b){ if(a.key!==b.key) return a.key<b.key?-1:1; var ta=a.time||"99:99", tb=b.time||"99:99"; return ta<tb?-1:ta>tb?1:0; }
 
+/* ========== 인라인 편집 ==========
+ * 목록의 텍스트를 한 번 누르면 그 자리에서 input으로 바뀐다.
+ *   Enter / 포커스 아웃 → 저장,  Esc → 취소
+ * data-act="edit" data-table="..." data-field="..." data-id="..." 만 붙이면 동작한다.
+ * 편집 중에는 render()가 input을 날려버리므로 editingId로 재진입을 막는다. */
+var editingId=null;
+function startEdit(el,table,id,field){
+  if(!el||editingId||!S[table]) return;
+  var item=S[table].find(function(x){ return x.id===id; });
+  if(!item) return;
+  editingId=id;
+  var cur=item[field]==null?"":String(item[field]);
+  var inp=document.createElement("input");
+  inp.className="input inline-edit";
+  inp.value=cur;
+  el.replaceWith(inp);
+  inp.focus();
+  try{ inp.setSelectionRange(cur.length,cur.length); }catch(e){}
+  var settled=false;
+  function commit(save){
+    if(settled) return;
+    settled=true; editingId=null;
+    var nv=inp.value.trim();
+    if(save&&nv&&nv!==cur){
+      item[field]=nv;
+      var patch={}; patch[field]=nv;
+      dbUpdate(table,id,patch);
+    }
+    render();
+  }
+  inp.addEventListener("keydown",function(e){
+    if(e.key==="Enter"){ e.preventDefault(); commit(true); }
+    else if(e.key==="Escape"){ e.preventDefault(); commit(false); }
+  });
+  inp.addEventListener("blur",function(){ commit(true); });
+}
+
+/* 캘린더에서 날짜를 누르면 아래 입력칸이 보이도록 스크롤 + 포커스 */
+function focusDayPanel(){
+  var panel=document.querySelector(".day-panel");
+  var inp=document.getElementById("day-ev");
+  if(panel&&panel.scrollIntoView) panel.scrollIntoView({behavior:"smooth",block:"center"});
+  if(inp) inp.focus();
+}
+
 function renderToday(){
   var now=new Date(), h=now.getHours();
   var greet=h<6?"새벽이에요":h<12?"좋은 아침이에요":h<18?"좋은 오후예요":"수고한 하루예요";
   var dateStr=now.toLocaleDateString("ko-KR",{year:"numeric",month:"long",day:"numeric",weekday:"long"});
   var todayKey=keyOf(now);
-  var open=S.schedule.filter(function(i){return !i.done;}), done=S.schedule.filter(function(i){return i.done;});
-  var sorted=open.slice().sort(function(a,b){return (b.star?1:0)-(a.star?1:0);});
+  var tmrKey=keyOf(tomorrow());
+  /* due_date가 없는 예전 항목은 '오늘'로 본다 (마이그레이션 전 데이터 호환) */
+  function dueOf(i){ return i.due||todayKey; }
+  /* 오늘 = 오늘 이하(지난 미완료도 이월). 내일 = 오늘보다 뒤 전부 → 사라지는 항목 없음 */
+  var todayItems=S.schedule.filter(function(i){ return dueOf(i)<=todayKey; });
+  var tmrItems  =S.schedule.filter(function(i){ return dueOf(i)>todayKey; });
+  var open=todayItems.filter(function(i){return !i.done;});
   var inProg=S.articles.filter(function(a){return a.status==="작성중";}).length;
   var mfdsOpen=S.mfds.filter(function(m){return m.status!=="완료";}).length;
   var needCheck=S.archive.filter(function(a){return a.needsCheck;}).length;
@@ -336,9 +391,28 @@ function renderToday(){
   var evHtml="";
   if(todayEv.length){ evHtml+='<div class="card"><div class="card-head"><h2>오늘 일정</h2></div>'+todayEv.map(function(e){ return '<div class="ev-row"><span class="ev-time">'+(e.time||"종일")+'</span><span class="ev-title">'+esc(e.title)+'</span></div>'; }).join("")+'</div>'; }
   if(upcoming.length){ evHtml+='<div class="card"><div class="card-head"><h2>다가오는 일정</h2><span class="muted" data-act="tab" data-id="calendar" style="cursor:pointer">캘린더 열기 →</span></div>'+upcoming.map(function(e){ var d=new Date(e.key); return '<div class="up-row"><span class="up-date">'+(d.getMonth()+1)+'월 '+d.getDate()+'일('+WD[d.getDay()]+')</span><span class="up-title">'+esc(e.title)+'</span><span class="up-time">'+(e.time||"")+'</span></div>'; }).join("")+'</div>'; }
-  var rows = (sorted.length===0&&done.length===0) ? '<p class="empty">아직 할 일이 없어요. 첫 항목을 추가해 하루를 시작해 보세요.</p>'
-    : '<ul class="list">'+sorted.map(function(i){ return '<li class="row"><button class="check" data-act="s-toggle" data-id="'+i.id+'">✓</button><span class="row-text">'+esc(i.text)+'</span><button class="star '+(i.star?"on":"")+'" data-act="s-star" data-id="'+i.id+'">'+(i.star?"★":"☆")+'</button><button class="del" data-act="s-del" data-id="'+i.id+'">✕</button></li>'; }).join("")
-      + done.map(function(i){ return '<li class="row done"><button class="check on" data-act="s-toggle" data-id="'+i.id+'">✓</button><span class="row-text">'+esc(i.text)+'</span><button class="del" data-act="s-del" data-id="'+i.id+'">✕</button></li>'; }).join("")+'</ul>';
+  /* 할 일 목록 HTML (오늘/내일 두 곳에서 재사용) */
+  function schedRows(items,emptyMsg){
+    var o=items.filter(function(i){return !i.done;}).sort(function(a,b){return (b.star?1:0)-(a.star?1:0);});
+    var d=items.filter(function(i){return i.done;});
+    if(!o.length&&!d.length) return '<p class="empty">'+emptyMsg+'</p>';
+    return '<ul class="list">'
+      + o.map(function(i){
+          var late=dueOf(i)<todayKey ? '<span class="row-late">지난</span>' : '';
+          return '<li class="row"><button class="check" data-act="s-toggle" data-id="'+i.id+'">✓</button>'
+            + '<span class="row-text" data-act="edit" data-table="schedule" data-field="text" data-id="'+i.id+'" title="눌러서 수정">'+esc(i.text)+'</span>'+late
+            + '<button class="star '+(i.star?"on":"")+'" data-act="s-star" data-id="'+i.id+'">'+(i.star?"★":"☆")+'</button>'
+            + '<button class="del" data-act="s-del" data-id="'+i.id+'">✕</button></li>'; }).join("")
+      + d.map(function(i){
+          return '<li class="row done"><button class="check on" data-act="s-toggle" data-id="'+i.id+'">✓</button>'
+            + '<span class="row-text" data-act="edit" data-table="schedule" data-field="text" data-id="'+i.id+'" title="눌러서 수정">'+esc(i.text)+'</span>'
+            + '<button class="del" data-act="s-del" data-id="'+i.id+'">✕</button></li>'; }).join("")
+      + '</ul>';
+  }
+  var rows    = schedRows(todayItems,"아직 할 일이 없어요. 첫 항목을 추가해 하루를 시작해 보세요.");
+  var tmrRows = schedRows(tmrItems,"내일 할 일은 아직 없어요.");
+  var tmrD=tomorrow();
+  var tmrLabel=(tmrD.getMonth()+1)+"월 "+tmrD.getDate()+"일("+WD[tmrD.getDay()]+")";
   view().innerHTML='<div class="page">'
     + '<header class="today-hero"><div class="today-date">'+esc(dateStr)+'</div><h1 class="today-greet">'+greet+', 이랑님.</h1><p class="today-line">오늘 할 일 '+open.length+'건'+(open.length?" 남았어요.":"이 없어요.")+(todayEv.length?" · 오늘 일정 "+todayEv.length+"건.":"")+'</p></header>'
     + '<section class="stat-row">'
@@ -347,8 +421,14 @@ function renderToday(){
     +   '<button class="stat" data-act="tab" data-id="archive"><span class="stat-num">'+S.archive.length+'</span><span class="stat-lbl">민원 검토 건'+(needCheck?" · 확인필요 "+needCheck:"")+'</span></button>'
     +   '<button class="stat" data-act="tab" data-id="docs"><span class="stat-num">'+S.docs.length+'</span><span class="stat-lbl">문서 인덱스</span></button>'
     + '</section>'+evHtml
-    + '<section class="card"><div class="card-head"><h2>오늘 할 일</h2><span class="muted">별표를 누르면 위로 올라와요</span></div><div class="add-row"><input class="input" id="new-s" placeholder="할 일을 적고 Enter" /><button class="btn" data-act="s-add">+ 추가</button></div>'+rows+'</section></div>';
-  document.getElementById("new-s").addEventListener("keydown",function(e){ if(e.key==="Enter") addSchedule(); });
+    + '<section class="card"><div class="card-head"><h2>오늘 할 일</h2><span class="muted">별표는 위로 · 항목을 누르면 수정</span></div>'
+    +   '<div class="add-row"><input class="input" id="new-s" placeholder="할 일을 적고 Enter" /><button class="btn" data-act="s-add" data-id="'+todayKey+'" data-input="new-s">+ 추가</button></div>'+rows
+    + '</section>'
+    + '<section class="card"><div class="card-head"><h2>내일 할 일</h2><span class="muted">'+tmrLabel+'</span></div>'
+    +   '<div class="add-row"><input class="input" id="new-s2" placeholder="내일 할 일을 적고 Enter" /><button class="btn" data-act="s-add" data-id="'+tmrKey+'" data-input="new-s2">+ 추가</button></div>'+tmrRows
+    + '</section></div>';
+  document.getElementById("new-s").addEventListener("keydown",function(e){ if(e.key==="Enter") addSchedule(todayKey,"new-s"); });
+  document.getElementById("new-s2").addEventListener("keydown",function(e){ if(e.key==="Enter") addSchedule(tmrKey,"new-s2"); });
 }
 
 function renderCalendar(){
@@ -362,10 +442,11 @@ function renderCalendar(){
     cells+='<div class="cal-cell'+(k===todayKey?" today":"")+(k===calSel?" sel":"")+'" data-act="cal-day" data-id="'+k+'"><span class="cal-num">'+d+'</span>'+chips+'</div>'; }
   var wdHtml=WD.map(function(w,i){ return '<div class="cal-wd'+(i===0?" sun":"")+'">'+w+'</div>'; }).join("");
   var selEvs=S.events.filter(function(e){return e.key===calSel;}).sort(evSort), selD=new Date(calSel);
-  var panel='<div class="day-panel"><div class="day-title">'+(selD.getMonth()+1)+'월 '+selD.getDate()+'일 ('+WD[selD.getDay()]+')</div>'
-    + '<div class="add-row"><input class="input" id="day-ev" placeholder="이 날 일정 (예: 오후 2시 GMP 실사)" /><button class="btn" data-act="day-add">+ 추가</button></div>'
-    + (selEvs.length? '<ul class="list">'+selEvs.map(function(e){ return '<li class="ev-row"><span class="ev-time">'+(e.time||"종일")+'</span><span class="ev-title">'+esc(e.title)+'</span><button class="del" data-act="ev-del" data-id="'+e.id+'">✕</button></li>'; }).join("")+'</ul>' : '<p class="empty">이 날은 아직 일정이 없어요.</p>')+'</div>';
-  view().innerHTML='<div class="page">'+pageHead("캘린더","날짜와 할 일을 그냥 쳐 넣으면 알아서 그 날짜에 얹어줘요.")
+  var panel='<div class="day-panel"><div class="day-title">'+(selD.getMonth()+1)+'월 '+selD.getDate()+'일 ('+WD[selD.getDay()]+')'+(calSel===todayKey?' <span class="day-today">오늘</span>':'')+'</div>'
+    + '<div class="day-hint">이 칸에는 날짜를 안 써도 돼요. 제목만 적으면 위에서 고른 날짜로 들어갑니다.</div>'
+    + '<div class="add-row"><input class="input" id="day-ev" placeholder="할 일 / 일정 (예: 오후 2시 GMP 실사)" /><button class="btn" data-act="day-add">+ 추가</button></div>'
+    + (selEvs.length? '<ul class="list">'+selEvs.map(function(e){ return '<li class="ev-row"><span class="ev-time" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'+(e.time||"종일")+'</span><span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span><button class="del" data-act="ev-del" data-id="'+e.id+'">✕</button></li>'; }).join("")+'</ul>' : '<p class="empty">이 날은 아직 일정이 없어요.</p>')+'</div>';
+  view().innerHTML='<div class="page">'+pageHead("캘린더","달력에서 날짜를 누른 뒤, 아래 칸에 제목만 적으면 그 날짜로 들어가요.")
     + '<div class="cal-quick"><input class="input" id="cal-nl" placeholder=\'"11월 3일 오후 2시 GMP 실사" 처럼 입력하고 Enter\' /><button class="btn" data-act="cal-nl-add">추가</button></div><div class="cal-toast" id="cal-toast"></div>'
     + '<div class="cal-nav"><button class="cal-arrow" data-act="cal-prev">‹</button><span class="cal-month">'+calYear+'년 '+(calMonth+1)+'월</span><button class="cal-arrow" data-act="cal-next">›</button></div>'
     + '<div class="cal-grid">'+wdHtml+cells+'</div>'+panel+'</div>';
@@ -375,14 +456,14 @@ function renderCalendar(){
 
 function renderArticles(){
   var items=S.articles;
-  var body=items.length===0?'<p class="empty">기고글을 추가하면 진행 상태별로 정리돼요.</p>':'<div class="grid">'+items.map(function(it){ var bi=ARTICLE_STATUS.indexOf(it.status); return '<div class="tile"><div class="tile-head"><button class="badge b'+bi+'" data-act="a-cycle" data-id="'+it.id+'">'+esc(it.status)+'</button><button class="del" data-act="a-del" data-id="'+it.id+'">✕</button></div><div class="tile-title">'+esc(it.title)+'</div>'+(it.memo?'<div class="tile-memo">'+esc(it.memo)+'</div>':'')+'</div>'; }).join("")+'</div>';
+  var body=items.length===0?'<p class="empty">기고글을 추가하면 진행 상태별로 정리돼요.</p>':'<div class="grid">'+items.map(function(it){ var bi=ARTICLE_STATUS.indexOf(it.status); return '<div class="tile"><div class="tile-head"><button class="badge b'+bi+'" data-act="a-cycle" data-id="'+it.id+'">'+esc(it.status)+'</button><button class="del" data-act="a-del" data-id="'+it.id+'">✕</button></div><div class="tile-title" data-act="edit" data-table="articles" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</div>'+(it.memo?'<div class="tile-memo" data-act="edit" data-table="articles" data-field="memo" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.memo)+'</div>':'')+'</div>'; }).join("")+'</div>';
   view().innerHTML='<div class="page">'+pageHead("서울시약사회 동물약품 기고글","기획 중인 글부터 기고 완료된 글까지 한눈에 관리해요.")+'<div class="card form"><input class="input" id="a-title" placeholder="글 제목" />'+seg("a-status",ARTICLE_STATUS,"기획")+'<textarea class="input" id="a-memo" placeholder="주제 / 마감 / 메모"></textarea><button class="btn" data-act="a-add">+ 저장</button></div>'+body+'</div>';
   wireSeg("a-status");
 }
 
 function renderMfds(){
   var items=S.mfds;
-  var board=MFDS_STATUS.map(function(s){ var list=items.filter(function(i){return i.status===s;}); return '<div class="col"><div class="col-head">'+s+' <span class="muted">'+list.length+'</span></div>'+list.map(function(it){ return '<div class="mini"><div class="mini-title">'+esc(it.title)+'</div>'+(it.memo?'<div class="mini-memo">'+esc(it.memo)+'</div>':'')+'<div class="mini-actions"><button class="link-btn" data-act="m-cycle" data-id="'+it.id+'">상태 변경</button><button class="del" data-act="m-del" data-id="'+it.id+'">✕</button></div></div>'; }).join("")+'</div>'; }).join("");
+  var board=MFDS_STATUS.map(function(s){ var list=items.filter(function(i){return i.status===s;}); return '<div class="col"><div class="col-head">'+s+' <span class="muted">'+list.length+'</span></div>'+list.map(function(it){ return '<div class="mini"><div class="mini-title" data-act="edit" data-table="mfds" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</div>'+(it.memo?'<div class="mini-memo" data-act="edit" data-table="mfds" data-field="memo" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.memo)+'</div>':'')+'<div class="mini-actions"><button class="link-btn" data-act="m-cycle" data-id="'+it.id+'">상태 변경</button><button class="del" data-act="m-del" data-id="'+it.id+'">✕</button></div></div>'; }).join("")+'</div>'; }).join("");
   view().innerHTML='<div class="page">'+pageHead("식약처 업무","GMP 평가·수거·해외 실사 등 진행 상태로 나눠서 봐요.")+'<div class="card form"><input class="input" id="m-title" placeholder="업무명 (예: 바이오시밀러 사전 GMP 평가)" />'+seg("m-status",MFDS_STATUS,"대기")+'<textarea class="input" id="m-memo" placeholder="담당 / 기한 / 메모"></textarea><button class="btn" data-act="m-add">+ 저장</button></div>'+(items.length===0?'<p class="empty">업무를 추가하면 대기 → 진행 → 완료로 정리돼요.</p>':'<div class="board">'+board+'</div>')+'</div>';
   wireSeg("m-status");
 }
@@ -414,21 +495,25 @@ function renderArchiveList(){
     var files= it.filePath
       ? '<div class="entry-files"><span class="file-name">📎 '+esc(it.fileName||"첨부 파일")+'</span><button class="file-btn" data-act="ar-open" data-id="'+it.id+'">열기</button><button class="file-btn plain" data-act="ar-filedel" data-id="'+it.id+'">파일 삭제</button></div>'
       : '<div class="entry-files"><button class="file-btn" data-act="ar-attach" data-id="'+it.id+'">📎 검토 파일 첨부</button></div>';
-    return '<div class="entry"><div class="entry-top"><div class="entry-q">'+esc(it.title)+(it.needsCheck?'<span class="entry-flag">확인 필요</span>':'')+'</div><button class="del" data-act="ar-del" data-id="'+it.id+'">✕</button></div>'
+    return '<div class="entry"><div class="entry-top"><div class="entry-q"><span data-act="edit" data-table="archive" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</span>'+(it.needsCheck?'<span class="entry-flag">확인 필요</span>':'')+'</div><button class="del" data-act="ar-del" data-id="'+it.id+'">✕</button></div>'
       + (it.guideline?'<div class="entry-law">§ '+esc(it.guideline)+'</div>':'')
-      + (it.summary?'<div class="entry-ans">'+esc(it.summary)+'</div>':'')
+      + (it.summary?'<div class="entry-ans" data-act="edit" data-table="archive" data-field="summary" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.summary)+'</div>':'')
       + kw + files + '</div>';
   }).join("")+'</div>';
 }
 
 function renderDocs(){
   var items=S.docs;
-  var body=items.length===0?'<p class="empty">파일을 올리거나, 자주 찾는 자료의 위치를 적어 두면 매번 찾아 헤매지 않아도 돼요.</p>':'<div class="doc-list">'+items.map(function(it){ var act=it.filePath?'<button class="doc-act" data-act="d-open" data-id="'+it.id+'">열기 ↗</button>':(it.link?'<a class="doc-act" href="'+esc(it.link)+'" target="_blank" rel="noreferrer">열기 ↗</a>':''); return '<div class="doc"><span class="doc-ic">'+(it.filePath?"⬇":"■")+'</span><div class="doc-body"><span class="doc-name">'+esc(it.name)+'</span>'+(it.cat?'<span class="doc-cat">'+esc(it.cat)+'</span>':'')+'</div>'+act+'<button class="del" data-act="d-del" data-id="'+it.id+'">✕</button></div>'; }).join("")+'</div>';
+  var body=items.length===0?'<p class="empty">파일을 올리거나, 자주 찾는 자료의 위치를 적어 두면 매번 찾아 헤매지 않아도 돼요.</p>':'<div class="doc-list">'+items.map(function(it){ var act=it.filePath?'<button class="doc-act" data-act="d-open" data-id="'+it.id+'">열기 ↗</button>':(it.link?'<a class="doc-act" href="'+esc(it.link)+'" target="_blank" rel="noreferrer">열기 ↗</a>':''); return '<div class="doc"><span class="doc-ic">'+(it.filePath?"⬇":"■")+'</span><div class="doc-body"><span class="doc-name" data-act="edit" data-table="docs" data-field="name" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.name)+'</span>'+(it.cat?'<span class="doc-cat">'+esc(it.cat)+'</span>':'')+'</div>'+act+'<button class="del" data-act="d-del" data-id="'+it.id+'">✕</button></div>'; }).join("")+'</div>';
   view().innerHTML='<div class="page">'+pageHead("문서 인덱스","공개 법령·지침서 PDF는 여기에 올려두고 바로 열 수 있어요.")+'<div class="notice">공개 자료(법령·지침서 등)만 올려주세요. 개인정보가 든 답변 원본·내부 비공개 문서는 온나라 등 공식 시스템에 두고, 여기엔 이름·위치만 적는 걸 권해요.</div><div class="up-zone"><button class="btn" data-act="d-upload">파일 올리기 (PDF 등)</button><span class="muted">공개 법령·지침서 PDF</span></div><div class="card form"><input class="input" id="d-name" placeholder="문서명 (위치만 적을 때)" /><input class="input" id="d-cat" placeholder="분류 (예: GMP / 법령 / 서식)" /><input class="input" id="d-link" placeholder="링크 또는 위치 (선택)" /><button class="btn ghost" data-act="d-add">위치만 저장</button></div>'+body+'</div>';
 }
 
 /* ========== 액션 (id 없이 insert → 서버가 uuid 생성) ========== */
-function addSchedule(){ var v=(val("new-s")||"").trim(); if(!v) return; var item={text:v,done:false,star:false}; S.schedule.unshift(item); render(); dbInsert("schedule",item); }
+function addSchedule(dueKey,inputId){
+  var v=(val(inputId||"new-s")||"").trim(); if(!v) return;
+  var item={text:v,done:false,star:false,due:dueKey||keyOf(new Date())};
+  S.schedule.unshift(item); render(); dbInsert("schedule",item);
+}
 function addArticle(){ var t=(val("a-title")||"").trim(); if(!t) return; var item={title:t,status:segValue("a-status")||"기획",memo:(val("a-memo")||"").trim()}; S.articles.unshift(item); render(); dbInsert("articles",item); }
 function addMfds(){ var t=(val("m-title")||"").trim(); if(!t) return; var item={title:t,status:segValue("m-status")||"대기",memo:(val("m-memo")||"").trim()}; S.mfds.unshift(item); render(); dbInsert("mfds",item); }
 function addArchive(){ var t=(val("ar-title")||"").trim(); if(!t) return; var chk=document.getElementById("ar-check"); var item={title:t,guideline:(val("ar-law")||"").trim(),summary:(val("ar-ans")||"").trim(),keywords:(val("ar-kw")||"").trim(),needsCheck:chk?chk.checked:false}; S.archive.unshift(item); render(); dbInsert("archive",item); }
@@ -651,13 +736,14 @@ document.getElementById("app").addEventListener("click",function(e){
   var act=el.getAttribute("data-act"), id=el.getAttribute("data-id");
   switch(act){
     case "tab": active=id; render(); break;
-    case "s-add": addSchedule(); break;
+    case "s-add": addSchedule(id,el.getAttribute("data-input")); break;
+    case "edit": startEdit(el,el.getAttribute("data-table"),id,el.getAttribute("data-field")); break;
     case "s-toggle": { var it=S.schedule.find(function(x){return x.id===id;}); if(it){it.done=!it.done;render();dbUpdate("schedule",id,{done:it.done});} break; }
     case "s-star": { var i2=S.schedule.find(function(x){return x.id===id;}); if(i2){i2.star=!i2.star;render();dbUpdate("schedule",id,{star:i2.star});} break; }
     case "s-del": del("schedule",id); break;
     case "cal-prev": calMonth--; if(calMonth<0){calMonth=11;calYear--;} render(); break;
     case "cal-next": calMonth++; if(calMonth>11){calMonth=0;calYear++;} render(); break;
-    case "cal-day": calSel=id; render(); break;
+    case "cal-day": calSel=id; render(); focusDayPanel(); break;
     case "cal-nl-add": calAddNL(); break;
     case "day-add": dayAdd(); break;
     case "ev-del": evDel(id); break;

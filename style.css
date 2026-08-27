@@ -208,3 +208,23 @@ textarea.input{min-height:60px;resize:vertical;line-height:1.5;width:100%;}
   .rail-tab .dot{display:none;}
   .brand-title{display:none;}
 }
+
+/* ===== 인라인 편집 · 오늘/내일 할 일 ===== */
+/* 눌러서 수정되는 텍스트임을 커서로 알림 */
+.row-text,.ev-title,.ev-time,.tile-title,.tile-memo,
+.mini-title,.mini-memo,.doc-name,.entry-q span[data-act],.entry-ans{cursor:text;}
+
+/* 편집 중 입력칸 — .input을 물려받되 행 높이에 맞게 납작하게 */
+.input.inline-edit{flex:1;min-width:0;padding:6px 9px;font-size:13.5px;
+  background:#fff;border-color:var(--accent);}
+
+/* 기한이 지난 미완료 할 일 배지 (.entry-flag와 같은 pill 형태) */
+.row-late{display:inline-block;font-size:10px;font-weight:700;color:var(--brass);
+  background:#F7EFDF;padding:2px 8px;border-radius:12px;margin-left:8px;
+  vertical-align:middle;white-space:nowrap;}
+
+/* 캘린더 날짜 패널 안내문 + 오늘 배지 */
+.day-hint{font-size:11.5px;color:var(--muted);margin:-4px 0 11px;line-height:1.5;}
+.day-today{display:inline-block;font-size:10px;font-weight:700;color:#fff;
+  background:var(--accent);padding:2px 8px;border-radius:12px;margin-left:6px;
+  vertical-align:middle;}

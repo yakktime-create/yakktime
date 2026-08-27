@@ -1547,6 +1547,16 @@ function openLawPdf(id,page){
 }
 
 
+/* 표인 쪽 판별.
+ * 줄글은 "~하여야 한다." 처럼 문장이 계속 끝나지만,
+ * 표는 칸 값만 늘어서서 문장 끝이 거의 없다.
+ * 실제 문서로 재본 값: 줄글 1,000자당 5~12개, 표 0~1개. */
+function looksLikeTable(t){
+  if(!t||t.length<300) return false;
+  var ends=(t.match(/다\s*\./g)||[]).length;
+  return ends*1000/t.length<2;
+}
+
 function renderLawModal(){
   var el=document.getElementById("law-modal"); if(!el) return;
   if(!lawView){ el.innerHTML=""; document.body.style.overflow=""; return; }
@@ -1569,9 +1579,9 @@ function renderLawModal(){
   var artBar=head0
     ? '<div class="lv-arts">'+esc(head0)+(tail0!==head0?'  ~  '+esc(tail0):'')+'</div>'
     : '';
-  /* 별표는 대개 표·서식이라 글자만 뽑으면 칸 구분이 사라진다 */
-  if(head0.indexOf("별표")===0)
-    artBar+='<div class="lv-hint">표로 된 쪽이면 글자만으로는 칸이 구분되지 않아요. 정확한 형태는 PDF 원문을 보세요.</div>';
+  if(!lawView.loading&&looksLikeTable(lawView.content))
+    artBar+='<div class="lv-hint">이 쪽은 <b>표(칸)</b>로 되어 있어요. 글자만 뽑으면 칸 경계가 사라져 내용이 한 줄로 이어져 보입니다. '
+      + '어느 칸의 값인지 확인하려면 아래 「PDF 원문 열기」를 눌러주세요.</div>';
 
   el.innerHTML='<div class="lv-back" data-act="lv-close"></div>'
     + '<div class="lv-panel" role="dialog">'

@@ -338,16 +338,17 @@ function startEdit(el,table,id,field,type){
   if(!item) return;
   editingId=id;
   var cur=item[field]==null?"":String(item[field]);
-  var inp=document.createElement("input");
-  inp.type=type||"text";
-  inp.className="input inline-edit";
+  var area=(type==="textarea");
+  var inp=document.createElement(area?"textarea":"input");
+  if(type&&!area) inp.type=type;
+  inp.className="input inline-edit"+(area?" inline-area":"");
   inp.value=cur;
   el.replaceWith(inp);
   inp.focus();
   if(!type) { try{ inp.setSelectionRange(cur.length,cur.length); }catch(e){} }
   var settled=false;
   /* 날짜는 비워서 저장할 수 있어야 한다 (기한을 없애면 캘린더에서도 빠짐) */
-  var allowEmpty=(type==="date");
+  var allowEmpty=(type==="date"||area);   /* 기한·메모는 비워서 지울 수 있어야 한다 */
   function commit(save){
     if(settled) return;
     settled=true; editingId=null;
@@ -360,7 +361,8 @@ function startEdit(el,table,id,field,type){
     render();
   }
   inp.addEventListener("keydown",function(e){
-    if(e.key==="Enter"){ e.preventDefault(); commit(true); }
+    /* 메모는 줄바꿈을 써야 하므로 Enter로 저장하지 않는다 (blur 또는 ⌘/Ctrl+Enter) */
+    if(e.key==="Enter"&&(!area||e.metaKey||e.ctrlKey)){ e.preventDefault(); commit(true); }
     else if(e.key==="Escape"){ e.preventDefault(); commit(false); }
   });
   inp.addEventListener("blur",function(){ commit(true); });
@@ -390,27 +392,22 @@ function wireMfdsDrag(){
   board.addEventListener("pointermove",function(e){
     if(!dragState||e.pointerId!==dragState.pid) return;
     var dx=e.clientX-dragState.sx, dy=e.clientY-dragState.sy;
-    var dist=Math.sqrt(dx*dx+dy*dy);
     if(!dragState.active){
+      var dist=Math.sqrt(dx*dx+dy*dy);
       /* 롱프레스가 차기 전에 움직였으면 스크롤 의도로 보고 포기한다 */
       if(!dragState.holdOk){ if(dist>10) cleanupDrag(); return; }
       if(dist<8) return;
-      dragState.active=true;
-      var r=dragState.card.getBoundingClientRect();
-      dragState.card.style.width=r.width+"px";
-      dragState.card.classList.add("dragging");
-      try{ dragState.card.setPointerCapture(dragState.pid); }catch(err){}
+      beginDrag();
     }
     e.preventDefault();
-    dragState.card.style.transform="translate("+dx+"px,"+dy+"px) rotate(1.5deg)";
-    var col=colAt(e.clientX,e.clientY);
-    clearDropTargets();
-    if(col) col.classList.add("drop-target");
+    dragState.dx=dx; dragState.dy=dy; dragState.px=e.clientX; dragState.py=e.clientY;
+    /* 프레임당 한 번만 그린다 — pointermove마다 그리면 끊긴다 */
+    if(!dragState.raf) dragState.raf=requestAnimationFrame(paintDrag);
   });
   board.addEventListener("pointerup",function(e){
     if(!dragState||e.pointerId!==dragState.pid) return;
     if(!dragState.active){ cleanupDrag(); return; }         /* 그냥 탭 → click 통과 */
-    var col=colAt(e.clientX,e.clientY), id=dragState.id;
+    var col=colFromCache(e.clientX,e.clientY), id=dragState.id;
     cleanupDrag();
     dragEndedAt=Date.now();                                 /* 뒤따르는 click 무시용 */
     var st=col?col.getAttribute("data-col"):null;
@@ -422,24 +419,43 @@ function wireMfdsDrag(){
   board.addEventListener("pointercancel",function(){ cleanupDrag(); });
 }
 
-/* 끌고 있는 카드는 잠시 숨겨야 그 아래 컬럼을 집어낼 수 있다 */
-function colAt(x,y){
-  var c=dragState&&dragState.card;
-  if(c) c.style.visibility="hidden";
-  var el=document.elementFromPoint(x,y);
-  if(c) c.style.visibility="";
-  return el?el.closest(".col"):null;
+/* 드래그 시작 시점에 컬럼 좌표를 캐시해 둔다.
+ * pointermove마다 elementFromPoint를 부르면 레이아웃이 매번 강제 계산돼 끊긴다.
+ * 드래그 중에는 preventDefault로 스크롤이 막히므로 좌표가 변하지 않는다. */
+function beginDrag(){
+  dragState.active=true;
+  var c=dragState.card, r=c.getBoundingClientRect();
+  c.style.width=r.width+"px"; c.style.height=r.height+"px";
+  c.classList.add("dragging");
+  try{ c.setPointerCapture(dragState.pid); }catch(err){}
+  dragState.cols=[];
+  var els=document.querySelectorAll(".col");
+  for(var i=0;i<els.length;i++) dragState.cols.push({el:els[i],r:els[i].getBoundingClientRect()});
 }
-function clearDropTargets(){
-  var els=document.querySelectorAll(".col.drop-target");
-  for(var i=0;i<els.length;i++) els[i].classList.remove("drop-target");
+function paintDrag(){
+  if(!dragState||!dragState.active) return;
+  dragState.raf=0;
+  dragState.card.style.transform="translate3d("+dragState.dx+"px,"+dragState.dy+"px,0) rotate(1.5deg)";
+  var col=colFromCache(dragState.px,dragState.py);
+  if(col!==dragState.overCol){
+    if(dragState.overCol) dragState.overCol.classList.remove("drop-target");
+    if(col) col.classList.add("drop-target");
+    dragState.overCol=col;
+  }
+}
+function colFromCache(x,y){
+  var cs=(dragState&&dragState.cols)||[];
+  for(var i=0;i<cs.length;i++){ var r=cs[i].r;
+    if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom) return cs[i].el; }
+  return null;
 }
 function cleanupDrag(){
   if(!dragState) return;
   clearTimeout(dragState.timer);
+  if(dragState.raf) cancelAnimationFrame(dragState.raf);
   var c=dragState.card;
-  if(c){ c.classList.remove("dragging"); c.style.transform=""; c.style.width=""; c.style.visibility=""; }
-  clearDropTargets();
+  if(c){ c.classList.remove("dragging"); c.style.transform=""; c.style.width=""; c.style.height=""; }
+  if(dragState.overCol) dragState.overCol.classList.remove("drop-target");
   dragState=null;
 }
 
@@ -573,16 +589,18 @@ function renderMfds(){
           }
           return '<div class="mini" data-mfds="'+it.id+'">'
             + '<div class="mini-title" data-act="edit" data-table="mfds" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</div>'
-            + (it.memo?'<div class="mini-memo" data-act="edit" data-table="mfds" data-field="memo" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.memo)+'</div>':'')
+            + (it.memo
+                ? '<div class="mini-memo" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.memo)+'</div>'
+                : '<div class="mini-memo none" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+it.id+'" title="눌러서 담당·메모 추가">＋ 담당 / 메모</div>')
             + due
-            + '<div class="mini-actions"><button class="link-btn" data-act="m-cycle" data-id="'+it.id+'">상태 변경</button><button class="del" data-act="m-del" data-id="'+it.id+'">✕</button></div></div>';
+            + '<div class="mini-actions"><button class="del" data-act="m-del" data-id="'+it.id+'">✕</button></div></div>';
         }).join("")
       + '</div>';
   }).join("");
   view().innerHTML='<div class="page">'+pageHead("식약처 업무","진행 상태로 나눠서 봐요. 카드를 지그시 눌렀다 끌면 다른 칸으로 옮겨져요.")
     + '<div class="card form"><input class="input" id="m-title" placeholder="업무명 (예: 바이오시밀러 사전 GMP 평가)" />'
     + seg("m-status",MFDS_STATUS,"대기")
-    + '<div class="add-row"><label class="due-lbl" for="m-due">기한</label><input class="input" type="date" id="m-due" /><span class="muted">기한을 넣으면 캘린더에도 표시돼요</span></div>'
+    + '<div class="add-row"><label class="due-lbl" for="m-due">기한</label><input class="input due-input" type="date" id="m-due" /><span class="muted">기한을 넣으면 캘린더에도 표시돼요</span></div>'
     + '<textarea class="input" id="m-memo" placeholder="담당 / 메모"></textarea>'
     + '<button class="btn" data-act="m-add">+ 저장</button></div>'
     + (items.length===0?'<p class="empty">업무를 추가하면 대기 → 진행 → 완료로 정리돼요.</p>':'<div class="board">'+board+'</div>')
@@ -901,7 +919,6 @@ document.getElementById("app").addEventListener("click",function(e){
     case "a-cycle": cycle(S.articles,id,ARTICLE_STATUS,"articles"); break;
     case "a-del": del("articles",id); break;
     case "m-add": addMfds(); break;
-    case "m-cycle": cycle(S.mfds,id,MFDS_STATUS,"mfds"); break;
     case "m-del": del("mfds",id); break;
     case "ar-add": addArchive(); break;
     case "ar-del": del("archive",id); break;

@@ -121,14 +121,6 @@ textarea.input{min-height:60px;resize:vertical;line-height:1.5;width:100%;}
 .up-date{font-size:11.5px;color:var(--accent);font-weight:700;min-width:78px;}
 .up-title{flex:1;font-size:13.5px;} .up-time{font-size:11.5px;color:var(--muted);}
 
-.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
-.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:15px;}
-.tile-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;}
-.tile-title{font-size:14.5px;font-weight:600;line-height:1.4;}
-.tile-memo{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.5;white-space:pre-wrap;}
-.badge{border:none;border-radius:20px;padding:4px 11px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;}
-.b0{background:#EFEAE0;color:#8A6D2B;} .b1{background:var(--accent-soft);color:var(--accent);} .b2{background:#E7EBE8;color:#5A6B62;}
-
 .board{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
 .col-head{font-size:12.5px;font-weight:650;color:var(--muted);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--line);}
 .mini{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:9px;}
@@ -201,7 +193,7 @@ textarea.input{min-height:60px;resize:vertical;line-height:1.5;width:100%;}
   .rail-foot{margin-top:0;flex-direction:row;gap:4px;}
   .foot-btn{font-size:10.5px;padding:5px 8px;}
   .page{padding:24px 18px 70px;}
-  .stat-row{grid-template-columns:repeat(2,1fr);} .grid,.board{grid-template-columns:1fr;}
+  .stat-row{grid-template-columns:repeat(2,1fr);} .board{grid-template-columns:1fr;}
   .page-head{flex-direction:column;}
 }
 @media (max-width:600px){
@@ -213,7 +205,7 @@ textarea.input{min-height:60px;resize:vertical;line-height:1.5;width:100%;}
 
 /* ===== 인라인 편집 · 오늘/내일 할 일 ===== */
 /* 눌러서 수정되는 텍스트임을 커서로 알림 */
-.row-text,.ev-title,.ev-time,.tile-title,.tile-memo,
+.row-text,.ev-title,.ev-time,
 .mini-title,.mini-memo,.doc-name,.entry-q span[data-act],.entry-ans{cursor:text;}
 
 /* 편집 중 입력칸 — .input을 물려받되 행 높이에 맞게 납작하게 */
@@ -290,6 +282,268 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 .board.drag-on .col.drop-target{outline:2px solid var(--blue);background:var(--blue-soft);}
 .board.drag-on .col-head{color:var(--blue-deep);}
 
-/* 기고글 메모 — 비어 있을 때도 눌러서 채울 수 있게 */
-.tile-memo.none{color:var(--muted);font-size:11px;margin-top:6px;
-  border:1px dashed var(--line);border-radius:8px;padding:4px 8px;display:inline-block;}
+
+
+/* ===== 식약처 업무 UI 개편 (3차) =====
+ * 1) 입력 폼을 접어 두고 필요할 때만 편다 — 화면 절반을 폼이 먹던 문제
+ * 2) 칸반 칸을 "면"으로 만들어 어디에 놓는지 눈에 보이게
+ * 3) 카드에서 상시 노출되던 삭제 버튼 줄을 없애고 우상단으로
+ */
+
+/* --- 페이지 머리 요약줄 --- */
+.head-meta{display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap;}
+.meta-pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;
+  color:var(--muted);background:var(--surface);border:1px solid var(--line);
+  border-radius:20px;padding:4px 11px;}
+.meta-pill.warn{color:var(--brick);background:#FBECE8;border-color:#F0D8D2;}
+
+/* --- 접힌 입력창 --- */
+.composer-open{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  background:var(--surface);border:1px dashed var(--line);border-radius:12px;
+  padding:13px 15px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:600;
+  color:var(--muted);margin-bottom:20px;transition:border-color .15s,color .15s,background .15s;}
+.composer-open:hover{border-color:var(--blue);color:var(--blue-deep);background:var(--blue-soft);}
+.composer-plus{display:grid;place-items:center;width:20px;height:20px;border-radius:6px;
+  background:var(--blue-soft);color:var(--blue-deep);font-size:14px;font-weight:700;line-height:1;flex-shrink:0;}
+.composer-open:hover .composer-plus{background:var(--blue);color:#fff;}
+.composer-hint{margin-left:auto;font-size:11.5px;font-weight:500;color:var(--muted);}
+
+/* --- 펼친 입력창 --- */
+.card.composer{padding:16px;gap:10px;box-shadow:0 6px 20px rgba(30,42,36,.06);}
+.composer-title{font-size:15px!important;font-weight:600;background:#fff!important;
+  border:none!important;border-bottom:1px solid var(--line)!important;border-radius:0!important;
+  padding:2px 2px 9px!important;}
+.composer-title:focus{border-bottom-color:var(--blue)!important;}
+.composer .input{background:#fff;}
+.composer-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  border-top:1px solid var(--line);padding-top:11px;}
+.composer-btns{margin-left:auto;display:flex;gap:6px;}
+.btn.sm{padding:8px 14px;font-size:12.5px;}
+.btn.quiet{background:none;color:var(--muted);border:1px solid var(--line);}
+.btn.quiet:hover{border-color:var(--muted);color:var(--ink);opacity:1;}
+
+/* 상태 세그먼트 — iOS식 슬라이딩 필 */
+.seg.compact{display:inline-flex;flex:0 0 auto;gap:2px;background:var(--paper);
+  border:1px solid var(--line);border-radius:9px;padding:2px;}
+.seg.compact .seg-btn{flex:0 0 auto;border:none;background:none;border-radius:7px;
+  padding:6px 13px;font-size:12.5px;color:var(--muted);}
+.seg.compact .seg-btn:hover{color:var(--ink);}
+.seg.compact .seg-btn.on{background:var(--surface);color:var(--blue-deep);font-weight:650;
+  box-shadow:0 1px 2px rgba(30,42,36,.10);}
+
+.due-field{display:inline-flex;align-items:center;gap:7px;background:var(--paper);
+  border:1px solid var(--line);border-radius:9px;padding:0 4px 0 11px;}
+.due-field label{font-size:12.5px;color:var(--muted);white-space:nowrap;}
+.due-field .input{border:none;background:none;padding:7px 4px;width:130px;flex:0 0 auto;}
+.due-field .input:focus{background:none;}
+
+/* --- 칸반 --- */
+.board{gap:14px;}
+.col{background:rgba(30,42,36,.045);border:1px solid rgba(227,231,226,.7);border-radius:14px;
+  padding:12px 11px 11px;min-height:200px;display:flex;flex-direction:column;}
+.col-head{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:650;
+  color:var(--ink);margin-bottom:11px;padding:0 3px 10px;border-bottom:1px solid var(--line);}
+.col-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.col[data-col="대기"]   .col-dot{background:var(--brass);}
+.col[data-col="진행중"] .col-dot{background:var(--blue);}
+.col[data-col="완료"]   .col-dot{background:var(--accent);}
+.col-count{margin-left:auto;font-size:11px;font-weight:700;color:var(--muted);
+  background:var(--paper);border-radius:10px;padding:2px 8px;min-width:22px;text-align:center;}
+
+/* 빈 칸 — 여기에 놓을 수 있다는 걸 보여준다 */
+.col-empty{flex:1;display:grid;place-items:center;border:1px dashed var(--line);
+  border-radius:10px;color:var(--muted);font-size:11.5px;padding:22px 10px;text-align:center;line-height:1.5;}
+
+/* --- 카드 --- */
+.mini{position:relative;padding:13px 14px;border-radius:12px;margin-bottom:8px;
+  box-shadow:0 1px 2px rgba(30,42,36,.04);}
+.mini:last-child{margin-bottom:0;}
+.mini:hover{border-color:#CFD8D3;box-shadow:0 3px 10px rgba(30,42,36,.07);}
+.mini-title{font-size:13.5px;font-weight:640;line-height:1.45;padding-right:20px;letter-spacing:-.005em;}
+.mini-memo{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5;}
+.mini-memo.none{border:none;padding:0;margin-top:5px;font-size:11.5px;opacity:.65;
+  display:inline-block;background:none;}
+.mini:hover .mini-memo.none{opacity:1;color:var(--blue-deep);}
+.mini-foot{display:flex;align-items:center;gap:6px;margin-top:9px;flex-wrap:wrap;}
+.mini-foot .input.inline-edit{width:100%;}
+.mini-actions{display:none;}
+
+/* 기한 칩 — 남은 날짜에 따라 톤이 달라진다 */
+.mini-due{margin-top:0;font-size:11px;font-weight:650;padding:3px 9px;border-radius:8px;
+  color:var(--muted);background:var(--paper);border:1px solid transparent;}
+.mini-due.soon{color:var(--brass);background:#F7EFDF;}
+.mini-due.over{color:#fff;background:var(--brick);}
+.mini-due.none{border:1px dashed var(--line);background:none;opacity:.7;font-weight:500;}
+.mini:hover .mini-due.none{opacity:1;border-color:var(--blue);color:var(--blue-deep);}
+
+/* 삭제 — 카드 우상단, 평소엔 흐리게 (터치에서도 눌리도록 완전히 숨기진 않는다) */
+.mini-del{position:absolute;top:8px;right:8px;width:22px;height:22px;border:none;
+  background:none;border-radius:7px;color:var(--muted);opacity:.32;cursor:pointer;
+  font-size:12px;line-height:1;display:grid;place-items:center;transition:.15s;padding:0;}
+.mini:hover .mini-del{opacity:.75;}
+.mini-del:hover{opacity:1!important;color:var(--brick);background:#FBECE8;}
+
+/* 드래그 중엔 칸 전체가 목표가 된다 */
+.board.drag-on .col{outline:none;border-style:dashed;}
+.board.drag-on .col.drop-target{border-style:solid;border-color:var(--blue);
+  background:var(--blue-soft);outline:none;}
+
+@media (max-width:1024px){
+  .board{grid-template-columns:1fr;gap:10px;}
+  .col{min-height:0;}
+  .col-empty{padding:14px 10px;}
+  .composer-hint{display:none;}
+  .composer-foot{gap:7px;}
+  .composer-btns{margin-left:0;width:100%;}
+  /* 저장이 주된 행동이므로 취소와 5:5로 나누지 않는다 */
+  .composer-btns .btn{justify-content:center;flex:1;}
+  .composer-btns .btn.quiet{flex:0 0 auto;padding-left:22px;padding-right:22px;}
+  .due-field{flex:1;} .due-field .input{width:100%;flex:1;}
+}
+
+/* ===== 전 탭 UI 통일 (4차) =====
+ * 식약처 업무에서 만든 언어(접히는 입력창 · 요약 배지 · 모서리 삭제 · 톤 있는 칩)를
+ * 오늘 / 캘린더 / 기고글 / 민원 서가 / 문서 인덱스에 그대로 옮긴다.
+ */
+
+/* --- 공용: 칩에 개수 배지 --- */
+.chip{display:inline-flex;align-items:center;gap:7px;padding:6px 10px 6px 13px;
+  font-weight:600;transition:.15s;}
+.chip:hover{border-color:var(--muted);color:var(--ink);}
+.chip.on:hover{border-color:var(--accent);color:var(--accent);}
+.chip-n{font-size:10.5px;font-weight:700;background:var(--paper);color:var(--muted);
+  border-radius:9px;padding:1px 7px;min-width:20px;text-align:center;}
+.chip.on .chip-n{background:#fff;color:var(--accent);}
+
+/* --- 공용: 빈 화면 --- */
+.empty-box{background:var(--surface);border:1px dashed var(--line);border-radius:14px;
+  padding:44px 20px;text-align:center;}
+.empty-box.sm{padding:26px 16px;border-radius:12px;}
+.empty-box p{margin:0;font-size:13px;color:var(--muted);line-height:1.7;}
+.empty-ic{font-size:26px;color:var(--line);margin-bottom:12px;line-height:1;}
+
+/* --- 공용: 목록 행의 숨은 버튼 --- */
+.row-acts{display:inline-flex;align-items:center;gap:2px;flex-shrink:0;
+  opacity:.3;transition:opacity .15s;}
+.row:hover .row-acts,.ev-row:hover .row-acts{opacity:1;}
+.row.star-on .row-acts{opacity:1;}
+.row-acts .star.on{opacity:1;}
+@media (hover:none){ .row-acts{opacity:.55;} }
+
+/* --- 오늘: 통계 타일 --- */
+.stat{position:relative;overflow:hidden;padding:16px 15px 15px;border-radius:13px;
+  box-shadow:0 1px 2px rgba(30,42,36,.04);}
+.stat::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--accent);opacity:.85;}
+.stat.t-brass::before{background:var(--brass);}
+.stat.t-blue::before{background:var(--blue);}
+.stat.t-accent::before{background:var(--accent);}
+.stat.t-slate::before{background:#8A9A92;}
+.stat:hover{border-color:#CFD8D3;box-shadow:0 4px 14px rgba(30,42,36,.08);}
+.stat.t-brass .stat-num{color:var(--brass);}
+.stat.t-blue .stat-num{color:var(--blue);}
+.stat.t-slate .stat-num{color:#6E7F76;}
+.stat-go{position:absolute;top:14px;right:13px;font-size:12px;color:var(--line);
+  transition:color .15s,transform .15s;}
+.stat:hover .stat-go{color:var(--muted);transform:translateX(2px);}
+
+/* --- 오늘: 할 일 --- */
+.add-row.quick{background:var(--paper);border:1px solid var(--line);border-radius:11px;
+  padding:5px;gap:5px;flex-wrap:nowrap;transition:border-color .15s,background .15s;}
+.add-row.quick:focus-within{border-color:var(--accent);background:#fff;}
+.add-row.quick .input{border:none;background:none;padding:8px 10px;}
+.add-row.quick .input:focus{background:none;}
+.add-row.quick .btn{padding:9px 14px;font-size:12.5px;}
+.row{gap:10px;padding:10px 4px;border-radius:8px;transition:background .12s;}
+.row:hover{background:rgba(243,245,242,.7);}
+.check{width:20px;height:20px;border-radius:7px;}
+.row-text{line-height:1.5;}
+.star{font-size:15px;padding:3px 4px;border-radius:6px;}
+.star:hover{background:var(--paper);}
+
+/* --- 캘린더 --- */
+.cal-cell{border-radius:10px;padding:7px 6px;}
+.cal-cell.today{background:var(--accent-soft);border-color:transparent;}
+.cal-cell.today .cal-num{color:var(--accent);font-weight:700;}
+.cal-cell.sel{outline:2px solid var(--accent);outline-offset:-2px;background:#fff;}
+.cal-cell.sel.today{background:var(--accent-soft);}
+.cal-ev{border-radius:5px;padding:2px 6px;font-weight:600;}
+.cal-nav{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+  padding:8px 10px;margin-bottom:16px;}
+.cal-arrow{border-radius:9px;transition:.15s;}
+.day-panel{margin-top:20px;border-top:none;padding-top:0;}
+.day-panel .day-title{font-size:15px;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:12px;}
+.ev-row{border-radius:8px;padding:9px 6px;transition:background .12s;}
+.ev-row:hover{background:rgba(243,245,242,.7);}
+
+/* --- 민원 서가 --- */
+.search-box{position:relative;margin-bottom:14px;}
+.search-ic{position:absolute;left:14px;top:50%;transform:translateY(-50%);
+  font-size:16px;color:var(--muted);pointer-events:none;line-height:1;}
+.input.search{margin-bottom:0;padding-left:38px;border-radius:11px;padding-top:12px;padding-bottom:12px;}
+.entry{position:relative;padding:18px;border-radius:13px;box-shadow:0 1px 2px rgba(30,42,36,.04);
+  transition:border-color .15s,box-shadow .15s;}
+.entry:hover{border-color:#CFD8D3;box-shadow:0 3px 10px rgba(30,42,36,.07);}
+.entry-del{opacity:.3;transition:.15s;}
+.entry:hover .entry-del{opacity:.75;}
+.entry-del:hover{opacity:1!important;}
+.entry-law{border-radius:8px;}
+.kw{background:var(--surface);border:1px solid var(--line);}
+
+/* --- 가져오기 / 올리기 띠 --- */
+.import-bar,.upload-bar{display:flex;align-items:center;gap:13px;width:100%;text-align:left;
+  border-radius:13px;padding:14px 16px;margin-bottom:16px;cursor:pointer;font-family:inherit;
+  transition:border-color .15s,background .15s,box-shadow .15s;}
+.import-bar{background:var(--accent-soft);border:1px solid transparent;}
+.import-bar:hover{background:#D9EAE1;border-color:var(--accent);box-shadow:0 3px 12px rgba(47,93,80,.10);}
+.upload-bar{background:var(--surface);border:1px dashed var(--line);}
+.upload-bar:hover{background:var(--accent-soft);border-color:var(--accent);}
+.import-bar-ic,.upload-ic{font-size:19px;flex-shrink:0;line-height:1;}
+.upload-ic{display:grid;place-items:center;width:32px;height:32px;border-radius:9px;
+  background:var(--accent-soft);color:var(--accent);font-size:15px;}
+.upload-bar:hover .upload-ic{background:var(--accent);color:#fff;}
+.import-bar-go{margin-left:auto;color:var(--muted);font-size:14px;flex-shrink:0;transition:transform .15s;}
+.import-bar:hover .import-bar-go,.upload-bar:hover .import-bar-go{transform:translateX(3px);color:var(--accent);}
+
+/* --- 문서 인덱스 --- */
+.notice{display:flex;gap:11px;align-items:flex-start;border-radius:12px;padding:13px 15px;}
+.notice-ic{display:grid;place-items:center;width:19px;height:19px;border-radius:50%;
+  background:#E5D3A6;color:#6B5518;font-size:12px;font-weight:800;flex-shrink:0;margin-top:1px;}
+.doc{border-radius:12px;padding:13px 14px;box-shadow:0 1px 2px rgba(30,42,36,.04);
+  transition:border-color .15s,box-shadow .15s;}
+.doc:hover{border-color:#CFD8D3;box-shadow:0 3px 10px rgba(30,42,36,.07);}
+.doc-ic{width:30px;height:30px;border-radius:9px;background:var(--paper);color:var(--muted);font-size:13px;}
+.doc-ic.file{background:var(--accent-soft);color:var(--accent);}
+.doc-del{opacity:.3;transition:.15s;}
+.doc:hover .doc-del{opacity:.75;}
+.doc-del:hover{opacity:1!important;}
+
+/* --- 좌측 레일 --- */
+.rail-tab{border-radius:10px;}
+.rail-tab.on{box-shadow:inset 0 0 0 1px rgba(47,93,80,.14);}
+
+@media (max-width:1024px){
+  .entry-del,.doc-del,.mini-del{opacity:.5;}
+  .row-acts{opacity:.55;}
+  .search-ic{left:12px;} .input.search{padding-left:34px;}
+  .import-bar,.upload-bar{padding:12px 14px;gap:11px;}
+}
+
+/* ===== 좁은 화면 탭 줄 =====
+ * .rail-tab에 width:100%가 걸려 있어 폰에서 탭 6개가 세로로 쌓였다.
+ * 첫 화면의 절반을 탭이 먹으므로 가로로 눕히고 넘치면 밀어서 본다. */
+@media (max-width:1024px){
+  .rail{gap:8px 10px;}
+  .rail-tabs{flex-wrap:nowrap;width:100%;overflow-x:auto;gap:4px;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:1px;}
+  .rail-tabs::-webkit-scrollbar{display:none;}
+  .rail-tab{width:auto;flex:0 0 auto;}
+  .rail-foot{width:100%;justify-content:flex-end;}
+  .foot-btn{flex:0 0 auto;}
+}
+
+/* ===== 기고글도 칸반으로 =====
+ * 기획 → 작성중 → 기고완료가 식약처 업무의 대기 → 진행중 → 완료와
+ * 같은 흐름이라, 같은 색·같은 조작으로 맞춘다. */
+.col[data-col="기획"]     .col-dot{background:var(--brass);}
+.col[data-col="작성중"]   .col-dot{background:var(--blue);}
+.col[data-col="기고완료"] .col-dot{background:var(--accent);}

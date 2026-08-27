@@ -377,14 +377,16 @@ function startEdit(el,table,id,field,type){
  */
 var dragState=null, dragEndedAt=0;
 
-function wireMfdsDrag(){
+/* 어느 탭의 칸반이든 board의 data-table을 읽어 그 표를 고친다 */
+function wireBoardDrag(){
   var board=document.querySelector(".board"); if(!board) return;
+  var table=board.getAttribute("data-table"); if(!table||!S[table]) return;
   board.addEventListener("pointerdown",function(e){
     if(editingId) return;                                   /* 편집 중엔 드래그 금지 */
     if(e.target.closest("input,textarea,button")) return;   /* 버튼·입력은 그대로 */
     var card=e.target.closest(".mini"); if(!card) return;
     var isTouch=(e.pointerType!=="mouse");
-    dragState={ id:card.getAttribute("data-mfds"), card:card, active:false,
+    dragState={ id:card.getAttribute("data-card"), card:card, active:false,
                 sx:e.clientX, sy:e.clientY, pid:e.pointerId,
                 holdOk:!isTouch, timer:null };
     if(isTouch) dragState.timer=setTimeout(function(){
@@ -416,9 +418,9 @@ function wireMfdsDrag(){
     cleanupDrag();
     dragEndedAt=Date.now();                                 /* 뒤따르는 click 무시용 */
     var st=col?col.getAttribute("data-col"):null;
-    var it=S.mfds.find(function(x){ return x.id===id; });
+    var it=S[table].find(function(x){ return x.id===id; });
     if(it&&st&&it.status!==st){
-      it.status=st; render(); dbUpdate("mfds",id,{status:st});
+      it.status=st; render(); dbUpdate(table,id,{status:st});
     } else render();                                        /* 원위치 */
   });
   board.addEventListener("pointercancel",function(){ cleanupDrag(); });
@@ -481,6 +483,13 @@ function focusDayPanel(){
   if(inp) inp.focus();
 }
 
+function statTile(tab,tone,num,label){
+  return '<button class="stat t-'+tone+'" data-act="tab" data-id="'+tab+'">'
+    + '<span class="stat-num">'+num+'</span>'
+    + '<span class="stat-lbl">'+esc(label)+'</span>'
+    + '<span class="stat-go">→</span></button>';
+}
+
 function renderToday(){
   var now=new Date(), h=now.getHours();
   var greet=h<6?"새벽이에요":h<12?"좋은 아침이에요":h<18?"좋은 오후예요":"수고한 하루예요";
@@ -505,18 +514,19 @@ function renderToday(){
   function schedRows(items,emptyMsg){
     var o=items.filter(function(i){return !i.done;}).sort(function(a,b){return (b.star?1:0)-(a.star?1:0);});
     var d=items.filter(function(i){return i.done;});
-    if(!o.length&&!d.length) return '<p class="empty">'+emptyMsg+'</p>';
+    if(!o.length&&!d.length) return '<div class="empty-box sm"><p>'+emptyMsg+'</p></div>';
     return '<ul class="list">'
       + o.map(function(i){
           var late=dueOf(i)<todayKey ? '<span class="row-late">지난</span>' : '';
-          return '<li class="row"><button class="check" data-act="s-toggle" data-id="'+i.id+'">✓</button>'
+          return '<li class="row'+(i.star?" star-on":"")+'"><button class="check" data-act="s-toggle" data-id="'+i.id+'">✓</button>'
             + '<span class="row-text" data-act="edit" data-table="schedule" data-field="text" data-id="'+i.id+'" title="눌러서 수정">'+esc(i.text)+'</span>'+late
-            + '<button class="star '+(i.star?"on":"")+'" data-act="s-star" data-id="'+i.id+'">'+(i.star?"★":"☆")+'</button>'
-            + '<button class="del" data-act="s-del" data-id="'+i.id+'">✕</button></li>'; }).join("")
+            + '<span class="row-acts">'
+            +   '<button class="star '+(i.star?"on":"")+'" data-act="s-star" data-id="'+i.id+'" title="별표">'+(i.star?"★":"☆")+'</button>'
+            +   '<button class="del" data-act="s-del" data-id="'+i.id+'" title="삭제">✕</button></span></li>'; }).join("")
       + d.map(function(i){
           return '<li class="row done"><button class="check on" data-act="s-toggle" data-id="'+i.id+'">✓</button>'
             + '<span class="row-text" data-act="edit" data-table="schedule" data-field="text" data-id="'+i.id+'" title="눌러서 수정">'+esc(i.text)+'</span>'
-            + '<button class="del" data-act="s-del" data-id="'+i.id+'">✕</button></li>'; }).join("")
+            + '<span class="row-acts"><button class="del" data-act="s-del" data-id="'+i.id+'" title="삭제">✕</button></span></li>'; }).join("")
       + '</ul>';
   }
   var rows    = schedRows(todayItems,"아직 할 일이 없어요. 첫 항목을 추가해 하루를 시작해 보세요.");
@@ -526,16 +536,16 @@ function renderToday(){
   view().innerHTML='<div class="page">'
     + '<header class="today-hero"><div class="today-date">'+esc(dateStr)+'</div><h1 class="today-greet">'+greet+', 이랑님.</h1><p class="today-line">오늘 할 일 '+open.length+'건'+(open.length?" 남았어요.":"이 없어요.")+(todayEv.length?" · 오늘 일정 "+todayEv.length+"건.":"")+'</p></header>'
     + '<section class="stat-row">'
-    +   '<button class="stat" data-act="tab" data-id="articles"><span class="stat-num">'+inProg+'</span><span class="stat-lbl">작성 중 기고글</span></button>'
-    +   '<button class="stat" data-act="tab" data-id="mfds"><span class="stat-num">'+mfdsOpen+'</span><span class="stat-lbl">진행 중 식약처 업무</span></button>'
-    +   '<button class="stat" data-act="tab" data-id="archive"><span class="stat-num">'+S.archive.length+'</span><span class="stat-lbl">민원 검토 건'+(needCheck?" · 확인필요 "+needCheck:"")+'</span></button>'
-    +   '<button class="stat" data-act="tab" data-id="docs"><span class="stat-num">'+S.docs.length+'</span><span class="stat-lbl">문서 인덱스</span></button>'
+    +   statTile("articles","brass",inProg,"작성 중 기고글")
+    +   statTile("mfds","blue",mfdsOpen,"진행 중 식약처 업무")
+    +   statTile("archive","accent",S.archive.length,"민원 검토 건"+(needCheck?" · 확인필요 "+needCheck:""))
+    +   statTile("docs","slate",S.docs.length,"문서 인덱스")
     + '</section>'+evHtml
     + '<section class="card"><div class="card-head"><h2>오늘 할 일</h2><span class="muted">별표는 위로 · 항목을 누르면 수정</span></div>'
-    +   '<div class="add-row"><input class="input" id="new-s" placeholder="할 일을 적고 Enter" /><button class="btn" data-act="s-add" data-id="'+todayKey+'" data-input="new-s">+ 추가</button></div>'+rows
+    +   '<div class="add-row quick"><input class="input" id="new-s" placeholder="할 일을 적고 Enter" /><button class="btn" data-act="s-add" data-id="'+todayKey+'" data-input="new-s">+ 추가</button></div>'+rows
     + '</section>'
     + '<section class="card"><div class="card-head"><h2>내일 할 일</h2><span class="muted">'+tmrLabel+'</span></div>'
-    +   '<div class="add-row"><input class="input" id="new-s2" placeholder="내일 할 일을 적고 Enter" /><button class="btn" data-act="s-add" data-id="'+tmrKey+'" data-input="new-s2">+ 추가</button></div>'+tmrRows
+    +   '<div class="add-row quick"><input class="input" id="new-s2" placeholder="내일 할 일을 적고 Enter" /><button class="btn" data-act="s-add" data-id="'+tmrKey+'" data-input="new-s2">+ 추가</button></div>'+tmrRows
     + '</section></div>';
   document.getElementById("new-s").addEventListener("keydown",function(e){ if(e.key==="Enter") addSchedule(todayKey,"new-s"); });
   document.getElementById("new-s2").addEventListener("keydown",function(e){ if(e.key==="Enter") addSchedule(tmrKey,"new-s2"); });
@@ -565,71 +575,197 @@ function renderCalendar(){
       + '<span class="mfds-badge">식약처</span>'
       + '<span class="ev-title" data-act="edit" data-table="mfds" data-field="title" data-id="'+t.id+'" title="눌러서 수정">'+esc(t.title)+'</span>'
       + '<span class="mfds-status">'+esc(t.status)+'</span>'
-      + '<button class="del" data-act="mfds-del" data-id="'+t.id+'">✕</button></li>'; }).join("");
+      + '<span class="row-acts"><button class="del" data-act="mfds-del" data-id="'+t.id+'" title="삭제">✕</button></span></li>'; }).join("");
   var panel='<div class="day-panel"><div class="day-title">'+(selD.getMonth()+1)+'월 '+selD.getDate()+'일 ('+WD[selD.getDay()]+')'+(calSel===todayKey?' <span class="day-today">오늘</span>':'')+'</div>'
-    + '<div class="add-row"><input class="input" id="day-ev" placeholder="할 일 / 일정 (예: 오후 2시 GMP 실사)" />'
+    + '<div class="add-row quick"><input class="input" id="day-ev" placeholder="할 일 / 일정 (예: 오후 2시 GMP 실사)" />'
     +   '<label class="chk"><input type="checkbox" id="day-mfds" /> 식약처 업무</label>'
     +   '<button class="btn" data-act="day-add">+ 추가</button></div>'
-    + ((selEvs.length||selTasks.length)? '<ul class="list">'+taskRows+selEvs.map(function(e){ return '<li class="ev-row"><span class="ev-time" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'+(e.time||"종일")+'</span><span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span><button class="del" data-act="ev-del" data-id="'+e.id+'">✕</button></li>'; }).join("")+'</ul>' : '<p class="empty">이 날은 아직 일정이 없어요.</p>')+'</div>';
-  view().innerHTML='<div class="page">'+pageHead("캘린더","")
+    + ((selEvs.length||selTasks.length)? '<ul class="list">'+taskRows+selEvs.map(function(e){ return '<li class="ev-row"><span class="ev-time" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'+(e.time||"종일")+'</span><span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span><span class="row-acts"><button class="del" data-act="ev-del" data-id="'+e.id+'" title="삭제">✕</button></span></li>'; }).join("")+'</ul>' : '<p class="empty">이 날은 아직 일정이 없어요.</p>')+'</div>';
+  var mk=calYear+"-"+pad(calMonth+1);
+  var mEv=S.events.filter(function(e){ return e.key.indexOf(mk)===0; }).length;
+  var mTask=S.mfds.filter(function(m){ return m.due&&m.due.indexOf(mk)===0; }).length;
+  var calPills=[]; if(mEv) calPills.push(pill("이번 달 일정 "+mEv+"건")); if(mTask) calPills.push(pill("기한 있는 업무 "+mTask+"건"));
+  view().innerHTML='<div class="page">'+pageHead2("캘린더","",calPills)
     + '<div class="cal-nav"><button class="cal-arrow" data-act="cal-prev">‹</button><span class="cal-month">'+calYear+'년 '+(calMonth+1)+'월</span><button class="cal-arrow" data-act="cal-next">›</button></div>'
     + '<div class="cal-grid">'+wdHtml+cells+'</div>'+panel+'</div>';
   document.getElementById("day-ev").addEventListener("keydown",function(e){ if(e.key==="Enter") dayAdd(); });
 }
 
+function articleCard(it){
+  return '<div class="mini" data-card="'+it.id+'">'
+    + '<button class="mini-del" data-act="a-del" data-id="'+it.id+'" title="삭제">✕</button>'
+    + '<div class="mini-title" data-act="edit" data-table="articles" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</div>'
+    + (it.memo
+        ? '<div class="mini-memo" data-act="edit" data-table="articles" data-field="memo" data-type="textarea" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.memo)+'</div>'
+        : '<div class="mini-memo none" data-act="edit" data-table="articles" data-field="memo" data-type="textarea" data-id="'+it.id+'" title="눌러서 메모 추가">＋ 주제 / 마감 / 메모</div>')
+    + '</div>';
+}
+
 function renderArticles(){
   var items=S.articles;
-  var body=items.length===0?'<p class="empty">기고글을 추가하면 진행 상태별로 정리돼요.</p>':'<div class="grid">'+items.map(function(it){ var bi=ARTICLE_STATUS.indexOf(it.status); return '<div class="tile"><div class="tile-head"><button class="badge b'+bi+'" data-act="a-cycle" data-id="'+it.id+'">'+esc(it.status)+'</button><button class="del" data-act="a-del" data-id="'+it.id+'">✕</button></div><div class="tile-title" data-act="edit" data-table="articles" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</div>'+(it.memo?'<div class="tile-memo" data-act="edit" data-table="articles" data-field="memo" data-type="textarea" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.memo)+'</div>':'<div class="tile-memo none" data-act="edit" data-table="articles" data-field="memo" data-type="textarea" data-id="'+it.id+'" title="눌러서 메모 추가">＋ 주제 / 마감 / 메모</div>')+'</div>'; }).join("")+'</div>';
-  view().innerHTML='<div class="page">'+pageHead("서울시약사회 동물약품 기고글","기획 중인 글부터 기고 완료된 글까지 한눈에 관리해요.")+'<div class="card form"><input class="input" id="a-title" placeholder="글 제목" />'+seg("a-status",ARTICLE_STATUS,"기획")+'<textarea class="input" id="a-memo" placeholder="주제 / 마감 / 메모"></textarea><button class="btn" data-act="a-add">+ 저장</button></div>'+body+'</div>';
-  wireSeg("a-status");
+  var counts=ARTICLE_STATUS.map(function(st){ return items.filter(function(a){return a.status===st;}).length; });
+
+  var composer = formOpen.articles
+    ? '<div class="card form composer">'
+      + '<input class="input composer-title" id="a-title" placeholder="글 제목" />'
+      + '<textarea class="input" id="a-memo" placeholder="주제 / 마감 / 메모 (선택)"></textarea>'
+      + '<div class="composer-foot">'+segC("a-status",ARTICLE_STATUS,"기획")+composerBtns("articles","a-add")+'</div>'
+      + '</div>'
+    : composerBtn("articles","새 기고글 추가","기획 → 작성중 → 기고완료 순으로 관리해요");
+
+  var pills=[pill("작성 중 "+counts[1]+"건")];
+  if(counts[0]) pills.push(pill("기획 "+counts[0]+"건"));
+
+  view().innerHTML='<div class="page">'
+    + pageHead2("서울시약사회 동물약품 기고글","카드를 지그시 눌렀다 끌면 다른 칸으로 옮겨져요.",items.length?pills:null)
+    + composer
+    + boardHtml("articles",ARTICLE_STATUS,items,articleCard)
+    + '</div>';
+
+  if(formOpen.articles){ wireSeg("a-status"); focusFirst("a-title"); }
+  wireBoardDrag();
+}
+
+/* ========== 접히는 입력창 (공용) ==========
+ * 입력 폼은 평소엔 접어 둔다. 화면 위쪽 절반을 폼이 차지하면
+ * 정작 봐야 할 목록이 스크롤 아래로 밀린다.
+ * 탭을 옮기면 모두 다시 접힌다. */
+var formOpen={mfds:false,articles:false,archive:false,docs:false};
+function closeForms(){ Object.keys(formOpen).forEach(function(k){ formOpen[k]=false; }); }
+function composerBtn(key,label,hint){
+  return '<button class="composer-open" data-act="f-open" data-id="'+key+'">'
+    + '<span class="composer-plus">+</span>'+esc(label)
+    + (hint?'<span class="composer-hint">'+esc(hint)+'</span>':'')+'</button>';
+}
+function composerBtns(key,saveAct,saveLabel){
+  return '<div class="composer-btns">'
+    + '<button class="btn quiet sm" data-act="f-close" data-id="'+key+'">취소</button>'
+    + '<button class="btn sm" data-act="'+saveAct+'">'+esc(saveLabel||"저장")+'</button></div>';
+}
+/* 펼친 직후 첫 칸에 커서를 둔다 */
+function focusFirst(id){ var el=document.getElementById(id); if(el) el.focus(); }
+/* 세그먼트 — 컴팩트(알약) 형태 */
+function segC(name,opts,def){
+  return '<div class="seg compact" data-seg="'+name+'">'
+    + opts.map(function(o){ return '<button class="seg-btn '+(o===def?"on":"")+'" data-val="'+esc(o)+'">'+esc(o)+'</button>'; }).join("")
+    + '</div>';
+}
+/* 페이지 머리말 + 요약 배지 */
+function pageHead2(title,sub,pills){
+  return '<header class="page-head"><div><h1 class="page-title">'+esc(title)+'</h1>'
+    + (sub?'<p class="page-sub">'+esc(sub)+'</p>':'')
+    + (pills&&pills.length?'<div class="head-meta">'+pills.join("")+'</div>':'')
+    + '</div></header>';
+}
+function pill(label,tone){ return '<span class="meta-pill'+(tone?" "+tone:"")+'">'+esc(label)+'</span>'; }
+
+function dayGap(a,b){ return Math.round((new Date(b+"T00:00:00")-new Date(a+"T00:00:00"))/86400000); }
+
+/* 기한 칩 — 날짜만 적어두면 급한지 아닌지 매번 세어봐야 하므로 남은 날짜로 바꿔 보여준다 */
+function mfdsDue(it,todayKey){
+  var at=' data-act="edit" data-table="mfds" data-field="due" data-type="date" data-id="'+it.id+'"';
+  if(!it.due) return '<span class="mini-due none"'+at+' title="눌러서 기한 추가">＋ 기한</span>';
+  var d=new Date(it.due+"T00:00:00");
+  var date=(d.getMonth()+1)+"월 "+d.getDate()+"일";
+  var label=date, tone="";
+  if(it.status!=="완료"){
+    var gap=dayGap(todayKey,it.due);
+    if(gap<0){ tone=" over"; label=date+" · "+(-gap)+"일 지남"; }
+    else if(gap===0){ tone=" over"; label="오늘 마감"; }
+    else if(gap===1){ tone=" soon"; label="내일 마감"; }
+    else if(gap<=3){ tone=" soon"; label=date+" · "+gap+"일 남음"; }
+  }
+  return '<span class="mini-due'+tone+'"'+at+' title="눌러서 기한 수정">'+esc(label)+'</span>';
+}
+
+/* 칸반 뼈대 — 식약처 업무·기고글이 함께 쓴다 */
+function boardHtml(table,statuses,items,cardFn){
+  return '<div class="board" data-table="'+table+'">'
+    + statuses.map(function(st){
+        var list=items.filter(function(i){ return i.status===st; });
+        return '<div class="col" data-col="'+esc(st)+'">'
+          + '<div class="col-head"><span class="col-dot"></span>'+esc(st)+'<span class="col-count">'+list.length+'</span></div>'
+          + (list.length
+              ? list.map(cardFn).join("")
+              : '<div class="col-empty">여기로 카드를 끌어다<br />놓을 수 있어요</div>')
+          + '</div>';
+      }).join("")
+    + '</div>';
+}
+
+function mfdsCard(it,todayKey){
+  return '<div class="mini" data-card="'+it.id+'">'
+    + '<button class="mini-del" data-act="m-del" data-id="'+it.id+'" title="삭제">✕</button>'
+    + '<div class="mini-title" data-act="edit" data-table="mfds" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</div>'
+    + (it.memo
+        ? '<div class="mini-memo" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.memo)+'</div>'
+        : '<div class="mini-memo none" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+it.id+'" title="눌러서 담당·메모 추가">＋ 담당 / 메모</div>')
+    + '<div class="mini-foot">'+mfdsDue(it,todayKey)+'</div>'
+    + '</div>';
+}
+
+function mfdsComposer(){
+  if(!formOpen.mfds) return composerBtn("mfds","새 업무 추가","기한을 넣으면 캘린더에도 표시돼요");
+  return '<div class="card form composer">'
+    + '<input class="input composer-title" id="m-title" placeholder="업무명 (예: 바이오시밀러 사전 GMP 평가)" />'
+    + '<textarea class="input" id="m-memo" placeholder="담당 / 메모 (선택)"></textarea>'
+    + '<div class="composer-foot">'
+    +   segC("m-status",MFDS_STATUS,"대기")
+    +   '<div class="due-field"><label for="m-due">기한</label><input class="input" type="date" id="m-due" /></div>'
+    +   composerBtns("mfds","m-add")
+    + '</div></div>';
 }
 
 function renderMfds(){
   var items=S.mfds, todayKey=keyOf(new Date());
-  var board=MFDS_STATUS.map(function(st){
-    var list=items.filter(function(i){ return i.status===st; });
-    return '<div class="col" data-col="'+esc(st)+'"><div class="col-head">'+st+' <span class="muted">'+list.length+'</span></div>'
-      + list.map(function(it){
-          var due;
-          if(it.due){
-            var d=new Date(it.due), over=(it.due<todayKey && it.status!=="완료");
-            due='<div class="mini-due'+(over?" over":"")+'" data-act="edit" data-table="mfds" data-field="due" data-type="date" data-id="'+it.id+'" title="눌러서 기한 수정">'
-               +(d.getMonth()+1)+'월 '+d.getDate()+'일'+(over?' · 기한 지남':'')+'</div>';
-          } else {
-            due='<div class="mini-due none" data-act="edit" data-table="mfds" data-field="due" data-type="date" data-id="'+it.id+'" title="눌러서 기한 추가">＋ 기한</div>';
-          }
-          return '<div class="mini" data-mfds="'+it.id+'">'
-            + '<div class="mini-title" data-act="edit" data-table="mfds" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</div>'
-            + (it.memo
-                ? '<div class="mini-memo" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.memo)+'</div>'
-                : '<div class="mini-memo none" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+it.id+'" title="눌러서 담당·메모 추가">＋ 담당 / 메모</div>')
-            + due
-            + '<div class="mini-actions"><button class="del" data-act="m-del" data-id="'+it.id+'">✕</button></div></div>';
-        }).join("")
-      + '</div>';
-  }).join("");
-  view().innerHTML='<div class="page">'+pageHead("식약처 업무","진행 상태로 나눠서 봐요. 카드를 지그시 눌렀다 끌면 다른 칸으로 옮겨져요.")
-    + '<div class="card form"><input class="input" id="m-title" placeholder="업무명 (예: 바이오시밀러 사전 GMP 평가)" />'
-    + seg("m-status",MFDS_STATUS,"대기")
-    + '<div class="add-row"><label class="due-lbl" for="m-due">기한</label><input class="input due-input" type="date" id="m-due" /><span class="muted">기한을 넣으면 캘린더에도 표시돼요</span></div>'
-    + '<textarea class="input" id="m-memo" placeholder="담당 / 메모"></textarea>'
-    + '<button class="btn" data-act="m-add">+ 저장</button></div>'
-    + (items.length===0?'<p class="empty">업무를 추가하면 대기 → 진행 → 완료로 정리돼요.</p>':'<div class="board">'+board+'</div>')
+  var late=items.filter(function(i){ return i.due && i.status!=="완료" && i.due<todayKey; }).length;
+  var open=items.filter(function(i){ return i.status!=="완료"; }).length;
+
+  var pills=[pill("진행 중 "+open+"건")];
+  if(late) pills.push(pill("기한 지남 "+late+"건","warn"));
+
+  view().innerHTML='<div class="page">'
+    + pageHead2("식약처 업무","카드를 지그시 눌렀다 끌면 다른 칸으로 옮겨져요.",items.length?pills:null)
+    + mfdsComposer()
+    + boardHtml("mfds",MFDS_STATUS,items,function(it){ return mfdsCard(it,todayKey); })
     + '</div>';
-  wireSeg("m-status");
-  wireMfdsDrag();
+
+  if(formOpen.mfds){ wireSeg("m-status"); focusFirst("m-title"); }
+  wireBoardDrag();
 }
 
 function renderArchive(){
   var need=S.archive.filter(function(a){return a.needsCheck;}).length;
-  view().innerHTML='<div class="page">'+pageHead("민원 검토 서가","건별 검토 파일과 핵심 쟁점을 쌓아 두고, 지침서·키워드로 찾아요.")
-    + '<input class="input search" id="ar-search" placeholder="건명·지침서·키워드로 검색 (예: 0980-05 갱신, 별표3)" value="'+esc(archiveSearch)+'" />'
-    + '<div class="chip-row"><button class="chip '+(archiveOnlyCheck?"on":"")+'" data-act="ar-filter">확인 필요만'+(need?' ('+need+')':'')+' </button></div>'
-    + '<div class="import-bar" data-act="ar-import-docx"><span class="import-bar-ic">📄</span><div class="import-bar-text"><div class="import-bar-title">마스터 문서(.docx)에서 가져오기</div><div class="import-bar-sub">워드 파일을 선택하면 건별로 자동 파싱해서 서가에 채워줘요.</div></div></div>'
+  var pills=[pill("총 "+S.archive.length+"건")];
+  if(need) pills.push(pill("확인 필요 "+need+"건","warn"));
+
+  var composer = formOpen.archive
+    ? '<div class="card form composer">'
+      + '<input class="input composer-title" id="ar-title" placeholder="건명 (예: 건4. OOS 배치 재시험 처리)" />'
+      + '<input class="input" id="ar-law" placeholder="적용 지침서 / 근거 (예: 0980-05 §6.4)" />'
+      + '<textarea class="input" id="ar-ans" placeholder="핵심 쟁점·검토 요지"></textarea>'
+      + '<input class="input" id="ar-kw" placeholder="키워드 (띄어쓰기로 구분)" />'
+      + '<div class="composer-foot">'
+      +   '<label class="check-line"><input type="checkbox" id="ar-check" /> [확인 필요] 항목 있음</label>'
+      +   composerBtns("archive","ar-add","건 추가")
+      + '</div></div>'
+    : composerBtn("archive","새 검토 건 추가","건명·근거·쟁점을 함께 적어 두면 나중에 검색돼요");
+
+  view().innerHTML='<div class="page">'
+    + pageHead2("민원 검토 서가","건별 검토 파일과 핵심 쟁점을 쌓아 두고, 지침서·키워드로 찾아요.",S.archive.length?pills:null)
+    + '<div class="search-box"><span class="search-ic">⌕</span>'
+    +   '<input class="input search" id="ar-search" placeholder="건명·지침서·키워드로 검색 (예: 0980-05 갱신, 별표3)" value="'+esc(archiveSearch)+'" />'
+    + '</div>'
+    + '<div class="chip-row">'
+    +   '<button class="chip '+(archiveOnlyCheck?"":"on")+'" data-act="ar-filter" data-id="all">전체<span class="chip-n">'+S.archive.length+'</span></button>'
+    +   '<button class="chip '+(archiveOnlyCheck?"on":"")+'" data-act="ar-filter" data-id="check">확인 필요<span class="chip-n">'+need+'</span></button>'
+    + '</div>'
+    + composer
+    + '<button class="import-bar" data-act="ar-import-docx"><span class="import-bar-ic">📄</span><div class="import-bar-text"><div class="import-bar-title">마스터 문서(.docx)에서 가져오기</div><div class="import-bar-sub">워드 파일을 선택하면 건별로 자동 파싱해서 서가에 채워줘요.</div></div><span class="import-bar-go">→</span></button>'
     + '<div id="ar-import-msg" style="display:none;margin-bottom:14px"></div>'
-    + '<div class="card form"><input class="input" id="ar-title" placeholder="건명 (예: 건4. OOS 배치 재시험 처리)" /><input class="input" id="ar-law" placeholder="적용 지침서 / 근거 (예: 0980-05 §6.4)" /><textarea class="input" id="ar-ans" placeholder="핵심 쟁점·검토 요지"></textarea><input class="input" id="ar-kw" placeholder="키워드 (띄어쓰기로 구분)" /><label class="check-line"><input type="checkbox" id="ar-check" /> [확인 필요] 항목 있음</label><button class="btn" data-act="ar-add">+ 건 추가</button></div>'
     + '<div id="ar-list"></div></div>';
   renderArchiveList();
+  if(formOpen.archive) focusFirst("ar-title");
   document.getElementById("ar-search").addEventListener("input",function(e){ archiveSearch=e.target.value; renderArchiveList(); });
 }
 
@@ -647,7 +783,7 @@ function renderArchiveList(){
     var files= it.filePath
       ? '<div class="entry-files"><span class="file-name">📎 '+esc(it.fileName||"첨부 파일")+'</span><button class="file-btn" data-act="ar-open" data-id="'+it.id+'">열기</button><button class="file-btn plain" data-act="ar-filedel" data-id="'+it.id+'">파일 삭제</button></div>'
       : '<div class="entry-files"><button class="file-btn" data-act="ar-attach" data-id="'+it.id+'">📎 검토 파일 첨부</button></div>';
-    return '<div class="entry"><div class="entry-top"><div class="entry-q"><span data-act="edit" data-table="archive" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</span>'+(it.needsCheck?'<span class="entry-flag">확인 필요</span>':'')+'</div><button class="del" data-act="ar-del" data-id="'+it.id+'">✕</button></div>'
+    return '<div class="entry"><div class="entry-top"><div class="entry-q"><span data-act="edit" data-table="archive" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</span>'+(it.needsCheck?'<span class="entry-flag">확인 필요</span>':'')+'</div><button class="del entry-del" data-act="ar-del" data-id="'+it.id+'" title="삭제">✕</button></div>'
       + (it.guideline?'<div class="entry-law">§ '+esc(it.guideline)+'</div>':'')
       + (it.summary?'<div class="entry-ans" data-act="edit" data-table="archive" data-field="summary" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.summary)+'</div>':'')
       + kw + files + '</div>';
@@ -656,8 +792,36 @@ function renderArchiveList(){
 
 function renderDocs(){
   var items=S.docs;
-  var body=items.length===0?'<p class="empty">파일을 올리거나, 자주 찾는 자료의 위치를 적어 두면 매번 찾아 헤매지 않아도 돼요.</p>':'<div class="doc-list">'+items.map(function(it){ var act=it.filePath?'<button class="doc-act" data-act="d-open" data-id="'+it.id+'">열기 ↗</button>':(it.link?'<a class="doc-act" href="'+esc(it.link)+'" target="_blank" rel="noreferrer">열기 ↗</a>':''); return '<div class="doc"><span class="doc-ic">'+(it.filePath?"⬇":"■")+'</span><div class="doc-body"><span class="doc-name" data-act="edit" data-table="docs" data-field="name" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.name)+'</span>'+(it.cat?'<span class="doc-cat">'+esc(it.cat)+'</span>':'')+'</div>'+act+'<button class="del" data-act="d-del" data-id="'+it.id+'">✕</button></div>'; }).join("")+'</div>';
-  view().innerHTML='<div class="page">'+pageHead("문서 인덱스","공개 법령·지침서 PDF는 여기에 올려두고 바로 열 수 있어요.")+'<div class="notice">공개 자료(법령·지침서 등)만 올려주세요. 개인정보가 든 답변 원본·내부 비공개 문서는 온나라 등 공식 시스템에 두고, 여기엔 이름·위치만 적는 걸 권해요.</div><div class="up-zone"><button class="btn" data-act="d-upload">파일 올리기 (PDF 등)</button><span class="muted">공개 법령·지침서 PDF</span></div><div class="card form"><input class="input" id="d-name" placeholder="문서명 (위치만 적을 때)" /><input class="input" id="d-cat" placeholder="분류 (예: GMP / 법령 / 서식)" /><input class="input" id="d-link" placeholder="링크 또는 위치 (선택)" /><button class="btn ghost" data-act="d-add">위치만 저장</button></div>'+body+'</div>';
+  var upCount=items.filter(function(d){return d.filePath;}).length;
+  var pills=[pill("총 "+items.length+"건")];
+  if(upCount) pills.push(pill("올린 파일 "+upCount+"건"));
+
+  var body = items.length===0
+    ? '<div class="empty-box"><div class="empty-ic">▤</div><p>파일을 올리거나, 자주 찾는 자료의 위치를 적어 두면<br />매번 찾아 헤매지 않아도 돼요.</p></div>'
+    : '<div class="doc-list">'+items.map(function(it){
+        var act=it.filePath
+          ? '<button class="doc-act" data-act="d-open" data-id="'+it.id+'">열기 ↗</button>'
+          : (it.link?'<a class="doc-act" href="'+esc(it.link)+'" target="_blank" rel="noreferrer">열기 ↗</a>':'');
+        return '<div class="doc">'
+          + '<span class="doc-ic'+(it.filePath?" file":"")+'">'+(it.filePath?"⬇":"■")+'</span>'
+          + '<div class="doc-body"><span class="doc-name" data-act="edit" data-table="docs" data-field="name" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.name)+'</span>'
+          +   (it.cat?'<span class="doc-cat">'+esc(it.cat)+'</span>':'')+'</div>'
+          + act+'<button class="del doc-del" data-act="d-del" data-id="'+it.id+'" title="삭제">✕</button></div>'; }).join("")+'</div>';
+
+  var composer = formOpen.docs
+    ? '<div class="card form composer">'
+      + '<input class="input composer-title" id="d-name" placeholder="문서명 (예: 의약품 제조 및 품질관리 규정)" />'
+      + '<input class="input" id="d-cat" placeholder="분류 (예: GMP / 법령 / 서식)" />'
+      + '<input class="input" id="d-link" placeholder="링크 또는 위치 (예: 온나라 > 법령집 > 3권)" />'
+      + '<div class="composer-foot">'+composerBtns("docs","d-add","위치만 저장")+'</div></div>'
+    : composerBtn("docs","위치만 적어 두기","파일을 올리지 않고 어디에 있는지만 기록해요");
+
+  view().innerHTML='<div class="page">'
+    + pageHead2("문서 인덱스","공개 법령·지침서 PDF는 여기에 올려두고 바로 열 수 있어요.",items.length?pills:null)
+    + '<div class="notice"><span class="notice-ic">!</span><div>공개 자료(법령·지침서 등)만 올려주세요. 개인정보가 든 답변 원본·내부 비공개 문서는 온나라 등 공식 시스템에 두고, 여기엔 이름·위치만 적는 걸 권해요.</div></div>'
+    + '<button class="upload-bar" data-act="d-upload"><span class="upload-ic">⬆</span><div class="import-bar-text"><div class="import-bar-title">파일 올리기</div><div class="import-bar-sub">공개 법령·지침서 PDF</div></div><span class="import-bar-go">→</span></button>'
+    + composer + body + '</div>';
+  if(formOpen.docs) focusFirst("d-name");
 }
 
 /* ========== 액션 (id 없이 insert → 서버가 uuid 생성) ========== */
@@ -666,17 +830,13 @@ function addSchedule(dueKey,inputId){
   var item={text:v,done:false,star:false,due:dueKey||keyOf(new Date())};
   S.schedule.unshift(item); render(); dbInsert("schedule",item);
 }
-function addArticle(){ var t=(val("a-title")||"").trim(); if(!t) return; var item={title:t,status:segValue("a-status")||"기획",memo:(val("a-memo")||"").trim()}; S.articles.unshift(item); render(); dbInsert("articles",item); }
+function addArticle(){ var t=(val("a-title")||"").trim(); if(!t) return; var item={title:t,status:segValue("a-status")||"기획",memo:(val("a-memo")||"").trim()}; S.articles.unshift(item); formOpen.articles=false; render(); dbInsert("articles",item); }
 function addMfds(){ var t=(val("m-title")||"").trim(); if(!t) return;
   var item={title:t,status:segValue("m-status")||"대기",memo:(val("m-memo")||"").trim(),due:(val("m-due")||"")||null};
-  S.mfds.unshift(item); render(); dbInsert("mfds",item); }
-function addArchive(){ var t=(val("ar-title")||"").trim(); if(!t) return; var chk=document.getElementById("ar-check"); var item={title:t,guideline:(val("ar-law")||"").trim(),summary:(val("ar-ans")||"").trim(),keywords:(val("ar-kw")||"").trim(),needsCheck:chk?chk.checked:false}; S.archive.unshift(item); render(); dbInsert("archive",item); }
-function addDocLink(){ var n=(val("d-name")||"").trim(); if(!n) return; var item={name:n,cat:(val("d-cat")||"").trim(),link:(val("d-link")||"").trim()}; S.docs.unshift(item); render(); dbInsert("docs",item); }
+  S.mfds.unshift(item); formOpen.mfds=false; render(); dbInsert("mfds",item); }
+function addArchive(){ var t=(val("ar-title")||"").trim(); if(!t) return; var chk=document.getElementById("ar-check"); var item={title:t,guideline:(val("ar-law")||"").trim(),summary:(val("ar-ans")||"").trim(),keywords:(val("ar-kw")||"").trim(),needsCheck:chk?chk.checked:false}; S.archive.unshift(item); formOpen.archive=false; render(); dbInsert("archive",item); }
+function addDocLink(){ var n=(val("d-name")||"").trim(); if(!n) return; var item={name:n,cat:(val("d-cat")||"").trim(),link:(val("d-link")||"").trim()}; S.docs.unshift(item); formOpen.docs=false; render(); dbInsert("docs",item); }
 
-function cycle(arr,id,states,tableName){
-  var it=arr.find(function(x){return x.id===id;});
-  if(it){ it.status=states[(states.indexOf(it.status)+1)%states.length]; render(); dbUpdate(tableName,id,{status:it.status}); }
-}
 function del(name,id){ S[name]=S[name].filter(function(x){return x.id!==id;}); render(); dbDelete(name,id); }
 
 function dayAdd(){
@@ -895,7 +1055,7 @@ document.getElementById("app").addEventListener("click",function(e){
   var el=e.target.closest("[data-act]"); if(!el) return;
   var act=el.getAttribute("data-act"), id=el.getAttribute("data-id");
   switch(act){
-    case "tab": active=id; render(); break;
+    case "tab": active=id; closeForms(); render(); break;
     case "s-add": addSchedule(id,el.getAttribute("data-input")); break;
     case "edit":
       if(Date.now()-dragEndedAt<350) break;   /* 드래그 직후 따라오는 click은 무시 */
@@ -920,13 +1080,14 @@ document.getElementById("app").addEventListener("click",function(e){
     case "day-add": dayAdd(); break;
     case "ev-del": evDel(id); break;
     case "a-add": addArticle(); break;
-    case "a-cycle": cycle(S.articles,id,ARTICLE_STATUS,"articles"); break;
     case "a-del": del("articles",id); break;
+    case "f-open": formOpen[id]=true; render(); break;
+    case "f-close": formOpen[id]=false; render(); break;
     case "m-add": addMfds(); break;
     case "m-del": del("mfds",id); break;
     case "ar-add": addArchive(); break;
     case "ar-del": del("archive",id); break;
-    case "ar-filter": archiveOnlyCheck=!archiveOnlyCheck; render(); break;
+    case "ar-filter": archiveOnlyCheck=(id==="check"); render(); break;
     case "ar-import-docx": importDocxClick(); break;
     case "ar-attach": archiveAttach(id); break;
     case "ar-open": { var a=S.archive.find(function(x){return x.id===id;}); if(a&&a.filePath) openStorageFile(a.filePath); break; }

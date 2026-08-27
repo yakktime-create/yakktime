@@ -1433,6 +1433,8 @@ function articleAt(arts,text,at,carried){
  * PDF에서 뽑으면 전부 한 줄로 이어져 읽기가 어렵다. */
 
 var META_RE=/<[^<>]{0,60}>|\[[^\[\]]{0,60}\]/g;          /* <개정 2024. 12. 30.> [본조신설 …] */
+/* 목 표시로 실제 쓰이는 글자 (가나다… / 거너더… / 고노도…) */
+var MOK="가나다라마바사아자차카타파하거너더러머버서어저처커터퍼허고노도로모보소오조초코토포호";
 var RUNHEAD_RE=/^(?:법제처\s*\d+\s*국가법령정보센터|■[^\[]{0,60}(?=\[))\s*/;  /* 쪽마다 반복되는 머리글 */
 
 /* 끊을 자리 찾기 — 날짜(<개정 2022. 12. 29.>)를 호로 오인하지 않도록
@@ -1450,10 +1452,20 @@ function lawBreaks(text){
     if(inSkip(i)) continue;
     var ch=text.charAt(i);
     if(HANG.indexOf(ch)>=0){ pts.push({at:i,lv:1,len:0}); continue; }
-    /* 호(1. 2.) · 목(가. 나.) — 앞이 공백이고 뒤가 공백인 것만 */
+    /* 호(1. 2.) · 목(가. 나.) — 앞이 공백이고 뒤가 공백인 것만.
+     * PDF에서 뽑으면 "사 ." 처럼 점 앞에 공백이 끼기도 해서 허용한다.
+     * 목 글자는 실제 쓰이는 것만 열거한다 — [가-하] 범위로 잡으면
+     * 한글 거의 전부가 들어가서 "…한다 ." 같은 문장 끝까지 걸린다. */
     if(i>0&&/\s/.test(text.charAt(i-1))){
-      var mm=/^(\d{1,2}|[가-하])\.\s/.exec(text.slice(i,i+5));
-      if(mm) pts.push({at:i,lv:/\d/.test(mm[1])?2:3,len:0});
+      var mm=/^(\d{1,2}|[\uAC00-\uD7A3])\s*\.\s/.exec(text.slice(i,i+6));
+      if(mm){
+        if(/^\d+$/.test(mm[1])) pts.push({at:i,lv:2,len:0});
+        else if(MOK.indexOf(mm[1])>=0) pts.push({at:i,lv:3,len:0});
+      } else {
+        /* 목 아래 세부는 "1)" "가)" 꼴을 쓴다 */
+        var m2=/^(\d{1,2}|[\uAC00-\uD7A3])\s*\)\s/.exec(text.slice(i,i+6));
+        if(m2&&(/^\d+$/.test(m2[1])||MOK.indexOf(m2[1])>=0)) pts.push({at:i,lv:4,len:0});
+      }
     }
   }
   pts.sort(function(a,b){ return a.at-b.at||a.lv-b.lv; });
@@ -1493,7 +1505,7 @@ function lawSegHtml(seg,q,artLen){
   return out+esc(seg.slice(pos));
 }
 
-var LP_CLASS=["lp0","lp1","lp2","lp3"];
+var LP_CLASS=["lp0","lp1","lp2","lp3","lp4"];
 function formatLawText(text,q){
   var pts=lawBreaks(text);
   if(!pts.length) return '<div class="lp lp0">'+lawSegHtml(text,q,0)+'</div>';

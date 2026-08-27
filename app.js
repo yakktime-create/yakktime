@@ -142,7 +142,7 @@ document.getElementById("login-pw").addEventListener("keydown",function(e){ if(e
 document.getElementById("login-email").addEventListener("keydown",function(e){ if(e.key==="Enter") document.getElementById("login-pw").focus(); });
 
 /* ========== DB 레이어 (Supabase) — OPUS SQL 스키마 ========== */
-var TABLES=["schedule","events","articles","mfds","archive","docs"];
+var TABLES=["schedule","events","articles","mfds","archive","docs","laws"];
 
 /*
  * OPUS SQL 컬럼명 매핑:
@@ -203,14 +203,20 @@ function toRemote(table,item){
   return o;
 }
 
+/* 표 하나가 실패해도 앱 전체를 막지 않는다.
+ * (예: 새 기능의 표를 아직 안 만들었을 때 — 그 탭만 비고 나머지는 정상 동작) */
 function loadAll(){
   var promises=TABLES.map(function(t){
     return withAuthRetry(function(){ return sb.from(t).select("*"); }).then(function(res){
-      if(res.error) throw res.error;
+      if(res.error) return {table:t, data:[], failed:res.error.message||"알 수 없는 오류"};
       return {table:t, data:(res.data||[]).map(function(r){ return toLocal(t,r); })};
+    }).catch(function(err){
+      return {table:t, data:[], failed:(err&&err.message)||"알 수 없는 오류"};
     });
   });
   return Promise.all(promises).then(function(results){
+    var bad=results.filter(function(r){ return r.failed; }).map(function(r){ return r.table; });
+    if(bad.length) setTimeout(function(){ showToast("일부 데이터를 못 읽었어요: "+bad.join(", "),true); },600);
     results.forEach(function(r){ S[r.table]=r.data; });
   });
 }
@@ -241,12 +247,13 @@ function dbDelete(table,id){
 }
 
 /* ========== 전역 상태 ========== */
-var S={ schedule:[], events:[], articles:[], mfds:[], archive:[], docs:[] };
+var S={ schedule:[], events:[], articles:[], mfds:[], archive:[], docs:[], laws:[] };
 var active="today", archiveSearch="", archiveOnlyCheck=false;
 var now0=new Date(), calYear=now0.getFullYear(), calMonth=now0.getMonth(), calSel=keyOf(now0);
 var ARTICLE_STATUS=["기획","작성중","기고완료"], MFDS_STATUS=["대기","진행중","완료"];
 var TAB_LIST=[{id:"today",label:"오늘"},{id:"calendar",label:"캘린더"},{id:"articles",label:"기고글"},
-  {id:"mfds",label:"식약처 업무"},{id:"archive",label:"민원 검토 서가"},{id:"docs",label:"문서 인덱스"}];
+  {id:"mfds",label:"식약처 업무"},{id:"archive",label:"민원 검토 서가"},{id:"docs",label:"문서 인덱스"},
+  {id:"laws",label:"법령 검색"}];
 var WD=["일","월","화","수","목","금","토"];
 
 /* ========== 시드 데이터 ========== */
@@ -926,6 +933,11 @@ function mergeArchiveCases(parsed){
   return {added:added,updated:updated};
 }
 
+document.getElementById("lawfile").addEventListener("change",function(e){
+  var f=e.target.files[0]; e.target.value=""; if(!f) return;
+  lawUpload(f);
+});
+
 document.getElementById("docxfile").addEventListener("change",function(e){
   var f=e.target.files[0]; e.target.value=""; if(!f) return;
   var reader=new FileReader();
@@ -1050,6 +1062,340 @@ document.getElementById("file").addEventListener("change",function(e){
   r.readAsText(f); e.target.value="";
 });
 
+/* ========== 법령 검색 (1단계) ==========
+ * PDF → pdf.js로 쪽마다 텍스트 추출 → law_pages에 저장 → ilike로 검색.
+ * 쪽 단위로 저장하는 이유: "어느 법령 몇 쪽"이 그대로 나오고,
+ * PDF도 그 쪽으로 바로 열 수 있다. (2단계에서 조문 단위 표를 따로 만든다) */
+
+var lawQuery="", lawHits=null, lawSel={}, lawBusy=false, lawSearching=false, lawListOpen=false;
+
+/* pdf.js는 1MB가 넘으므로 이 탭을 쓸 때만 내려받는다 */
+var PDFJS_BASE="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/";
+var pdfjsReady=null;
+function loadPdfJs(){
+  if(pdfjsReady) return pdfjsReady;
+  pdfjsReady=new Promise(function(resolve,reject){
+    if(window.pdfjsLib){ resolve(window.pdfjsLib); return; }
+    var sc=document.createElement("script");
+    sc.src=PDFJS_BASE+"pdf.min.js";
+    sc.onload=function(){
+      if(!window.pdfjsLib){ pdfjsReady=null; reject(new Error("PDF 처리기를 불러오지 못했어요.")); return; }
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS_BASE+"pdf.worker.min.js";
+      resolve(window.pdfjsLib);
+    };
+    sc.onerror=function(){ pdfjsReady=null; reject(new Error("PDF 처리기를 내려받지 못했어요. 네트워크를 확인해 주세요.")); };
+    document.head.appendChild(sc);
+  });
+  return pdfjsReady;
+}
+
+/* 일부 환경에서는 다른 도메인의 워커 파일이 막힌다.
+ * 그때는 워커 파일을 본체 스레드에 직접 올려서 다시 시도한다. */
+var pdfInlineReady=null;
+function loadPdfWorkerInline(){
+  if(pdfInlineReady) return pdfInlineReady;
+  pdfInlineReady=new Promise(function(resolve,reject){
+    if(window.pdfjsWorker){ resolve(); return; }
+    var sc=document.createElement("script");
+    sc.src=PDFJS_BASE+"pdf.worker.min.js";
+    sc.onload=function(){ resolve(); };
+    sc.onerror=function(){ pdfInlineReady=null; reject(new Error("PDF 처리기를 내려받지 못했어요.")); };
+    document.head.appendChild(sc);
+  });
+  return pdfInlineReady;
+}
+
+function readBuffer(f){
+  return new Promise(function(resolve,reject){
+    var r=new FileReader();
+    r.onload=function(){ resolve(r.result); };
+    r.onerror=function(){ reject(new Error("파일을 읽지 못했어요.")); };
+    r.readAsArrayBuffer(f);
+  });
+}
+
+/* 쪽마다 텍스트를 뽑는다. 글자가 없는 쪽(표지·이미지)은 건너뛴다. */
+function extractPdfPages(buf,onProgress){
+  var bytes=new Uint8Array(buf);
+  var backup=bytes.slice(0);   /* pdf.js가 워커로 넘기면 원본이 비므로 사본을 남긴다 */
+  return loadPdfJs().then(function(pdfjsLib){
+    return pdfjsLib.getDocument({data:bytes}).promise.catch(function(){
+      return loadPdfWorkerInline().then(function(){
+        return pdfjsLib.getDocument({data:backup}).promise;
+      });
+    });
+  }).then(function(doc){
+    var pages=[], total=doc.numPages;
+    function step(i){
+      if(i>total) return Promise.resolve(pages);
+      return doc.getPage(i).then(function(pg){ return pg.getTextContent(); }).then(function(tc){
+        var txt=tc.items.map(function(it){ return it.str; }).join(" ").replace(/\s+/g," ").trim();
+        if(txt) pages.push({page:i,content:txt});
+        if(onProgress) onProgress(i,total);
+        return step(i+1);
+      });
+    }
+    return step(1);
+  });
+}
+
+function lawUploadClick(){ if(!lawBusy) document.getElementById("lawfile").click(); }
+
+function lawUpload(f){
+  if(lawBusy) return;
+  lawBusy=true; render();
+  var path=Date.now()+"_"+f.name.replace(/[^a-zA-Z0-9._-]/g,"_");
+  var uploaded=false;
+  showToast("PDF 읽는 중...");
+  readBuffer(f).then(function(buf){
+    return extractPdfPages(buf,function(i,n){ showToast("텍스트 추출 "+i+"/"+n+"쪽"); });
+  }).then(function(pages){
+    /* 스캔본이면 글자가 거의 안 나온다 — 올려봐야 검색이 안 되므로 여기서 멈춘다 */
+    var chars=0; pages.forEach(function(p){ chars+=p.content.length; });
+    if(chars<200) throw new Error("SCAN");
+    showToast("파일 올리는 중...");
+    return sb.storage.from("files").upload(path,f).then(function(res){
+      if(res.error) throw new Error("업로드 실패: "+res.error.message);
+      uploaded=true;
+      return pages;
+    });
+  }).then(function(pages){
+    var item={name:f.name.replace(/\.pdf$/i,""),filePath:path,fileName:f.name,pages:pages.length};
+    return dbInsert("laws",item).then(function(row){
+      if(!row) throw new Error("법령 정보를 저장하지 못했어요.");
+      S.laws.unshift(item);
+      return saveLawPages(row.id,pages);
+    });
+  }).then(function(){
+    lawBusy=false; lawListOpen=true; render();
+    showToast("✓ 법령 추가 완료");
+  }).catch(function(err){
+    lawBusy=false;
+    if(uploaded) sb.storage.from("files").remove([path]);
+    render();
+    if(err&&err.message==="SCAN"){
+      alert("글자가 없는 스캔본 같아요.\n\n1단계는 글자가 들어 있는 PDF만 지원해요.\n법제처에서 받은 PDF면 대부분 됩니다.");
+    } else showToast((err&&err.message)||"법령을 추가하지 못했어요.",true);
+  });
+}
+
+/* 한 번에 다 넣으면 요청이 너무 커진다 — 50쪽씩 나눠 보낸다 */
+function saveLawPages(lawId,pages){
+  var rows=pages.map(function(p){ return {law_id:lawId,page:p.page,content:p.content}; });
+  var i=0;
+  function chunk(){
+    if(i>=rows.length) return Promise.resolve();
+    var part=rows.slice(i,i+50); i+=50;
+    showToast("저장 중 "+Math.min(i,rows.length)+"/"+rows.length+"쪽");
+    return withAuthRetry(function(){ return sb.from("law_pages").insert(part); }).then(function(res){
+      if(res.error) throw new Error("쪽 저장 실패: "+res.error.message);
+      return chunk();
+    });
+  }
+  return chunk();
+}
+
+function lawName(id){
+  var l=S.laws.find(function(x){ return x.id===id; });
+  return l?l.name:"(삭제된 법령)";
+}
+
+/* ilike의 % _ \ 는 특수문자라 그대로 넣으면 엉뚱한 걸 찾는다 */
+function escLike(s){ return s.replace(/([%_\\])/g,"\\$1"); }
+
+function lawSearch(){
+  var q=(val("law-q")||"").trim();
+  lawQuery=q; lawSel={}; lawHits=null;
+  if(q.length<2){ renderLawResults(); showToast("두 글자 이상 입력해 주세요."); return; }
+  if(!S.laws.length){ renderLawResults(); showToast("먼저 법령 PDF를 올려주세요."); return; }
+  lawSearching=true; renderLawResults();
+  withAuthRetry(function(){
+    return sb.from("law_pages").select("law_id,page,content").ilike("content","%"+escLike(q)+"%").limit(300);
+  }).then(function(res){
+    lawSearching=false;
+    if(res.error){ showToast("검색 실패: "+res.error.message,true); lawHits=[]; renderLawResults(); return; }
+    lawHits=buildLawHits(res.data||[],q);
+    renderLawResults();
+  });
+}
+
+/* 한 쪽에 키워드가 여러 번 나오면 나온 만큼 결과를 만든다 (진짜 Ctrl+F) */
+function buildLawHits(rows,q){
+  var out=[], lq=q.toLowerCase(), PAD=90, MAX_PER_PAGE=5;
+  rows.forEach(function(r){
+    var c=r.content, lc=c.toLowerCase(), from=0, n=0;
+    while(n<MAX_PER_PAGE){
+      var at=lc.indexOf(lq,from); if(at<0) break;
+      var s=Math.max(0,at-PAD), e=Math.min(c.length,at+q.length+PAD);
+      out.push({ key:r.law_id+"|"+r.page+"|"+at, lawId:r.law_id, page:r.page,
+        before:(s>0?"…":"")+c.slice(s,at),
+        match:c.slice(at,at+q.length),
+        after:c.slice(at+q.length,e)+(e<c.length?"…":"") });
+      from=at+q.length; n++;
+    }
+    if(n===MAX_PER_PAGE&&lc.indexOf(lq,from)>=0)
+      out.push({ key:r.law_id+"|"+r.page+"|more", lawId:r.law_id, page:r.page, more:true });
+  });
+  out.sort(function(a,b){
+    var na=lawName(a.lawId), nb=lawName(b.lawId);
+    if(na!==nb) return na<nb?-1:1;
+    return a.page-b.page;
+  });
+  return out;
+}
+
+function openLawPage(id,page){
+  var l=S.laws.find(function(x){ return x.id===id; });
+  if(!l||!l.filePath){ showToast("원문 파일을 찾지 못했어요.",true); return; }
+  sb.storage.from("files").createSignedUrl(l.filePath,3600).then(function(res){
+    if(res.error){ showToast("파일을 열지 못했어요.",true); return; }
+    window.open(res.data.signedUrl+"#page="+page,"_blank");
+  });
+}
+
+function lawDel(id){
+  var l=S.laws.find(function(x){ return x.id===id; });
+  if(!l) return;
+  if(!confirm('"'+l.name+'"\n\n법령과 추출된 텍스트가 모두 지워집니다. 계속할까요?')) return;
+  if(l.filePath) sb.storage.from("files").remove([l.filePath]);
+  S.laws=S.laws.filter(function(x){ return x.id!==id; });
+  lawHits=null; lawSel={};
+  render();
+  dbDelete("laws",id);   /* law_pages는 cascade로 함께 지워진다 */
+}
+
+/* ---------- 내보내기 ---------- */
+function lawPicked(){
+  return (lawHits||[]).filter(function(h){ return !h.more&&lawSel[h.key]; });
+}
+function lawExportText(){
+  var picked=lawPicked(); if(!picked.length) return null;
+  var lines=['법령 검색 결과 — "'+lawQuery+'"',
+             new Date().toLocaleString("ko-KR")+" · "+picked.length+"건",""];
+  var cur=null;
+  picked.forEach(function(h){
+    var nm=lawName(h.lawId);
+    if(nm!==cur){ cur=nm; lines.push("■ "+nm); }
+    lines.push("  ["+h.page+"쪽] "+h.before+h.match+h.after);
+    lines.push("");
+  });
+  return lines.join("\n");
+}
+function lawCopy(){
+  var t=lawExportText();
+  if(!t){ showToast("먼저 결과를 골라주세요."); return; }
+  var done=function(){ showToast("✓ "+lawPicked().length+"건 복사했어요"); };
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(done,function(){ lawCopyFallback(t,done); });
+  } else lawCopyFallback(t,done);
+}
+function lawCopyFallback(t,done){
+  var ta=document.createElement("textarea");
+  ta.value=t; ta.style.position="fixed"; ta.style.opacity="0";
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand("copy"); done(); }
+  catch(e){ showToast("복사하지 못했어요.",true); }
+  document.body.removeChild(ta);
+}
+function lawDownload(){
+  var t=lawExportText();
+  if(!t){ showToast("먼저 결과를 골라주세요."); return; }
+  var blob=new Blob([t],{type:"text/plain;charset=utf-8"});
+  var a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="법령검색_"+lawQuery.replace(/[^가-힣a-zA-Z0-9]/g,"")+"_"+keyOf(new Date())+".txt";
+  a.click();
+}
+function lawSelAll(on){
+  (lawHits||[]).forEach(function(h){ if(!h.more) lawSel[h.key]=on; });
+  if(!on) lawSel={};
+  renderLawResults();
+}
+
+/* ---------- 화면 ---------- */
+function renderLaws(){
+  var items=S.laws;
+  var totalPages=0; items.forEach(function(l){ totalPages+=(l.pages||0); });
+  var pills=[pill("법령 "+items.length+"건")];
+  if(totalPages) pills.push(pill("총 "+totalPages+"쪽"));
+
+  var list="";
+  if(items.length){
+    list='<button class="law-toggle" data-act="law-list">'
+      + (lawListOpen?"▾":"▸")+' 올려둔 법령 '+items.length+'개'
+      + '<span class="law-toggle-hint">'+(lawListOpen?"접기":"이름 수정 · 삭제")+'</span></button>';
+    if(lawListOpen) list+='<div class="law-list">'+items.map(function(l){
+      return '<div class="law-row">'
+        + '<span class="doc-ic file">▤</span>'
+        + '<span class="law-name" data-act="edit" data-table="laws" data-field="name" data-id="'+l.id+'" title="눌러서 이름 수정">'+esc(l.name)+'</span>'
+        + '<span class="law-pages">'+(l.pages||0)+'쪽</span>'
+        + '<button class="doc-act" data-act="law-open" data-id="'+l.id+'" data-page="1">열기 ↗</button>'
+        + '<button class="del doc-del" data-act="law-del" data-id="'+l.id+'" title="삭제">✕</button></div>';
+    }).join("")+'</div>';
+  }
+
+  view().innerHTML='<div class="page">'
+    + pageHead2("법령 검색","올려둔 법령 전체에서 단어를 찾고, 결과를 골라 모아요.",items.length?pills:null)
+    + '<div class="search-box"><span class="search-ic">⌕</span>'
+    +   '<input class="input search law-input" id="law-q" placeholder="찾을 단어 (예: 냉장 보관, 별표 3, 제12조)" value="'+esc(lawQuery)+'" />'
+    +   '<button class="btn sm law-go" data-act="law-search">검색</button>'
+    + '</div>'
+    + '<button class="upload-bar'+(lawBusy?" busy":"")+'" data-act="law-upload"'+(lawBusy?" disabled":"")+'>'
+    +   '<span class="upload-ic">⬆</span><div class="import-bar-text">'
+    +   '<div class="import-bar-title">'+(lawBusy?"처리 중이에요...":"법령 PDF 올리기")+'</div>'
+    +   '<div class="import-bar-sub">'+(lawBusy?"창을 닫지 마세요":"글자가 들어 있는 PDF만 (스캔본은 아직 안 돼요)")+'</div></div>'
+    +   '<span class="import-bar-go">→</span></button>'
+    + list
+    + '<div id="law-results"></div></div>';
+
+  renderLawResults();
+  var q=document.getElementById("law-q");
+  if(q) q.addEventListener("keydown",function(e){ if(e.key==="Enter") lawSearch(); });
+}
+
+function renderLawResults(){
+  var el=document.getElementById("law-results"); if(!el) return;
+
+  if(lawSearching){ el.innerHTML='<p class="empty">찾는 중...</p>'; return; }
+  if(lawHits===null){
+    el.innerHTML=S.laws.length
+      ? '<div class="empty-box"><div class="empty-ic">⌕</div><p>찾을 단어를 넣고 Enter를 눌러요.<br />띄어쓰기까지 그대로 찾습니다.</p></div>'
+      : '<div class="empty-box"><div class="empty-ic">▤</div><p>법령 PDF를 올리면 여기서 검색할 수 있어요.<br />공개 법령·지침서만 올려주세요.</p></div>';
+    return;
+  }
+  if(!lawHits.length){
+    el.innerHTML='<p class="empty">「'+esc(lawQuery)+'」를 찾지 못했어요.<br />띄어쓰기를 바꾸거나 더 짧은 단어로 해보세요.</p>';
+    return;
+  }
+
+  var picked=lawPicked().length;
+  var head='<div class="law-head">'
+    + '<div class="law-count">결과 <b>'+lawHits.filter(function(h){return !h.more;}).length+'</b>건'
+    +   (picked?' · <span class="law-picked">'+picked+'건 선택</span>':'')+'</div>'
+    + '<div class="law-actions">'
+    +   '<button class="link-btn" data-act="law-all">모두 선택</button>'
+    +   '<button class="link-btn" data-act="law-none">해제</button>'
+    +   '<button class="btn quiet sm" data-act="law-copy">복사</button>'
+    +   '<button class="btn sm" data-act="law-save">텍스트로 저장</button>'
+    + '</div></div>';
+
+  var cur=null, body="";
+  lawHits.forEach(function(h){
+    var nm=lawName(h.lawId);
+    if(nm!==cur){ cur=nm; body+='<div class="law-group">'+esc(nm)+'</div>'; }
+    if(h.more){ body+='<div class="law-more">이 쪽에 더 있어요 — 원문에서 확인하세요</div>'; return; }
+    body+='<label class="law-hit'+(lawSel[h.key]?" on":"")+'">'
+      + '<input type="checkbox" class="law-check" data-act="law-pick" data-key="'+esc(h.key)+'"'+(lawSel[h.key]?" checked":"")+' />'
+      + '<div class="law-hit-body">'
+      +   '<div class="law-snip">'+esc(h.before)+'<mark>'+esc(h.match)+'</mark>'+esc(h.after)+'</div>'
+      +   '<div class="law-meta"><span class="law-page">'+h.page+'쪽</span>'
+      +     '<button class="link-btn" data-act="law-open" data-id="'+h.lawId+'" data-page="'+h.page+'">원문 열기 ↗</button></div>'
+      + '</div></label>';
+  });
+
+  el.innerHTML=head+'<div class="law-hits">'+body+'</div>'
+    + '<p class="law-note">원문은 새 창에서 열려요. 기기에 따라 해당 쪽으로 바로 넘어가지 않을 수 있으니 쪽 번호를 참고하세요.</p>';
+}
+
 /* ========== 이벤트 위임 ========== */
 document.getElementById("app").addEventListener("click",function(e){
   var el=e.target.closest("[data-act]"); if(!el) return;
@@ -1092,6 +1438,18 @@ document.getElementById("app").addEventListener("click",function(e){
     case "ar-attach": archiveAttach(id); break;
     case "ar-open": { var a=S.archive.find(function(x){return x.id===id;}); if(a&&a.filePath) openStorageFile(a.filePath); break; }
     case "ar-filedel": arFileDel(id); break;
+    case "law-upload": lawUploadClick(); break;
+    case "law-search": lawSearch(); break;
+    case "law-list": lawListOpen=!lawListOpen; render(); break;
+    case "law-open": openLawPage(id,parseInt(el.getAttribute("data-page"),10)||1); break;
+    case "law-del": lawDel(id); break;
+    case "law-pick": { var lk=el.getAttribute("data-key");
+      if(lawSel[lk]) delete lawSel[lk]; else lawSel[lk]=true;
+      renderLawResults(); break; }
+    case "law-all": lawSelAll(true); break;
+    case "law-none": lawSelAll(false); break;
+    case "law-copy": lawCopy(); break;
+    case "law-save": lawDownload(); break;
     case "d-upload": docsUpload(); break;
     case "d-add": addDocLink(); break;
     case "d-open": { var dc=S.docs.find(function(x){return x.id===id;}); if(dc&&dc.filePath) openStorageFile(dc.filePath); break; }
@@ -1111,6 +1469,7 @@ function render(){
   else if(active==="mfds") renderMfds();
   else if(active==="archive") renderArchive();
   else if(active==="docs") renderDocs();
+  else if(active==="laws") renderLaws();
 }
 
 /* 앱 시작 (로그인 후 호출) */

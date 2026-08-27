@@ -690,3 +690,16 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 /* 지금 돌고 있는 버전 — 캐시 때문에 옛 화면을 보고 있는지 바로 알 수 있게 */
 .ver{font-size:10px;color:#B6C0BA;text-align:center;padding:2px 0 4px;letter-spacing:.04em;}
 @media (max-width:1024px){ .ver{padding:0 6px;align-self:center;} }
+
+/* 조 전체 보기 */
+.lv-pg{display:flex;align-items:center;gap:10px;margin:22px 0 16px;
+  color:#B6C0BA;font-size:10.5px;font-weight:700;letter-spacing:.05em;}
+.lv-pg::before,.lv-pg::after{content:"";flex:1;height:1px;background:var(--line);}
+.lv-text mark.on{background:#FFC845;box-shadow:0 0 0 2px #E0A21B;}
+.lv-hit-n{font-size:11.5px;font-weight:650;color:var(--muted);min-width:46px;text-align:center;}
+.law-acts{display:inline-flex;align-items:center;gap:10px;margin-left:auto;flex-wrap:wrap;}
+.law-go-art{font-weight:750;color:var(--blue-deep)!important;}
+@media (max-width:1024px){
+  .lv-foot{flex-wrap:wrap;}
+  .law-acts{margin-left:0;width:100%;padding-top:2px;}
+}

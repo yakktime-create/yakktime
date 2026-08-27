@@ -387,7 +387,12 @@ function wireMfdsDrag(){
     dragState={ id:card.getAttribute("data-mfds"), card:card, active:false,
                 sx:e.clientX, sy:e.clientY, pid:e.pointerId,
                 holdOk:!isTouch, timer:null };
-    if(isTouch) dragState.timer=setTimeout(function(){ if(dragState) dragState.holdOk=true; },200);
+    if(isTouch) dragState.timer=setTimeout(function(){
+      if(!dragState) return;
+      dragState.holdOk=true;
+      dragState.card.classList.add("armed");        /* 움직이기 전에 "잡혔다"를 보여준다 */
+      if(navigator.vibrate){ try{ navigator.vibrate(8); }catch(err){} }
+    },200);
   });
   board.addEventListener("pointermove",function(e){
     if(!dragState||e.pointerId!==dragState.pid) return;
@@ -426,8 +431,10 @@ function beginDrag(){
   dragState.active=true;
   var c=dragState.card, r=c.getBoundingClientRect();
   c.style.width=r.width+"px"; c.style.height=r.height+"px";
-  c.classList.add("dragging");
+  c.classList.remove("armed"); c.classList.add("dragging");
   try{ c.setPointerCapture(dragState.pid); }catch(err){}
+  var bd=document.querySelector(".board");
+  if(bd){ bd.classList.add("drag-on"); dragState.board=bd; }   /* 세 칸의 경계를 보여준다 */
   dragState.cols=[];
   var els=document.querySelectorAll(".col");
   for(var i=0;i<els.length;i++) dragState.cols.push({el:els[i],r:els[i].getBoundingClientRect()});
@@ -435,7 +442,7 @@ function beginDrag(){
 function paintDrag(){
   if(!dragState||!dragState.active) return;
   dragState.raf=0;
-  dragState.card.style.transform="translate3d("+dragState.dx+"px,"+dragState.dy+"px,0) rotate(1.5deg)";
+  dragState.card.style.transform="translate3d("+dragState.dx+"px,"+dragState.dy+"px,0) rotate(1.5deg) scale(1.03)";
   var col=colFromCache(dragState.px,dragState.py);
   if(col!==dragState.overCol){
     if(dragState.overCol) dragState.overCol.classList.remove("drop-target");
@@ -444,9 +451,14 @@ function paintDrag(){
   }
 }
 function colFromCache(x,y){
-  var cs=(dragState&&dragState.cols)||[];
-  for(var i=0;i<cs.length;i++){ var r=cs[i].r;
+  var cs=(dragState&&dragState.cols)||[], i, r;
+  /* 1차: 컬럼 영역 안에 정확히 들어온 경우 */
+  for(i=0;i<cs.length;i++){ r=cs[i].r;
     if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom) return cs[i].el; }
+  /* 2차: 컬럼 아래 빈 공간 — 세로는 무시하고 가로 위치로만 판정해
+     카드가 없는 칸에도 아래쪽 어디서든 놓을 수 있게 한다 */
+  for(i=0;i<cs.length;i++){ r=cs[i].r;
+    if(y>=r.top&&x>=r.left&&x<=r.right) return cs[i].el; }
   return null;
 }
 function cleanupDrag(){
@@ -454,7 +466,9 @@ function cleanupDrag(){
   clearTimeout(dragState.timer);
   if(dragState.raf) cancelAnimationFrame(dragState.raf);
   var c=dragState.card;
-  if(c){ c.classList.remove("dragging"); c.style.transform=""; c.style.width=""; c.style.height=""; }
+  if(c){ c.classList.remove("dragging"); c.classList.remove("armed");
+         c.style.transform=""; c.style.width=""; c.style.height=""; }
+  if(dragState.board) dragState.board.classList.remove("drag-on");
   if(dragState.overCol) dragState.overCol.classList.remove("drop-target");
   dragState=null;
 }
@@ -559,16 +573,14 @@ function renderCalendar(){
     +   '<button class="btn" data-act="day-add">+ 추가</button></div>'
     + ((selEvs.length||selTasks.length)? '<ul class="list">'+taskRows+selEvs.map(function(e){ return '<li class="ev-row"><span class="ev-time" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'+(e.time||"종일")+'</span><span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span><button class="del" data-act="ev-del" data-id="'+e.id+'">✕</button></li>'; }).join("")+'</ul>' : '<p class="empty">이 날은 아직 일정이 없어요.</p>')+'</div>';
   view().innerHTML='<div class="page">'+pageHead("캘린더","달력에서 날짜를 누른 뒤, 아래 칸에 제목만 적으면 그 날짜로 들어가요.")
-    + '<div class="cal-quick"><input class="input" id="cal-nl" placeholder=\'"11월 3일 오후 2시 GMP 실사" 처럼 입력하고 Enter\' /><button class="btn" data-act="cal-nl-add">추가</button></div><div class="cal-toast" id="cal-toast"></div>'
     + '<div class="cal-nav"><button class="cal-arrow" data-act="cal-prev">‹</button><span class="cal-month">'+calYear+'년 '+(calMonth+1)+'월</span><button class="cal-arrow" data-act="cal-next">›</button></div>'
     + '<div class="cal-grid">'+wdHtml+cells+'</div>'+panel+'</div>';
-  document.getElementById("cal-nl").addEventListener("keydown",function(e){ if(e.key==="Enter") calAddNL(); });
   document.getElementById("day-ev").addEventListener("keydown",function(e){ if(e.key==="Enter") dayAdd(); });
 }
 
 function renderArticles(){
   var items=S.articles;
-  var body=items.length===0?'<p class="empty">기고글을 추가하면 진행 상태별로 정리돼요.</p>':'<div class="grid">'+items.map(function(it){ var bi=ARTICLE_STATUS.indexOf(it.status); return '<div class="tile"><div class="tile-head"><button class="badge b'+bi+'" data-act="a-cycle" data-id="'+it.id+'">'+esc(it.status)+'</button><button class="del" data-act="a-del" data-id="'+it.id+'">✕</button></div><div class="tile-title" data-act="edit" data-table="articles" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</div>'+(it.memo?'<div class="tile-memo" data-act="edit" data-table="articles" data-field="memo" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.memo)+'</div>':'')+'</div>'; }).join("")+'</div>';
+  var body=items.length===0?'<p class="empty">기고글을 추가하면 진행 상태별로 정리돼요.</p>':'<div class="grid">'+items.map(function(it){ var bi=ARTICLE_STATUS.indexOf(it.status); return '<div class="tile"><div class="tile-head"><button class="badge b'+bi+'" data-act="a-cycle" data-id="'+it.id+'">'+esc(it.status)+'</button><button class="del" data-act="a-del" data-id="'+it.id+'">✕</button></div><div class="tile-title" data-act="edit" data-table="articles" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</div>'+(it.memo?'<div class="tile-memo" data-act="edit" data-table="articles" data-field="memo" data-type="textarea" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.memo)+'</div>':'<div class="tile-memo none" data-act="edit" data-table="articles" data-field="memo" data-type="textarea" data-id="'+it.id+'" title="눌러서 메모 추가">＋ 주제 / 마감 / 메모</div>')+'</div>'; }).join("")+'</div>';
   view().innerHTML='<div class="page">'+pageHead("서울시약사회 동물약품 기고글","기획 중인 글부터 기고 완료된 글까지 한눈에 관리해요.")+'<div class="card form"><input class="input" id="a-title" placeholder="글 제목" />'+seg("a-status",ARTICLE_STATUS,"기획")+'<textarea class="input" id="a-memo" placeholder="주제 / 마감 / 메모"></textarea><button class="btn" data-act="a-add">+ 저장</button></div>'+body+'</div>';
   wireSeg("a-status");
 }
@@ -668,12 +680,6 @@ function cycle(arr,id,states,tableName){
 }
 function del(name,id){ S[name]=S[name].filter(function(x){return x.id!==id;}); render(); dbDelete(name,id); }
 
-function calAddNL(){ var r=parseNL(val("cal-nl")||""); var toast=document.getElementById("cal-toast");
-  if(!r.ok){ toast.className="cal-toast no"; toast.textContent='날짜를 못 찾았어요. 예: "11월 3일 GMP 실사", "내일 오후 2시 회의"'; return; }
-  var item={key:r.key,time:r.time,title:r.title};
-  S.events.push(item); dbInsert("events",item);
-  calYear=r.date.getFullYear(); calMonth=r.date.getMonth(); calSel=r.key; render();
-  var nt=document.getElementById("cal-toast"); if(nt){ nt.className="cal-toast ok"; nt.textContent="✓ "+(r.date.getMonth()+1)+"월 "+r.date.getDate()+"일"+(r.time?" "+r.time:"")+" · "+r.title; } }
 function dayAdd(){
   var raw=(val("day-ev")||"").trim(); if(!raw) return;
   var chk=document.getElementById("day-mfds");
@@ -912,7 +918,6 @@ document.getElementById("app").addEventListener("click",function(e){
     case "cal-prev": calMonth--; if(calMonth<0){calMonth=11;calYear--;} render(); break;
     case "cal-next": calMonth++; if(calMonth>11){calMonth=0;calYear++;} render(); break;
     case "cal-day": calSel=id; render(); focusDayPanel(); break;
-    case "cal-nl-add": calAddNL(); break;
     case "day-add": dayAdd(); break;
     case "ev-del": evDel(id); break;
     case "a-add": addArticle(); break;

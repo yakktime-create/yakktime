@@ -238,11 +238,14 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 /* ===== 식약처 업무 — 칸반 드래그 · 캘린더 연동 ===== */
 
 /* 칸반 컬럼: 비어 있어도 드롭할 수 있게 최소 높이 확보 */
-.col{min-height:120px;border-radius:10px;padding:4px;transition:background .15s,box-shadow .15s;}
+.col{min-height:240px;border-radius:10px;padding:4px;transition:background .15s,box-shadow .15s,outline-color .15s;}
 .col.drop-target{background:var(--blue-soft);box-shadow:inset 0 0 0 2px var(--blue);}
 
 /* 들어올린 카드 */
-.mini{transition:box-shadow .15s;}
+.mini{transition:box-shadow .15s,transform .12s,background .12s,border-color .12s;}
+/* 롱프레스가 차서 "잡힌" 상태 — 움직이기 전에 먼저 보여준다 */
+.mini.armed{transform:scale(1.035);border-color:var(--blue);background:var(--blue-soft);
+  box-shadow:0 10px 22px rgba(30,63,88,.20);cursor:grabbing;}
 /* transition:none 이 핵심 — 켜져 있으면 매 프레임 애니메이션이 걸려 끊겨 보인다 */
 .mini.dragging{position:relative;z-index:50;touch-action:none;cursor:grabbing;
   transition:none;will-change:transform;
@@ -281,3 +284,13 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 .mini-memo.none{color:var(--muted);font-size:11px;margin-top:6px;
   border:1px dashed var(--line);border-radius:8px;padding:4px 8px;display:inline-block;}
 .mini-actions{justify-content:flex-end;}
+
+/* ===== 드래그 중 드롭 존을 눈에 보이게 ===== */
+/* 카드가 없는 칸도 어디에 놓을 수 있는지 알 수 있어야 한다 */
+.board.drag-on .col{outline:1.5px dashed var(--line);outline-offset:-2px;}
+.board.drag-on .col.drop-target{outline:2px solid var(--blue);background:var(--blue-soft);}
+.board.drag-on .col-head{color:var(--blue-deep);}
+
+/* 기고글 메모 — 비어 있을 때도 눌러서 채울 수 있게 */
+.tile-memo.none{color:var(--muted);font-size:11px;margin-top:6px;
+  border:1px dashed var(--line);border-radius:8px;padding:4px 8px;display:inline-block;}

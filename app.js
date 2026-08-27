@@ -3,7 +3,17 @@
 /* ========== Supabase 연결 ========== */
 var SUPABASE_URL = "https://mkwcqnqfidlvsrlximbw.supabase.co";
 var SUPABASE_KEY = "sb_publishable_JNoquJ1EHLtDedRI0PzHzQ_w5Nly20H";
-var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* storageKey는 일부러 기본값(sb-<ref>-auth-token)을 그대로 쓴다.
+   여기서 바꾸면 이미 저장돼 있던 세션을 못 찾아서 전원 재로그인이 발생함. */
+var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    persistSession: true,      /* 세션을 localStorage에 저장 (v2 기본값이지만 명시) */
+    autoRefreshToken: true,    /* 만료 전 액세스 토큰 자동 갱신 */
+    detectSessionInUrl: true,
+    storage: window.localStorage
+  }
+});
 
 /* ========== 유틸 ========== */
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
@@ -50,8 +60,80 @@ function doLogin(){
   });
 }
 function doLogout(){
+  appStarted=false;
   sb.auth.signOut().then(function(){ showLogin(); });
 }
+
+/* ========== 세션 유지 (iOS 홈 화면 PWA 대응) ==========
+ * 문제: 홈 화면 아이콘으로 열면 iOS가 앱을 완전히 종료했다가 다시 띄운다.
+ *   1) 콜드 스타트 시점엔 네트워크가 아직 안 붙어 있는 경우가 많다.
+ *      → 토큰 갱신이 실패 → 예전 코드는 곧바로 로그인 화면을 띄웠다("세션 풀림").
+ *   2) 백그라운드에서는 타이머가 정지돼 autoRefreshToken이 갱신 시점을 놓친다.
+ *      → 복귀 직후 액세스 토큰이 만료 상태 → 쿼리가 401 → 데이터가 빈 채로 보인다.
+ * 대응: 만료 임박이면 선제 갱신, 실패해도 오프라인이면 세션 유지, 복귀 시 재검증.
+ */
+var appStarted=false;
+
+function isAuthErr(e){
+  if(!e) return false;
+  var msg=String(e.message||"");
+  return e.status===401 || e.code==="PGRST301" || /jwt|token|expired|unauthorized/i.test(msg);
+}
+
+/* 액세스 토큰이 만료됐거나 60초 내 만료 예정이면 미리 갱신한다. */
+function ensureSession(){
+  return sb.auth.getSession().then(function(res){
+    var s=(res&&res.data)?res.data.session:null;
+    if(!s) return null;
+    var msLeft=(s.expires_at||0)*1000-Date.now();
+    if(msLeft>60000) return s;
+    return sb.auth.refreshSession().then(function(r){
+      if(r&&r.data&&r.data.session) return r.data.session;
+      /* 오프라인이라 실패한 거면 세션을 버리지 않는다. 온라인 복귀 시 다시 시도. */
+      if(!navigator.onLine) return s;
+      return null;
+    }).catch(function(){ return navigator.onLine?null:s; });
+  });
+}
+
+/* 쿼리가 토큰 만료로 실패하면 한 번 갱신 후 재시도한다. */
+function withAuthRetry(makeQuery){
+  return Promise.resolve(makeQuery()).then(function(res){
+    if(!res||!res.error||!isAuthErr(res.error)) return res;
+    return sb.auth.refreshSession().then(function(r){
+      if(!r||!r.data||!r.data.session) return res;
+      return makeQuery();
+    }).catch(function(){ return res; });
+  });
+}
+
+/* 앱 복귀(포그라운드 전환/bfcache 복원/온라인 복귀) 시 세션 재검증 + 데이터 새로고침 */
+var _resumeAt=0;
+function onResume(){
+  var now=Date.now();
+  if(now-_resumeAt<3000) return;   /* 이벤트가 겹쳐 들어오므로 스로틀 */
+  _resumeAt=now;
+  if(sb.auth.startAutoRefresh) { try{ sb.auth.startAutoRefresh(); }catch(e){} }
+  ensureSession().then(function(s){
+    if(!s){ if(appStarted){ appStarted=false; showLogin(); } return; }
+    if(!appStarted){ startApp(); return; }
+    loadAll().then(render).catch(function(){});
+  });
+}
+
+document.addEventListener("visibilitychange",function(){
+  if(document.visibilityState==="visible") onResume();
+  else if(sb.auth.stopAutoRefresh){ try{ sb.auth.stopAutoRefresh(); }catch(e){} }
+});
+window.addEventListener("pageshow",function(e){ if(e.persisted) onResume(); });
+window.addEventListener("focus",onResume);
+window.addEventListener("online",onResume);
+
+/* 토큰 갱신/로그아웃을 UI에 반영 */
+sb.auth.onAuthStateChange(function(event,session){
+  if(event==="SIGNED_OUT"){ appStarted=false; showLogin(); return; }
+  if(event==="SIGNED_IN"&&session&&!appStarted){ startApp(); return; }
+});
 
 /* 로그인 이벤트 */
 document.getElementById("login-btn").addEventListener("click",doLogin);
@@ -118,7 +200,7 @@ function toRemote(table,item){
 
 function loadAll(){
   var promises=TABLES.map(function(t){
-    return sb.from(t).select("*").then(function(res){
+    return withAuthRetry(function(){ return sb.from(t).select("*"); }).then(function(res){
       if(res.error) throw res.error;
       return {table:t, data:(res.data||[]).map(function(r){ return toLocal(t,r); })};
     });
@@ -130,7 +212,7 @@ function loadAll(){
 
 function dbInsert(table,item){
   var remote=toRemote(table,item);
-  return sb.from(table).insert(remote).select().then(function(res){
+  return withAuthRetry(function(){ return sb.from(table).insert(remote).select(); }).then(function(res){
     if(res.error){ showToast("저장 실패: "+res.error.message,true); return null; }
     /* 서버가 생성한 uuid를 로컬 아이템에 반영 */
     if(res.data&&res.data[0]){ item.id=res.data[0].id; }
@@ -138,17 +220,17 @@ function dbInsert(table,item){
   });
 }
 function dbUpdate(table,id,changes){
-  return sb.from(table).update(toRemote(table,changes)).eq("id",id).then(function(res){
+  return withAuthRetry(function(){ return sb.from(table).update(toRemote(table,changes)).eq("id",id); }).then(function(res){
     if(res.error){ showToast("업데이트 실패: "+res.error.message,true); }
   });
 }
 function dbUpsert(table,item){
-  return sb.from(table).upsert(toRemote(table,item)).then(function(res){
+  return withAuthRetry(function(){ return sb.from(table).upsert(toRemote(table,item)); }).then(function(res){
     if(res.error){ showToast("저장 실패: "+res.error.message,true); }
   });
 }
 function dbDelete(table,id){
-  return sb.from(table).delete().eq("id",id).then(function(res){
+  return withAuthRetry(function(){ return sb.from(table).delete().eq("id",id); }).then(function(res){
     if(res.error){ showToast("삭제 실패: "+res.error.message,true); }
   });
 }
@@ -615,6 +697,7 @@ function render(){
 
 /* 앱 시작 (로그인 후 호출) */
 function startApp(){
+  appStarted=true;
   showApp();
   document.getElementById("loading").style.display="flex";
   document.getElementById("loading").className="loading-overlay";
@@ -631,12 +714,17 @@ function startApp(){
   });
 }
 
-/* 세션 확인 → 자동 로그인 or 로그인 화면 */
-sb.auth.getSession().then(function(res){
-  if(res.data&&res.data.session){
+/* 세션 확인 → 자동 로그인 or 로그인 화면
+ * ensureSession()이 만료 임박 토큰을 미리 갱신하므로, startApp()의 첫 쿼리가
+ * 만료된 JWT로 나가서 전부 401로 죽는 상황(= 앱은 열리는데 데이터가 빈 화면)을 막는다. */
+ensureSession().then(function(session){
+  if(session){
     startApp();
   } else {
     hideLoading();
     showLogin();
   }
+}).catch(function(){
+  hideLoading();
+  showLogin();
 });

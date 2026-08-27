@@ -567,7 +567,6 @@ function renderCalendar(){
       + '<span class="mfds-status">'+esc(t.status)+'</span>'
       + '<button class="del" data-act="mfds-del" data-id="'+t.id+'">✕</button></li>'; }).join("");
   var panel='<div class="day-panel"><div class="day-title">'+(selD.getMonth()+1)+'월 '+selD.getDate()+'일 ('+WD[selD.getDay()]+')'+(calSel===todayKey?' <span class="day-today">오늘</span>':'')+'</div>'
-    + '<div class="day-hint">이 칸에는 날짜를 안 써도 돼요. 제목만 적으면 위에서 고른 날짜로 들어갑니다.<br />＋ 식약처 업무로 체크하면 일정이 아니라 <b>업무</b>로 등록돼 식약처 탭에서도 보여요.</div>'
     + '<div class="add-row"><input class="input" id="day-ev" placeholder="할 일 / 일정 (예: 오후 2시 GMP 실사)" />'
     +   '<label class="chk"><input type="checkbox" id="day-mfds" /> 식약처 업무</label>'
     +   '<button class="btn" data-act="day-add">+ 추가</button></div>'

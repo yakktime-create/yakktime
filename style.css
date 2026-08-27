@@ -230,7 +230,6 @@ textarea.inline-area{min-height:52px;resize:vertical;}
   vertical-align:middle;white-space:nowrap;}
 
 /* 캘린더 날짜 패널 안내문 + 오늘 배지 */
-.day-hint{font-size:11.5px;color:var(--muted);margin:-4px 0 11px;line-height:1.5;}
 .day-today{display:inline-block;font-size:10px;font-weight:700;color:#fff;
   background:var(--accent);padding:2px 8px;border-radius:12px;margin-left:6px;
   vertical-align:middle;}

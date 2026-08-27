@@ -627,9 +627,19 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 .lv-x:hover{background:var(--paper);color:var(--ink);}
 
 .lv-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:18px 20px 22px;}
-.lv-text{font-size:14px;line-height:1.95;color:#3A473F;white-space:pre-wrap;
-  word-break:break-word;letter-spacing:-.003em;}
+.lv-text{font-size:14px;line-height:1.85;color:#3A473F;word-break:break-word;letter-spacing:-.003em;}
 .lv-text mark{background:#F7E7A8;color:var(--ink);font-weight:700;border-radius:3px;padding:1px 2px;}
+
+/* 조 → 항 → 호 → 목 을 들여쓰기로 보여준다 (글자는 그대로) */
+.lp{margin:0 0 10px;}
+.lp0{margin-top:20px;padding-top:16px;border-top:1px solid var(--line);}
+.lp0:first-child{margin-top:0;padding-top:0;border-top:none;}
+.lp1{margin-left:14px;}
+.lp2{margin-left:32px;font-size:13.5px;}
+.lp3{margin-left:50px;font-size:13.5px;color:#4E5B53;}
+.lp-art{display:block;margin-bottom:7px;font-size:15px;font-weight:750;color:var(--blue-deep);
+  letter-spacing:-.01em;}
+.lp-meta{color:#93A09A;font-size:11.5px;}
 
 .lv-foot{display:flex;align-items:center;gap:8px;padding:11px 16px;
   border-top:1px solid var(--line);background:var(--paper);flex-shrink:0;}
@@ -647,3 +657,12 @@ textarea.inline-area{min-height:52px;resize:vertical;}
   .lv-head{padding-top:calc(15px + env(safe-area-inset-top));}
   .lv-foot .btn{flex:0 0 auto;}
 }
+
+/* 조문 표시 */
+.law-art{font-size:11px;font-weight:700;color:#6B5518;background:#F7EFDF;
+  border-radius:8px;padding:3px 9px;white-space:nowrap;}
+.law-hit.on .law-art{background:#fff;}
+.lv-arts{flex-shrink:0;padding:9px 16px;border-bottom:1px solid var(--line);
+  background:var(--paper);font-size:11.5px;font-weight:650;color:#6B5518;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lv-art{color:var(--blue-deep);font-weight:750;}

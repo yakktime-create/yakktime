@@ -1150,6 +1150,14 @@ function lawUpload(f){
   readBuffer(f).then(function(buf){
     return extractPdfPages(buf,function(i,n){ showToast("텍스트 추출 "+i+"/"+n+"쪽"); });
   }).then(function(pages){
+    /* 조가 여러 쪽에 걸치므로, 쪽마다 "시작 시점에 유효한 조"를 기록해 둔다.
+     * 전체 쪽을 순서대로 들고 있는 지금이 이걸 계산할 수 있는 유일한 시점이다. */
+    var carry="";
+    pages.forEach(function(p){
+      p.article=carry;
+      var a=findArticles(p.content);
+      if(a.length) carry=a[a.length-1].label;
+    });
     /* 스캔본이면 글자가 거의 안 나온다 — 올려봐야 검색이 안 되므로 여기서 멈춘다 */
     var chars=0; pages.forEach(function(p){ chars+=p.content.length; });
     if(chars<200) throw new Error("SCAN");
@@ -1181,13 +1189,20 @@ function lawUpload(f){
 
 /* 한 번에 다 넣으면 요청이 너무 커진다 — 50쪽씩 나눠 보낸다 */
 function saveLawPages(lawId,pages){
-  var rows=pages.map(function(p){ return {law_id:lawId,page:p.page,content:p.content}; });
+  var rows=pages.map(function(p){ return {law_id:lawId,page:p.page,content:p.content,article:p.article||null}; });
   var i=0;
   function chunk(){
     if(i>=rows.length) return Promise.resolve();
     var part=rows.slice(i,i+50); i+=50;
     showToast("저장 중 "+Math.min(i,rows.length)+"/"+rows.length+"쪽");
     return withAuthRetry(function(){ return sb.from("law_pages").insert(part); }).then(function(res){
+      if(res.error&&isNoArtCol(res.error)){
+        lawArtCol=false;
+        var plain=part.map(function(r){ return {law_id:r.law_id,page:r.page,content:r.content}; });
+        return withAuthRetry(function(){ return sb.from("law_pages").insert(plain); });
+      }
+      return res;
+    }).then(function(res){
       if(res.error) throw new Error("쪽 저장 실패: "+res.error.message);
       return chunk();
     });
@@ -1203,14 +1218,29 @@ function lawName(id){
 /* ilike의 % _ \ 는 특수문자라 그대로 넣으면 엉뚱한 걸 찾는다 */
 function escLike(s){ return s.replace(/([%_\\])/g,"\\$1"); }
 
+/* article 컬럼은 나중에 추가된 것이라 아직 없는 DB가 있을 수 있다.
+ * 없으면 한 번만 감지해서 그 컬럼 없이 계속 동작한다 (조문 표시만 빠진다) */
+var lawArtCol=true;
+function isNoArtCol(err){
+  var m=((err&&err.message)||"").toLowerCase();
+  return m.indexOf("article")>=0&&(m.indexOf("column")>=0||m.indexOf("does not exist")>=0);
+}
+
 function lawSearch(){
   var q=(val("law-q")||"").trim();
   lawQuery=q; lawSel={}; lawHits=null;
   if(q.length<2){ renderLawResults(); showToast("두 글자 이상 입력해 주세요."); return; }
   if(!S.laws.length){ renderLawResults(); showToast("먼저 법령 PDF를 올려주세요."); return; }
   lawSearching=true; renderLawResults();
-  withAuthRetry(function(){
-    return sb.from("law_pages").select("law_id,page,content").ilike("content","%"+escLike(q)+"%").limit(300);
+  function run(){
+    return withAuthRetry(function(){
+      return sb.from("law_pages").select(lawArtCol?"law_id,page,content,article":"law_id,page,content")
+        .ilike("content","%"+escLike(q)+"%").limit(300);
+    });
+  }
+  run().then(function(res){
+    if(res.error&&lawArtCol&&isNoArtCol(res.error)){ lawArtCol=false; return run(); }
+    return res;
   }).then(function(res){
     lawSearching=false;
     if(res.error){ showToast("검색 실패: "+res.error.message,true); lawHits=[]; renderLawResults(); return; }
@@ -1224,10 +1254,12 @@ function buildLawHits(rows,q){
   var out=[], lq=q.toLowerCase(), PAD=90, MAX_PER_PAGE=5;
   rows.forEach(function(r){
     var c=r.content, lc=c.toLowerCase(), from=0, n=0;
+    var arts=findArticles(c);   /* 쪽마다 한 번만 계산 */
     while(n<MAX_PER_PAGE){
       var at=lc.indexOf(lq,from); if(at<0) break;
       var s=Math.max(0,at-PAD), e=Math.min(c.length,at+q.length+PAD);
       out.push({ key:r.law_id+"|"+r.page+"|"+at, lawId:r.law_id, page:r.page,
+        art:articleAt(arts,c,at,r.article),
         before:(s>0?"…":"")+c.slice(s,at),
         match:c.slice(at,at+q.length),
         after:c.slice(at+q.length,e)+(e<c.length?"…":"") });
@@ -1256,14 +1288,21 @@ function openLawView(id,page){
   if(page<1) page=1; if(page>max) page=max;
   lawView={lawId:id,page:page,loading:true,content:"",err:""};
   renderLawModal();
-  withAuthRetry(function(){
-    return sb.from("law_pages").select("content").eq("law_id",id).eq("page",page).limit(1);
+  function runPage(){
+    return withAuthRetry(function(){
+      return sb.from("law_pages").select(lawArtCol?"content,article":"content")
+        .eq("law_id",id).eq("page",page).limit(1);
+    });
+  }
+  runPage().then(function(res){
+    if(res.error&&lawArtCol&&isNoArtCol(res.error)){ lawArtCol=false; return runPage(); }
+    return res;
   }).then(function(res){
     if(!lawView||lawView.lawId!==id||lawView.page!==page) return;   /* 그새 다른 쪽으로 옮겼으면 버린다 */
     lawView.loading=false;
     if(res.error) lawView.err="쪽을 불러오지 못했어요: "+res.error.message;
     else if(!res.data||!res.data.length) lawView.content="";
-    else lawView.content=res.data[0].content;
+    else { lawView.content=res.data[0].content; lawView.article=res.data[0].article||""; }
     renderLawModal();
   });
 }
@@ -1283,16 +1322,228 @@ function openLawPdf(id,page){
   });
 }
 
-/* 검색어에 형광펜 */
-function markQuery(text,q){
-  if(!q||q.length<2) return esc(text);
-  var lt=text.toLowerCase(), lq=q.toLowerCase(), out="", from=0;
-  while(true){
-    var at=lt.indexOf(lq,from); if(at<0) break;
-    out+=esc(text.slice(from,at))+"<mark>"+esc(text.slice(at,at+q.length))+"</mark>";
-    from=at+q.length;
+/* ---------- 조문 찾기 ----------
+ * 추출된 텍스트에서 "제12조(보관)" 같은 조문 머리말을 찾아,
+ * 검색어가 어느 조 안에 있는지 알려준다.
+ *
+ * 제목이 붙은 괄호를 반드시 요구하는 이유:
+ *   "제31조제2항에 따라" 처럼 다른 조를 가리키는 말이 본문에 흔한데,
+ *   조문 머리말은 법제처 문서에서 항상 "제N조(제목)" 꼴이다.
+ *   괄호 제목을 조건으로 걸면 참조와 머리말이 깔끔하게 갈린다.
+ * PDF에서 뽑은 글자는 띄어쓰기가 들쭉날쭉해서(제 12 조 ( 보관 )) 공백을 허용한다. */
+var ART_RE=/제\s*(\d+)\s*조(?:\s*의\s*(\d+))?\s*\(\s*([^()]{1,40}?)\s*\)/g;
+var HANG="①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";
+
+/* 한 쪽 안의 조문 머리말 위치를 모두 찾는다 (쪽마다 한 번만 계산) */
+function findArticles(text){
+  var out=[], m;
+  ART_RE.lastIndex=0;
+  while((m=ART_RE.exec(text))!==null){
+    out.push({ at:m.index, end:m.index+m[0].length,
+      label:"제"+m[1]+"조"+(m[2]?"의"+m[2]:"")+"("+m[3].replace(/\s+/g," ").trim()+")" });
+    if(out.length>200) break;
   }
-  return out+esc(text.slice(from));
+  return out;
+}
+
+/* 그 위치가 속한 조문 + 항(①②③...)
+ * 이 쪽에 머리말이 없으면 앞 쪽에서 이어진 조(carried)를 쓴다.
+ * 조 하나가 여러 쪽에 걸치는 게 보통이라 이게 없으면 대부분의 결과에 조가 안 붙는다. */
+function articleAt(arts,text,at,carried){
+  var found=null, label=null, from=0;
+  for(var i=0;i<arts.length;i++){ if(arts[i].at<=at) found=arts[i]; else break; }
+  if(found){ label=found.label; from=found.end; }
+  else if(carried){ label=carried; from=0; }
+  else return null;
+  var hang="";
+  for(var j=at;j>from;j--){
+    if(HANG.indexOf(text.charAt(j))>=0){ hang=text.charAt(j); break; }
+  }
+  return label+(hang?" "+hang:"");
+}
+
+/* ---------- 원문 보기 좋게 나누기 ----------
+ * 글자는 하나도 바꾸지 않는다. 줄바꿈과 들여쓰기만 넣는다.
+ * 법령 문서는 조 → 항(①②) → 호(1. 2.) → 목(가. 나.) 구조인데
+ * PDF에서 뽑으면 전부 한 줄로 이어져 읽기가 어렵다. */
+
+var META_RE=/<[^<>]{0,60}>|\[[^\[\]]{0,60}\]/g;          /* <개정 2024. 12. 30.> [본조신설 …] */
+var RUNHEAD_RE=/^법제처\s*\d+\s*국가법령정보센터\s*/;      /* 쪽마다 반복되는 머리글 */
+
+/* 끊을 자리 찾기 — 날짜(<개정 2022. 12. 29.>)를 호로 오인하지 않도록
+ * < > 나 [ ] 안쪽은 아예 건너뛴다 */
+function lawBreaks(text){
+  var skip=[], m;
+  META_RE.lastIndex=0;
+  while((m=META_RE.exec(text))!==null) skip.push([m.index,m.index+m[0].length]);
+  function inSkip(i){ for(var k=0;k<skip.length;k++){ if(i>=skip[k][0]&&i<skip[k][1]) return true; } return false; }
+
+  var pts=[];
+  findArticles(text).forEach(function(a){ if(!inSkip(a.at)) pts.push({at:a.at,lv:0,len:a.end-a.at}); });
+
+  for(var i=0;i<text.length;i++){
+    if(inSkip(i)) continue;
+    var ch=text.charAt(i);
+    if(HANG.indexOf(ch)>=0){ pts.push({at:i,lv:1,len:0}); continue; }
+    /* 호(1. 2.) · 목(가. 나.) — 앞이 공백이고 뒤가 공백인 것만 */
+    if(i>0&&/\s/.test(text.charAt(i-1))){
+      var mm=/^(\d{1,2}|[가-하])\.\s/.exec(text.slice(i,i+5));
+      if(mm) pts.push({at:i,lv:/\d/.test(mm[1])?2:3,len:0});
+    }
+  }
+  pts.sort(function(a,b){ return a.at-b.at||a.lv-b.lv; });
+  /* 같은 자리 중복 제거 */
+  var out=[];
+  pts.forEach(function(p){ if(!out.length||out[out.length-1].at!==p.at) out.push(p); });
+  return out;
+}
+
+/* 한 토막을 HTML로 — 검색어 형광펜, <개정…> 같은 부가 표시는 흐리게 */
+function lawSegHtml(seg,q,artLen){
+  var ranges=[];
+  if(artLen>0) ranges.push({s:0,e:artLen,cls:"lp-art"});
+  var m;
+  META_RE.lastIndex=0;
+  while((m=META_RE.exec(seg))!==null) ranges.push({s:m.index,e:m.index+m[0].length,cls:"lp-meta"});
+  var rh=RUNHEAD_RE.exec(seg);
+  if(rh) ranges.push({s:0,e:rh[0].length,cls:"lp-meta"});
+  if(q&&q.length>=2){
+    var lt=seg.toLowerCase(), lq=q.toLowerCase(), from=0;
+    while(true){
+      var at=lt.indexOf(lq,from); if(at<0) break;
+      ranges.push({s:at,e:at+q.length,cls:"mark"});
+      from=at+q.length;
+    }
+  }
+  ranges.sort(function(a,b){ return a.s-b.s||(b.e-b.s)-(a.e-a.s); });
+  var out="", pos=0;
+  ranges.forEach(function(r){
+    if(r.s<pos) return;                       /* 겹치면 앞의 것만 */
+    out+=esc(seg.slice(pos,r.s));
+    out+=(r.cls==="mark"?"<mark>":'<span class="'+r.cls+'">')
+       + esc(seg.slice(r.s,r.e))
+       + (r.cls==="mark"?"</mark>":"</span>");
+    pos=r.e;
+  });
+  return out+esc(seg.slice(pos));
+}
+
+var LP_CLASS=["lp0","lp1","lp2","lp3"];
+function formatLawText(text,q){
+  var pts=lawBreaks(text);
+  if(!pts.length) return '<div class="lp lp0">'+lawSegHtml(text,q,0)+'</div>';
+  var html="", prev=0, prevLv=0, prevArt=0;
+  function push(to){
+    var seg=text.slice(prev,to);
+    if(seg.trim()) html+='<div class="lp '+LP_CLASS[prevLv]+'">'+lawSegHtml(seg,q,prevArt)+'</div>';
+  }
+  if(pts[0].at>0){ prev=0; prevLv=0; prevArt=0; push(pts[0].at); }
+  pts.forEach(function(p,i){
+    prev=p.at; prevLv=p.lv; prevArt=p.len;
+    push(i+1<pts.length?pts[i+1].at:text.length);
+  });
+  return html;
+}
+
+var lawView=null;   /* {lawId,page,content,loading,err} */
+
+function openLawView(id,page){
+  var l=S.laws.find(function(x){ return x.id===id; });
+  if(!l) return;
+  var max=l.pages||1;
+  if(page<1) page=1; if(page>max) page=max;
+  lawView={lawId:id,page:page,loading:true,content:"",err:""};
+  renderLawModal();
+  withAuthRetry(function(){
+    return sb.from("law_pages").select("content,article").eq("law_id",id).eq("page",page).limit(1);
+  }).then(function(res){
+    if(!lawView||lawView.lawId!==id||lawView.page!==page) return;   /* 그새 다른 쪽으로 옮겼으면 버린다 */
+    lawView.loading=false;
+    if(res.error) lawView.err="쪽을 불러오지 못했어요: "+res.error.message;
+    else if(!res.data||!res.data.length) lawView.content="";
+    else { lawView.content=res.data[0].content; lawView.article=res.data[0].article||""; }
+    renderLawModal();
+  });
+}
+function closeLawView(){ lawView=null; renderLawModal(); }
+function lawViewStep(d){
+  if(!lawView) return;
+  openLawView(lawView.lawId,lawView.page+d);
+}
+/* PDF 원문은 필요할 때만 — 파일 전체를 받으므로 느리다 */
+function openLawPdf(id,page){
+  var l=S.laws.find(function(x){ return x.id===id; });
+  if(!l||!l.filePath){ showToast("원문 파일을 찾지 못했어요.",true); return; }
+  showToast("PDF 여는 중... 파일이 크면 시간이 걸려요");
+  sb.storage.from("files").createSignedUrl(l.filePath,3600).then(function(res){
+    if(res.error){ showToast("파일을 열지 못했어요.",true); return; }
+    window.open(res.data.signedUrl+"#page="+page,"_blank");
+  });
+}
+
+/* ---------- 조문 찾기 ----------
+ * 추출된 텍스트에서 "제12조(보관)" 같은 조문 머리말을 찾아,
+ * 검색어가 어느 조 안에 있는지 알려준다.
+ *
+ * 제목이 붙은 괄호를 반드시 요구하는 이유:
+ *   "제31조제2항에 따라" 처럼 다른 조를 가리키는 말이 본문에 흔한데,
+ *   조문 머리말은 법제처 문서에서 항상 "제N조(제목)" 꼴이다.
+ *   괄호 제목을 조건으로 걸면 참조와 머리말이 깔끔하게 갈린다.
+ * PDF에서 뽑은 글자는 띄어쓰기가 들쭉날쭉해서(제 12 조 ( 보관 )) 공백을 허용한다. */
+var ART_RE=/제\s*(\d+)\s*조(?:\s*의\s*(\d+))?\s*\(\s*([^()]{1,40}?)\s*\)/g;
+var HANG="①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";
+
+/* 한 쪽 안의 조문 머리말 위치를 모두 찾는다 (쪽마다 한 번만 계산) */
+function findArticles(text){
+  var out=[], m;
+  ART_RE.lastIndex=0;
+  while((m=ART_RE.exec(text))!==null){
+    out.push({ at:m.index, end:m.index+m[0].length,
+      label:"제"+m[1]+"조"+(m[2]?"의"+m[2]:"")+"("+m[3].replace(/\s+/g," ").trim()+")" });
+    if(out.length>200) break;
+  }
+  return out;
+}
+
+/* 그 위치가 속한 조문 + 항(①②③...)
+ * 이 쪽에 머리말이 없으면 앞 쪽에서 이어진 조(carried)를 쓴다.
+ * 조 하나가 여러 쪽에 걸치는 게 보통이라 이게 없으면 대부분의 결과에 조가 안 붙는다. */
+function articleAt(arts,text,at,carried){
+  var found=null, label=null, from=0;
+  for(var i=0;i<arts.length;i++){ if(arts[i].at<=at) found=arts[i]; else break; }
+  if(found){ label=found.label; from=found.end; }
+  else if(carried){ label=carried; from=0; }
+  else return null;
+  var hang="";
+  for(var j=at;j>from;j--){
+    if(HANG.indexOf(text.charAt(j))>=0){ hang=text.charAt(j); break; }
+  }
+  return label+(hang?" "+hang:"");
+}
+
+/* 본문에서 조문 머리말은 굵게, 검색어는 형광펜 — 한 번에 처리한다 */
+function decorateLawText(text,q){
+  var ranges=findArticles(text).map(function(a){ return {s:a.at,e:a.end,t:"art"}; });
+  if(q&&q.length>=2){
+    var lt=text.toLowerCase(), lq=q.toLowerCase(), from=0;
+    while(true){
+      var at=lt.indexOf(lq,from); if(at<0) break;
+      var e=at+q.length;
+      /* 조문 머리말과 겹치면 형광펜은 건너뛴다 */
+      var clash=ranges.some(function(r){ return r.t==="art"&&at<r.e&&e>r.s; });
+      if(!clash) ranges.push({s:at,e:e,t:"q"});
+      from=e;
+    }
+  }
+  ranges.sort(function(a,b){ return a.s-b.s; });
+  var out="", pos=0;
+  ranges.forEach(function(r){
+    if(r.s<pos) return;
+    out+=esc(text.slice(pos,r.s));
+    out+=(r.t==="art"?'<b class="lv-art">':'<mark>')+esc(text.slice(r.s,r.e))+(r.t==="art"?'</b>':'</mark>');
+    pos=r.e;
+  });
+  return out+esc(text.slice(pos));
 }
 
 function renderLawModal(){
@@ -1306,7 +1557,17 @@ function renderLawModal(){
   if(lawView.loading) body='<p class="empty">불러오는 중...</p>';
   else if(lawView.err) body='<p class="empty">'+esc(lawView.err)+'</p>';
   else if(!lawView.content) body='<p class="empty">이 쪽에는 글자가 없어요.<br />표나 그림만 있는 쪽일 수 있어요 — 아래 PDF 원문에서 확인해 주세요.</p>';
-  else body='<div class="lv-text">'+markQuery(lawView.content,lawQuery)+'</div>';
+  else body='<div class="lv-text">'+formatLawText(lawView.content,lawQuery)+'</div>';
+
+  var arts=(!lawView.loading&&lawView.content)?findArticles(lawView.content):[];
+  var head0=arts.length?arts[0].label:"", tail0=arts.length?arts[arts.length-1].label:"";
+  if(lawView.article){                       /* 앞 쪽에서 이어진 조를 앞에 세운다 */
+    head0=lawView.article+" (이어짐)";
+    if(!tail0) tail0=head0;
+  }
+  var artBar=head0
+    ? '<div class="lv-arts">'+esc(head0)+(tail0!==head0?'  ~  '+esc(tail0):'')+'</div>'
+    : '';
 
   el.innerHTML='<div class="lv-back" data-act="lv-close"></div>'
     + '<div class="lv-panel" role="dialog">'
@@ -1315,6 +1576,7 @@ function renderLawModal(){
     +     '<div class="lv-page">'+lawView.page+' / '+max+'쪽</div>'
     +     '<button class="lv-x" data-act="lv-close" title="닫기">✕</button>'
     +   '</div>'
+    +   artBar
     +   '<div class="lv-body" id="lv-body">'+body+'</div>'
     +   '<div class="lv-foot">'
     +     '<button class="btn quiet sm" data-act="lv-prev"'+(lawView.page<=1?" disabled":"")+'>‹ 이전 쪽</button>'
@@ -1348,7 +1610,7 @@ function lawExportText(){
   picked.forEach(function(h){
     var nm=lawName(h.lawId);
     if(nm!==cur){ cur=nm; lines.push("■ "+nm); }
-    lines.push("  ["+h.page+"쪽] "+h.before+h.match+h.after);
+    lines.push("  ["+(h.art?h.art+" · ":"")+h.page+"쪽] "+h.before+h.match+h.after);
     lines.push("");
   });
   return lines.join("\n");
@@ -1460,7 +1722,9 @@ function renderLawResults(){
       + '<input type="checkbox" class="law-check" data-act="law-pick" data-key="'+esc(h.key)+'"'+(lawSel[h.key]?" checked":"")+' />'
       + '<div class="law-hit-body">'
       +   '<div class="law-snip">'+esc(h.before)+'<mark>'+esc(h.match)+'</mark>'+esc(h.after)+'</div>'
-      +   '<div class="law-meta"><span class="law-page">'+h.page+'쪽</span>'
+      +   '<div class="law-meta">'
+      +     (h.art?'<span class="law-art">'+esc(h.art)+'</span>':'')
+      +     '<span class="law-page">'+h.page+'쪽</span>'
       +     '<button class="link-btn" data-act="law-view" data-id="'+h.lawId+'" data-page="'+h.page+'">이 쪽 펼쳐보기</button>'
       +     '<button class="link-btn quiet-link" data-act="law-pdf" data-id="'+h.lawId+'" data-page="'+h.page+'">PDF ↗</button></div>'
       + '</div></label>';

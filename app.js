@@ -1244,13 +1244,85 @@ function buildLawHits(rows,q){
   return out;
 }
 
-function openLawPage(id,page){
+/* ---------- 쪽 보기 (앱 안에서 바로) ----------
+ * PDF를 여는 건 파일 전체를 내려받는 일이라 501쪽짜리는 12MB를 다 받아야
+ * 한 쪽이 보인다. 쪽 텍스트는 이미 law_pages에 있으므로 그걸 바로 띄운다. */
+var lawView=null;   /* {lawId,page,content,loading,err} */
+
+function openLawView(id,page){
+  var l=S.laws.find(function(x){ return x.id===id; });
+  if(!l) return;
+  var max=l.pages||1;
+  if(page<1) page=1; if(page>max) page=max;
+  lawView={lawId:id,page:page,loading:true,content:"",err:""};
+  renderLawModal();
+  withAuthRetry(function(){
+    return sb.from("law_pages").select("content").eq("law_id",id).eq("page",page).limit(1);
+  }).then(function(res){
+    if(!lawView||lawView.lawId!==id||lawView.page!==page) return;   /* 그새 다른 쪽으로 옮겼으면 버린다 */
+    lawView.loading=false;
+    if(res.error) lawView.err="쪽을 불러오지 못했어요: "+res.error.message;
+    else if(!res.data||!res.data.length) lawView.content="";
+    else lawView.content=res.data[0].content;
+    renderLawModal();
+  });
+}
+function closeLawView(){ lawView=null; renderLawModal(); }
+function lawViewStep(d){
+  if(!lawView) return;
+  openLawView(lawView.lawId,lawView.page+d);
+}
+/* PDF 원문은 필요할 때만 — 파일 전체를 받으므로 느리다 */
+function openLawPdf(id,page){
   var l=S.laws.find(function(x){ return x.id===id; });
   if(!l||!l.filePath){ showToast("원문 파일을 찾지 못했어요.",true); return; }
+  showToast("PDF 여는 중... 파일이 크면 시간이 걸려요");
   sb.storage.from("files").createSignedUrl(l.filePath,3600).then(function(res){
     if(res.error){ showToast("파일을 열지 못했어요.",true); return; }
     window.open(res.data.signedUrl+"#page="+page,"_blank");
   });
+}
+
+/* 검색어에 형광펜 */
+function markQuery(text,q){
+  if(!q||q.length<2) return esc(text);
+  var lt=text.toLowerCase(), lq=q.toLowerCase(), out="", from=0;
+  while(true){
+    var at=lt.indexOf(lq,from); if(at<0) break;
+    out+=esc(text.slice(from,at))+"<mark>"+esc(text.slice(at,at+q.length))+"</mark>";
+    from=at+q.length;
+  }
+  return out+esc(text.slice(from));
+}
+
+function renderLawModal(){
+  var el=document.getElementById("law-modal"); if(!el) return;
+  if(!lawView){ el.innerHTML=""; document.body.style.overflow=""; return; }
+  document.body.style.overflow="hidden";
+
+  var l=S.laws.find(function(x){ return x.id===lawView.lawId; });
+  var max=(l&&l.pages)||1;
+  var body;
+  if(lawView.loading) body='<p class="empty">불러오는 중...</p>';
+  else if(lawView.err) body='<p class="empty">'+esc(lawView.err)+'</p>';
+  else if(!lawView.content) body='<p class="empty">이 쪽에는 글자가 없어요.<br />표나 그림만 있는 쪽일 수 있어요 — 아래 PDF 원문에서 확인해 주세요.</p>';
+  else body='<div class="lv-text">'+markQuery(lawView.content,lawQuery)+'</div>';
+
+  el.innerHTML='<div class="lv-back" data-act="lv-close"></div>'
+    + '<div class="lv-panel" role="dialog">'
+    +   '<div class="lv-head">'
+    +     '<div class="lv-title">'+esc(l?l.name:"법령")+'</div>'
+    +     '<div class="lv-page">'+lawView.page+' / '+max+'쪽</div>'
+    +     '<button class="lv-x" data-act="lv-close" title="닫기">✕</button>'
+    +   '</div>'
+    +   '<div class="lv-body" id="lv-body">'+body+'</div>'
+    +   '<div class="lv-foot">'
+    +     '<button class="btn quiet sm" data-act="lv-prev"'+(lawView.page<=1?" disabled":"")+'>‹ 이전 쪽</button>'
+    +     '<button class="btn quiet sm" data-act="lv-next"'+(lawView.page>=max?" disabled":"")+'>다음 쪽 ›</button>'
+    +     '<button class="link-btn lv-pdf" data-act="lv-pdf">PDF 원문 열기 ↗</button>'
+    +   '</div>'
+    + '</div>';
+  var b=document.getElementById("lv-body"); if(b) b.scrollTop=0;
 }
 
 function lawDel(id){
@@ -1328,7 +1400,7 @@ function renderLaws(){
         + '<span class="doc-ic file">▤</span>'
         + '<span class="law-name" data-act="edit" data-table="laws" data-field="name" data-id="'+l.id+'" title="눌러서 이름 수정">'+esc(l.name)+'</span>'
         + '<span class="law-pages">'+(l.pages||0)+'쪽</span>'
-        + '<button class="doc-act" data-act="law-open" data-id="'+l.id+'" data-page="1">열기 ↗</button>'
+        + '<button class="doc-act" data-act="law-pdf" data-id="'+l.id+'" data-page="1">PDF ↗</button>'
         + '<button class="del doc-del" data-act="law-del" data-id="'+l.id+'" title="삭제">✕</button></div>';
     }).join("")+'</div>';
   }
@@ -1345,9 +1417,10 @@ function renderLaws(){
     +   '<div class="import-bar-sub">'+(lawBusy?"창을 닫지 마세요":"글자가 들어 있는 PDF만 (스캔본은 아직 안 돼요)")+'</div></div>'
     +   '<span class="import-bar-go">→</span></button>'
     + list
-    + '<div id="law-results"></div></div>';
+    + '<div id="law-results"></div><div id="law-modal"></div></div>';
 
   renderLawResults();
+  renderLawModal();
   var q=document.getElementById("law-q");
   if(q) q.addEventListener("keydown",function(e){ if(e.key==="Enter") lawSearch(); });
 }
@@ -1388,13 +1461,19 @@ function renderLawResults(){
       + '<div class="law-hit-body">'
       +   '<div class="law-snip">'+esc(h.before)+'<mark>'+esc(h.match)+'</mark>'+esc(h.after)+'</div>'
       +   '<div class="law-meta"><span class="law-page">'+h.page+'쪽</span>'
-      +     '<button class="link-btn" data-act="law-open" data-id="'+h.lawId+'" data-page="'+h.page+'">원문 열기 ↗</button></div>'
+      +     '<button class="link-btn" data-act="law-view" data-id="'+h.lawId+'" data-page="'+h.page+'">이 쪽 펼쳐보기</button>'
+      +     '<button class="link-btn quiet-link" data-act="law-pdf" data-id="'+h.lawId+'" data-page="'+h.page+'">PDF ↗</button></div>'
       + '</div></label>';
   });
 
   el.innerHTML=head+'<div class="law-hits">'+body+'</div>'
     + '<p class="law-note">원문은 새 창에서 열려요. 기기에 따라 해당 쪽으로 바로 넘어가지 않을 수 있으니 쪽 번호를 참고하세요.</p>';
 }
+
+/* 쪽 보기 창은 Esc로 닫는다 */
+document.addEventListener("keydown",function(e){
+  if(e.key==="Escape"&&lawView){ e.preventDefault(); closeLawView(); }
+});
 
 /* ========== 이벤트 위임 ========== */
 document.getElementById("app").addEventListener("click",function(e){
@@ -1441,7 +1520,12 @@ document.getElementById("app").addEventListener("click",function(e){
     case "law-upload": lawUploadClick(); break;
     case "law-search": lawSearch(); break;
     case "law-list": lawListOpen=!lawListOpen; render(); break;
-    case "law-open": openLawPage(id,parseInt(el.getAttribute("data-page"),10)||1); break;
+    case "law-view": openLawView(id,parseInt(el.getAttribute("data-page"),10)||1); break;
+    case "law-pdf": openLawPdf(id,parseInt(el.getAttribute("data-page"),10)||1); break;
+    case "lv-close": closeLawView(); break;
+    case "lv-prev": lawViewStep(-1); break;
+    case "lv-next": lawViewStep(1); break;
+    case "lv-pdf": if(lawView) openLawPdf(lawView.lawId,lawView.page); break;
     case "law-del": lawDel(id); break;
     case "law-pick": { var lk=el.getAttribute("data-key");
       if(lawSel[lk]) delete lawSel[lk]; else lawSel[lk]=true;

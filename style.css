@@ -1,6 +1,8 @@
 :root{
   --paper:#F3F5F2; --surface:#FFFFFF; --ink:#1E2A24; --muted:#6C7A72;
   --line:#E3E7E2; --accent:#2F5D50; --accent-soft:#E5EEE9; --brass:#A67C2E; --brick:#A4503E;
+  /* 식약처 업무 — 세이지 그린과 같은 명도·채도대의 슬레이트 블루 (형제색) */
+  --blue:#2D5B7D; --blue-soft:#E5EDF3; --blue-deep:#1E3F58;
 }
 *{box-sizing:border-box;}
 html,body{margin:0;height:100%;}
@@ -228,3 +230,38 @@ textarea.input{min-height:60px;resize:vertical;line-height:1.5;width:100%;}
 .day-today{display:inline-block;font-size:10px;font-weight:700;color:#fff;
   background:var(--accent);padding:2px 8px;border-radius:12px;margin-left:6px;
   vertical-align:middle;}
+
+/* ===== 식약처 업무 — 칸반 드래그 · 캘린더 연동 ===== */
+
+/* 칸반 컬럼: 비어 있어도 드롭할 수 있게 최소 높이 확보 */
+.col{min-height:120px;border-radius:10px;padding:4px;transition:background .15s,box-shadow .15s;}
+.col.drop-target{background:var(--blue-soft);box-shadow:inset 0 0 0 2px var(--blue);}
+
+/* 들어올린 카드 */
+.mini{transition:box-shadow .15s,transform .15s;}
+.mini.dragging{position:relative;z-index:50;touch-action:none;cursor:grabbing;
+  box-shadow:0 12px 28px rgba(30,63,88,.22);border-color:var(--blue);opacity:.96;}
+
+/* 카드 기한 */
+.mini-due{display:inline-block;margin-top:7px;font-size:11px;font-weight:650;
+  color:var(--blue-deep);background:var(--blue-soft);padding:2px 9px;border-radius:12px;cursor:text;}
+.mini-due.none{color:var(--muted);background:transparent;border:1px dashed var(--line);font-weight:500;}
+.mini-due.over{color:#fff;background:var(--brick);}
+
+/* 캘린더 칩 — 식약처는 파랑, 일정은 기존 초록 */
+.cal-ev.mfds{background:var(--blue);}
+.cal-ev.done{background:var(--blue-soft);color:var(--blue-deep);text-decoration:line-through;}
+
+/* 캘린더 목록의 식약처 행 */
+.ev-row.task{gap:8px;}
+.ev-row.task.done .ev-title{color:var(--muted);text-decoration:line-through;}
+.mfds-badge{flex-shrink:0;font-size:10px;font-weight:700;color:var(--blue-deep);
+  background:var(--blue-soft);padding:2px 8px;border-radius:12px;white-space:nowrap;}
+.mfds-status{flex-shrink:0;font-size:11px;color:var(--muted);}
+.day-check{width:17px;height:17px;flex-shrink:0;accent-color:var(--blue);cursor:pointer;margin:0;}
+
+/* 입력줄 체크박스 · 기한 라벨 */
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);
+  white-space:nowrap;cursor:pointer;user-select:none;}
+.chk input{width:16px;height:16px;accent-color:var(--blue);cursor:pointer;margin:0;}
+.due-lbl{font-size:12.5px;color:var(--muted);align-self:center;white-space:nowrap;}

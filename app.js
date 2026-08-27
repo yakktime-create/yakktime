@@ -182,8 +182,8 @@ function toRemote(table,item){
     /* events */
     if(k==="key"&&table==="events") rk="event_date";
     else if(k==="time"&&table==="events") rk="event_time";
-    /* schedule */
-    else if(k==="due"&&table==="schedule") rk="due_date";
+    /* schedule 할 일 날짜 · mfds 업무 기한 */
+    else if(k==="due"&&(table==="schedule"||table==="mfds")) rk="due_date";
     /* archive */
     else if(k==="needsCheck") rk="needs_check";
     /* archive+docs 공통 */
@@ -332,26 +332,29 @@ function evSort(a,b){ if(a.key!==b.key) return a.key<b.key?-1:1; var ta=a.time||
  * data-act="edit" data-table="..." data-field="..." data-id="..." 만 붙이면 동작한다.
  * 편집 중에는 render()가 input을 날려버리므로 editingId로 재진입을 막는다. */
 var editingId=null;
-function startEdit(el,table,id,field){
+function startEdit(el,table,id,field,type){
   if(!el||editingId||!S[table]) return;
   var item=S[table].find(function(x){ return x.id===id; });
   if(!item) return;
   editingId=id;
   var cur=item[field]==null?"":String(item[field]);
   var inp=document.createElement("input");
+  inp.type=type||"text";
   inp.className="input inline-edit";
   inp.value=cur;
   el.replaceWith(inp);
   inp.focus();
-  try{ inp.setSelectionRange(cur.length,cur.length); }catch(e){}
+  if(!type) { try{ inp.setSelectionRange(cur.length,cur.length); }catch(e){} }
   var settled=false;
+  /* 날짜는 비워서 저장할 수 있어야 한다 (기한을 없애면 캘린더에서도 빠짐) */
+  var allowEmpty=(type==="date");
   function commit(save){
     if(settled) return;
     settled=true; editingId=null;
     var nv=inp.value.trim();
-    if(save&&nv&&nv!==cur){
-      item[field]=nv;
-      var patch={}; patch[field]=nv;
+    if(save&&(nv||allowEmpty)&&nv!==cur){
+      item[field]=nv||null;
+      var patch={}; patch[field]=nv||null;
       dbUpdate(table,id,patch);
     }
     render();
@@ -361,6 +364,83 @@ function startEdit(el,table,id,field){
     else if(e.key==="Escape"){ e.preventDefault(); commit(false); }
   });
   inp.addEventListener("blur",function(){ commit(true); });
+}
+
+/* ========== 칸반 드래그 (포인터 이벤트) ==========
+ * iOS Safari는 HTML5 드래그(draggable/dragstart)가 터치에서 동작하지 않으므로
+ * 포인터 이벤트로 직접 구현한다.
+ *   · 터치: 200ms 롱프레스 후 움직여야 드래그 시작 → 페이지 세로 스크롤과 충돌 안 함
+ *   · 마우스: 8px 이상 움직이면 바로 시작
+ *   · 드래그가 시작되지 않았으면 click이 그대로 통과 → 인라인 수정이 계속 동작
+ */
+var dragState=null, dragEndedAt=0;
+
+function wireMfdsDrag(){
+  var board=document.querySelector(".board"); if(!board) return;
+  board.addEventListener("pointerdown",function(e){
+    if(editingId) return;                                   /* 편집 중엔 드래그 금지 */
+    if(e.target.closest("input,textarea,button")) return;   /* 버튼·입력은 그대로 */
+    var card=e.target.closest(".mini"); if(!card) return;
+    var isTouch=(e.pointerType!=="mouse");
+    dragState={ id:card.getAttribute("data-mfds"), card:card, active:false,
+                sx:e.clientX, sy:e.clientY, pid:e.pointerId,
+                holdOk:!isTouch, timer:null };
+    if(isTouch) dragState.timer=setTimeout(function(){ if(dragState) dragState.holdOk=true; },200);
+  });
+  board.addEventListener("pointermove",function(e){
+    if(!dragState||e.pointerId!==dragState.pid) return;
+    var dx=e.clientX-dragState.sx, dy=e.clientY-dragState.sy;
+    var dist=Math.sqrt(dx*dx+dy*dy);
+    if(!dragState.active){
+      /* 롱프레스가 차기 전에 움직였으면 스크롤 의도로 보고 포기한다 */
+      if(!dragState.holdOk){ if(dist>10) cleanupDrag(); return; }
+      if(dist<8) return;
+      dragState.active=true;
+      var r=dragState.card.getBoundingClientRect();
+      dragState.card.style.width=r.width+"px";
+      dragState.card.classList.add("dragging");
+      try{ dragState.card.setPointerCapture(dragState.pid); }catch(err){}
+    }
+    e.preventDefault();
+    dragState.card.style.transform="translate("+dx+"px,"+dy+"px) rotate(1.5deg)";
+    var col=colAt(e.clientX,e.clientY);
+    clearDropTargets();
+    if(col) col.classList.add("drop-target");
+  });
+  board.addEventListener("pointerup",function(e){
+    if(!dragState||e.pointerId!==dragState.pid) return;
+    if(!dragState.active){ cleanupDrag(); return; }         /* 그냥 탭 → click 통과 */
+    var col=colAt(e.clientX,e.clientY), id=dragState.id;
+    cleanupDrag();
+    dragEndedAt=Date.now();                                 /* 뒤따르는 click 무시용 */
+    var st=col?col.getAttribute("data-col"):null;
+    var it=S.mfds.find(function(x){ return x.id===id; });
+    if(it&&st&&it.status!==st){
+      it.status=st; render(); dbUpdate("mfds",id,{status:st});
+    } else render();                                        /* 원위치 */
+  });
+  board.addEventListener("pointercancel",function(){ cleanupDrag(); });
+}
+
+/* 끌고 있는 카드는 잠시 숨겨야 그 아래 컬럼을 집어낼 수 있다 */
+function colAt(x,y){
+  var c=dragState&&dragState.card;
+  if(c) c.style.visibility="hidden";
+  var el=document.elementFromPoint(x,y);
+  if(c) c.style.visibility="";
+  return el?el.closest(".col"):null;
+}
+function clearDropTargets(){
+  var els=document.querySelectorAll(".col.drop-target");
+  for(var i=0;i<els.length;i++) els[i].classList.remove("drop-target");
+}
+function cleanupDrag(){
+  if(!dragState) return;
+  clearTimeout(dragState.timer);
+  var c=dragState.card;
+  if(c){ c.classList.remove("dragging"); c.style.transform=""; c.style.width=""; c.style.visibility=""; }
+  clearDropTargets();
+  dragState=null;
 }
 
 /* 캘린더에서 날짜를 누르면 아래 입력칸이 보이도록 스크롤 + 포커스 */
@@ -437,15 +517,31 @@ function renderCalendar(){
   for(var i=0;i<startDay;i++) cells+='<div class="cal-cell blank"></div>';
   for(var d=1;d<=dim;d++){ var k=calYear+"-"+pad(calMonth+1)+"-"+pad(d);
     var evs=S.events.filter(function(e){return e.key===k;}).sort(evSort);
-    var chips=evs.slice(0,2).map(function(e){ return '<div class="cal-ev">'+(e.time?esc(e.time)+" ":"")+esc(e.title)+'</div>'; }).join("");
-    if(evs.length>2) chips+='<div class="cal-more">+'+(evs.length-2)+'</div>';
+    /* 식약처 업무를 같은 칸에 함께 얹는다 (복사본이 아니라 mfds를 직접 읽음) */
+    var tasks=S.mfds.filter(function(m){ return m.due===k; });
+    var chipItems=tasks.map(function(m){ return {task:true,done:m.status==="완료",label:m.title}; })
+      .concat(evs.map(function(e){ return {task:false,done:false,label:(e.time?e.time+" ":"")+e.title}; }));
+    var chips=chipItems.slice(0,2).map(function(c){
+      return '<div class="cal-ev'+(c.task?" mfds":"")+(c.done?" done":"")+'">'+esc(c.label)+'</div>'; }).join("");
+    if(chipItems.length>2) chips+='<div class="cal-more">+'+(chipItems.length-2)+'</div>';
     cells+='<div class="cal-cell'+(k===todayKey?" today":"")+(k===calSel?" sel":"")+'" data-act="cal-day" data-id="'+k+'"><span class="cal-num">'+d+'</span>'+chips+'</div>'; }
   var wdHtml=WD.map(function(w,i){ return '<div class="cal-wd'+(i===0?" sun":"")+'">'+w+'</div>'; }).join("");
   var selEvs=S.events.filter(function(e){return e.key===calSel;}).sort(evSort), selD=new Date(calSel);
+  var selTasks=S.mfds.filter(function(m){ return m.due===calSel; });
+  var taskRows=selTasks.map(function(t){
+    var done=(t.status==="완료");
+    return '<li class="ev-row task'+(done?" done":"")+'">'
+      + '<input class="day-check" type="checkbox" data-act="mfds-done" data-id="'+t.id+'"'+(done?' checked':'')+' />'
+      + '<span class="mfds-badge">식약처</span>'
+      + '<span class="ev-title" data-act="edit" data-table="mfds" data-field="title" data-id="'+t.id+'" title="눌러서 수정">'+esc(t.title)+'</span>'
+      + '<span class="mfds-status">'+esc(t.status)+'</span>'
+      + '<button class="del" data-act="mfds-del" data-id="'+t.id+'">✕</button></li>'; }).join("");
   var panel='<div class="day-panel"><div class="day-title">'+(selD.getMonth()+1)+'월 '+selD.getDate()+'일 ('+WD[selD.getDay()]+')'+(calSel===todayKey?' <span class="day-today">오늘</span>':'')+'</div>'
-    + '<div class="day-hint">이 칸에는 날짜를 안 써도 돼요. 제목만 적으면 위에서 고른 날짜로 들어갑니다.</div>'
-    + '<div class="add-row"><input class="input" id="day-ev" placeholder="할 일 / 일정 (예: 오후 2시 GMP 실사)" /><button class="btn" data-act="day-add">+ 추가</button></div>'
-    + (selEvs.length? '<ul class="list">'+selEvs.map(function(e){ return '<li class="ev-row"><span class="ev-time" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'+(e.time||"종일")+'</span><span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span><button class="del" data-act="ev-del" data-id="'+e.id+'">✕</button></li>'; }).join("")+'</ul>' : '<p class="empty">이 날은 아직 일정이 없어요.</p>')+'</div>';
+    + '<div class="day-hint">이 칸에는 날짜를 안 써도 돼요. 제목만 적으면 위에서 고른 날짜로 들어갑니다.<br />＋ 식약처 업무로 체크하면 일정이 아니라 <b>업무</b>로 등록돼 식약처 탭에서도 보여요.</div>'
+    + '<div class="add-row"><input class="input" id="day-ev" placeholder="할 일 / 일정 (예: 오후 2시 GMP 실사)" />'
+    +   '<label class="chk"><input type="checkbox" id="day-mfds" /> 식약처 업무</label>'
+    +   '<button class="btn" data-act="day-add">+ 추가</button></div>'
+    + ((selEvs.length||selTasks.length)? '<ul class="list">'+taskRows+selEvs.map(function(e){ return '<li class="ev-row"><span class="ev-time" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'+(e.time||"종일")+'</span><span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span><button class="del" data-act="ev-del" data-id="'+e.id+'">✕</button></li>'; }).join("")+'</ul>' : '<p class="empty">이 날은 아직 일정이 없어요.</p>')+'</div>';
   view().innerHTML='<div class="page">'+pageHead("캘린더","달력에서 날짜를 누른 뒤, 아래 칸에 제목만 적으면 그 날짜로 들어가요.")
     + '<div class="cal-quick"><input class="input" id="cal-nl" placeholder=\'"11월 3일 오후 2시 GMP 실사" 처럼 입력하고 Enter\' /><button class="btn" data-act="cal-nl-add">추가</button></div><div class="cal-toast" id="cal-toast"></div>'
     + '<div class="cal-nav"><button class="cal-arrow" data-act="cal-prev">‹</button><span class="cal-month">'+calYear+'년 '+(calMonth+1)+'월</span><button class="cal-arrow" data-act="cal-next">›</button></div>'
@@ -462,10 +558,37 @@ function renderArticles(){
 }
 
 function renderMfds(){
-  var items=S.mfds;
-  var board=MFDS_STATUS.map(function(s){ var list=items.filter(function(i){return i.status===s;}); return '<div class="col"><div class="col-head">'+s+' <span class="muted">'+list.length+'</span></div>'+list.map(function(it){ return '<div class="mini"><div class="mini-title" data-act="edit" data-table="mfds" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</div>'+(it.memo?'<div class="mini-memo" data-act="edit" data-table="mfds" data-field="memo" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.memo)+'</div>':'')+'<div class="mini-actions"><button class="link-btn" data-act="m-cycle" data-id="'+it.id+'">상태 변경</button><button class="del" data-act="m-del" data-id="'+it.id+'">✕</button></div></div>'; }).join("")+'</div>'; }).join("");
-  view().innerHTML='<div class="page">'+pageHead("식약처 업무","GMP 평가·수거·해외 실사 등 진행 상태로 나눠서 봐요.")+'<div class="card form"><input class="input" id="m-title" placeholder="업무명 (예: 바이오시밀러 사전 GMP 평가)" />'+seg("m-status",MFDS_STATUS,"대기")+'<textarea class="input" id="m-memo" placeholder="담당 / 기한 / 메모"></textarea><button class="btn" data-act="m-add">+ 저장</button></div>'+(items.length===0?'<p class="empty">업무를 추가하면 대기 → 진행 → 완료로 정리돼요.</p>':'<div class="board">'+board+'</div>')+'</div>';
+  var items=S.mfds, todayKey=keyOf(new Date());
+  var board=MFDS_STATUS.map(function(st){
+    var list=items.filter(function(i){ return i.status===st; });
+    return '<div class="col" data-col="'+esc(st)+'"><div class="col-head">'+st+' <span class="muted">'+list.length+'</span></div>'
+      + list.map(function(it){
+          var due;
+          if(it.due){
+            var d=new Date(it.due), over=(it.due<todayKey && it.status!=="완료");
+            due='<div class="mini-due'+(over?" over":"")+'" data-act="edit" data-table="mfds" data-field="due" data-type="date" data-id="'+it.id+'" title="눌러서 기한 수정">'
+               +(d.getMonth()+1)+'월 '+d.getDate()+'일'+(over?' · 기한 지남':'')+'</div>';
+          } else {
+            due='<div class="mini-due none" data-act="edit" data-table="mfds" data-field="due" data-type="date" data-id="'+it.id+'" title="눌러서 기한 추가">＋ 기한</div>';
+          }
+          return '<div class="mini" data-mfds="'+it.id+'">'
+            + '<div class="mini-title" data-act="edit" data-table="mfds" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</div>'
+            + (it.memo?'<div class="mini-memo" data-act="edit" data-table="mfds" data-field="memo" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.memo)+'</div>':'')
+            + due
+            + '<div class="mini-actions"><button class="link-btn" data-act="m-cycle" data-id="'+it.id+'">상태 변경</button><button class="del" data-act="m-del" data-id="'+it.id+'">✕</button></div></div>';
+        }).join("")
+      + '</div>';
+  }).join("");
+  view().innerHTML='<div class="page">'+pageHead("식약처 업무","진행 상태로 나눠서 봐요. 카드를 지그시 눌렀다 끌면 다른 칸으로 옮겨져요.")
+    + '<div class="card form"><input class="input" id="m-title" placeholder="업무명 (예: 바이오시밀러 사전 GMP 평가)" />'
+    + seg("m-status",MFDS_STATUS,"대기")
+    + '<div class="add-row"><label class="due-lbl" for="m-due">기한</label><input class="input" type="date" id="m-due" /><span class="muted">기한을 넣으면 캘린더에도 표시돼요</span></div>'
+    + '<textarea class="input" id="m-memo" placeholder="담당 / 메모"></textarea>'
+    + '<button class="btn" data-act="m-add">+ 저장</button></div>'
+    + (items.length===0?'<p class="empty">업무를 추가하면 대기 → 진행 → 완료로 정리돼요.</p>':'<div class="board">'+board+'</div>')
+    + '</div>';
   wireSeg("m-status");
+  wireMfdsDrag();
 }
 
 function renderArchive(){
@@ -515,7 +638,9 @@ function addSchedule(dueKey,inputId){
   S.schedule.unshift(item); render(); dbInsert("schedule",item);
 }
 function addArticle(){ var t=(val("a-title")||"").trim(); if(!t) return; var item={title:t,status:segValue("a-status")||"기획",memo:(val("a-memo")||"").trim()}; S.articles.unshift(item); render(); dbInsert("articles",item); }
-function addMfds(){ var t=(val("m-title")||"").trim(); if(!t) return; var item={title:t,status:segValue("m-status")||"대기",memo:(val("m-memo")||"").trim()}; S.mfds.unshift(item); render(); dbInsert("mfds",item); }
+function addMfds(){ var t=(val("m-title")||"").trim(); if(!t) return;
+  var item={title:t,status:segValue("m-status")||"대기",memo:(val("m-memo")||"").trim(),due:(val("m-due")||"")||null};
+  S.mfds.unshift(item); render(); dbInsert("mfds",item); }
 function addArchive(){ var t=(val("ar-title")||"").trim(); if(!t) return; var chk=document.getElementById("ar-check"); var item={title:t,guideline:(val("ar-law")||"").trim(),summary:(val("ar-ans")||"").trim(),keywords:(val("ar-kw")||"").trim(),needsCheck:chk?chk.checked:false}; S.archive.unshift(item); render(); dbInsert("archive",item); }
 function addDocLink(){ var n=(val("d-name")||"").trim(); if(!n) return; var item={name:n,cat:(val("d-cat")||"").trim(),link:(val("d-link")||"").trim()}; S.docs.unshift(item); render(); dbInsert("docs",item); }
 
@@ -531,7 +656,19 @@ function calAddNL(){ var r=parseNL(val("cal-nl")||""); var toast=document.getEle
   S.events.push(item); dbInsert("events",item);
   calYear=r.date.getFullYear(); calMonth=r.date.getMonth(); calSel=r.key; render();
   var nt=document.getElementById("cal-toast"); if(nt){ nt.className="cal-toast ok"; nt.textContent="✓ "+(r.date.getMonth()+1)+"월 "+r.date.getDate()+"일"+(r.time?" "+r.time:"")+" · "+r.title; } }
-function dayAdd(){ var raw=(val("day-ev")||"").trim(); if(!raw) return; var r=parseNL(raw); var time=null,title=raw; if(r.ok){ time=r.time; title=r.title; } var item={key:calSel,time:time,title:title}; S.events.push(item); render(); dbInsert("events",item); }
+function dayAdd(){
+  var raw=(val("day-ev")||"").trim(); if(!raw) return;
+  var chk=document.getElementById("day-mfds");
+  if(chk&&chk.checked){
+    /* 일정이 아니라 식약처 업무로 등록. 캘린더는 mfds를 직접 읽으므로 여기에도 그대로 뜬다. */
+    var task={title:raw,status:"대기",memo:"",due:calSel};
+    S.mfds.unshift(task); render(); dbInsert("mfds",task); return;
+  }
+  var r=parseNL(raw); var time=null,title=raw;
+  if(r.ok){ time=r.time; title=r.title; }
+  var item={key:calSel,time:time,title:title};
+  S.events.push(item); render(); dbInsert("events",item);
+}
 function evDel(id){ S.events=S.events.filter(function(e){return e.id!==id;}); render(); dbDelete("events",id); }
 
 /* ========== 파일 업로드 (Supabase Storage — private bucket) ========== */
@@ -737,7 +874,20 @@ document.getElementById("app").addEventListener("click",function(e){
   switch(act){
     case "tab": active=id; render(); break;
     case "s-add": addSchedule(id,el.getAttribute("data-input")); break;
-    case "edit": startEdit(el,el.getAttribute("data-table"),id,el.getAttribute("data-field")); break;
+    case "edit":
+      if(Date.now()-dragEndedAt<350) break;   /* 드래그 직후 따라오는 click은 무시 */
+      startEdit(el,el.getAttribute("data-table"),id,el.getAttribute("data-field"),el.getAttribute("data-type"));
+      break;
+    /* 캘린더에서 식약처 업무 완료 토글 */
+    case "mfds-done": {
+      var mt=S.mfds.find(function(x){return x.id===id;});
+      if(mt){ mt.status=(mt.status==="완료")?"진행중":"완료"; render(); dbUpdate("mfds",id,{status:mt.status}); }
+      break; }
+    /* 캘린더에서 지우면 업무 자체가 사라지므로 반드시 확인받는다 */
+    case "mfds-del": {
+      var md=S.mfds.find(function(x){return x.id===id;});
+      if(md&&confirm('"'+md.title+'"\n\n식약처 업무에서도 함께 삭제됩니다. 계속할까요?')) del("mfds",id);
+      break; }
     case "s-toggle": { var it=S.schedule.find(function(x){return x.id===id;}); if(it){it.done=!it.done;render();dbUpdate("schedule",id,{done:it.done});} break; }
     case "s-star": { var i2=S.schedule.find(function(x){return x.id===id;}); if(i2){i2.star=!i2.star;render();dbUpdate("schedule",id,{star:i2.star});} break; }
     case "s-del": del("schedule",id); break;

@@ -1627,41 +1627,6 @@ function formatLawText(text,q){
   return html;
 }
 
-var lawView=null;   /* {lawId,page,content,loading,err} */
-
-function openLawView(id,page){
-  var l=S.laws.find(function(x){ return x.id===id; });
-  if(!l) return;
-  var max=l.pages||1;
-  if(page<1) page=1; if(page>max) page=max;
-  lawView={lawId:id,page:page,loading:true,content:"",err:""};
-  renderLawModal();
-  withAuthRetry(function(){
-    return sb.from("law_pages").select("content,article").eq("law_id",id).eq("page",page).limit(1);
-  }).then(function(res){
-    if(!lawView||lawView.lawId!==id||lawView.page!==page) return;   /* 그새 다른 쪽으로 옮겼으면 버린다 */
-    lawView.loading=false;
-    if(res.error) lawView.err="쪽을 불러오지 못했어요: "+res.error.message;
-    else if(!res.data||!res.data.length) lawView.content="";
-    else { lawView.content=res.data[0].content; lawView.article=res.data[0].article||""; }
-    renderLawModal();
-  });
-}
-function closeLawView(){ lawView=null; renderLawModal(); }
-function lawViewStep(d){
-  if(!lawView) return;
-  openLawView(lawView.lawId,lawView.page+d);
-}
-/* PDF 원문은 필요할 때만 — 파일 전체를 받으므로 느리다 */
-function openLawPdf(id,page){
-  var l=S.laws.find(function(x){ return x.id===id; });
-  if(!l||!l.filePath){ showToast("원문 파일을 찾지 못했어요.",true); return; }
-  showToast("PDF 여는 중... 파일이 크면 시간이 걸려요");
-  sb.storage.from("files").createSignedUrl(l.filePath,3600).then(function(res){
-    if(res.error){ showToast("파일을 열지 못했어요.",true); return; }
-    window.open(res.data.signedUrl+"#page="+page,"_blank");
-  });
-}
 
 
 /* 표인 쪽 판별.

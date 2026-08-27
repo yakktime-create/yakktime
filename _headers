@@ -1,0 +1,5 @@
+# Netlify — 브라우저가 옛 파일을 계속 쓰지 않도록 매번 확인하게 한다.
+# 아이패드·아이폰 홈 화면 앱(PWA)이 옛 app.js를 붙들고 있어
+# "고쳤는데 안 고쳐진 것처럼 보이는" 일이 있었다.
+/*
+  Cache-Control: public, max-age=0, must-revalidate

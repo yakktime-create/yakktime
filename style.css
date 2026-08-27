@@ -686,3 +686,7 @@ textarea.inline-area{min-height:52px;resize:vertical;}
   font-size:11.5px;color:#7A6224;line-height:1.6;}
 .lv-hint b{font-weight:750;}
 .law-row .link-btn{white-space:nowrap;flex-shrink:0;}
+
+/* 지금 돌고 있는 버전 — 캐시 때문에 옛 화면을 보고 있는지 바로 알 수 있게 */
+.ver{font-size:10px;color:#B6C0BA;text-align:center;padding:2px 0 4px;letter-spacing:.04em;}
+@media (max-width:1024px){ .ver{padding:0 6px;align-self:center;} }

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <title>이랑 업무 데스크</title>
-<link rel="stylesheet" href="style.css" />
+<link rel="stylesheet" href="style.css?v=10" />
 </head>
 <body>
 <div class="loading-overlay" id="loading">
@@ -42,6 +42,7 @@
     <div class="rail-foot">
       <button class="foot-btn" data-act="export">데이터 백업(내보내기)</button>
       <button class="foot-btn" data-act="import">백업 불러오기</button>
+      <div class="ver" id="ver"></div>
       <button class="foot-btn" data-act="logout" style="color:var(--brick);border-color:var(--brick);">로그아웃</button>
     </div>
   </nav>
@@ -53,6 +54,6 @@
 <input type="file" id="lawfile" accept="application/pdf" style="display:none" />
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="app.js"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>

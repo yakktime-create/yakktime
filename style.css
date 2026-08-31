@@ -712,3 +712,37 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 .law-need-bar b{font-weight:700}
 .law-need-bar .btn{margin-left:auto;flex:none}
 .link-btn.law-need{color:#b06a00;font-weight:700}
+
+/* ---------- 법령 검색 사용법 ---------- */
+.law-help-open{display:flex;align-items:center;gap:8px;width:100%;margin-top:10px;
+  padding:11px 14px;border:1px dashed var(--line);border-radius:12px;background:transparent;
+  color:var(--muted);font-size:13px;font-weight:600;text-align:left;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;}
+.law-help-open:active{background:var(--surface);color:var(--ink);}
+
+.law-help{margin-top:10px;padding:16px 18px 6px;border-radius:14px;
+  background:var(--surface);border:1px solid var(--line);}
+.law-help-head{display:flex;align-items:center;gap:10px;margin-bottom:4px;}
+.law-help-head b{font-size:15px;font-weight:750;color:var(--ink);}
+.law-help-x{margin-left:auto;padding:6px 10px;border:0;border-radius:8px;background:transparent;
+  color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;}
+.law-help-x:active{background:var(--line);}
+
+.law-help-sec{padding:14px 0 4px;border-top:1px solid var(--line);margin-top:12px;}
+.law-help-t{font-size:13px;font-weight:750;color:var(--ink);margin-bottom:8px;}
+.law-help ul{margin:0;padding-left:18px;}
+.law-help li{font-size:13px;line-height:1.75;color:var(--muted);margin-bottom:9px;}
+.law-help li b{font-weight:700;color:var(--ink);}
+.law-help li u{text-decoration:none;border-bottom:1.5px solid var(--brass);
+  padding-bottom:1px;color:var(--ink);}
+.law-help code{padding:2px 6px;border-radius:5px;background:var(--line);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--ink);}
+.law-help-chip{display:inline-block;padding:2px 8px;border-radius:999px;
+  background:#FBF3DF;color:#7A5C14;font-size:12px;font-weight:650;}
+.law-help-soon{color:var(--muted);font-size:12px;opacity:.85;}
+
+@media (max-width:640px){
+  .law-help{padding:14px 14px 4px;}
+  .law-help li{font-size:13.5px;}
+}

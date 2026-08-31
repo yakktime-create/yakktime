@@ -325,7 +325,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v14";
+var APP_VER="v15";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){ return '<button class="rail-tab '+(active===t.id?"on":"")+'" data-act="tab" data-id="'+t.id+'"><span class="dot"></span>'+esc(t.label)+'</button>'; }).join(""); }
@@ -1071,6 +1071,15 @@ document.getElementById("file").addEventListener("change",function(e){
  * 추측 없이 정확해진다. law_pages는 "이 쪽만 보기"와 PDF 쪽 이동에 쓴다. */
 
 var lawQuery="", lawTermList=[], lawHits=null, lawSel={}, lawOpen={}, lawBusy=false, lawSearching=false, lawListOpen=false;
+/* 처음 쓰는 사람에겐 펼쳐서 보여주고, 한 번 접으면 그 뒤로는 접힌 채로 둔다 */
+var lawHelpOpen=(function(){
+  try{ return window.localStorage.getItem("lawHelpSeen")!=="1"; }catch(e){ return true; }
+})();
+function lawHelpToggle(){
+  lawHelpOpen=!lawHelpOpen;
+  if(!lawHelpOpen){ try{ window.localStorage.setItem("lawHelpSeen","1"); }catch(e){} }
+  render();
+}
 
 /* pdf.js는 1MB가 넘으므로 이 탭을 쓸 때만 내려받는다 */
 var PDFJS_BASE="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/";
@@ -2013,6 +2022,59 @@ function lawSelAll(on){
   renderLawResults();
 }
 
+/* ---------- 사용법 ----------
+ * 화면만 보고는 알 수 없는 것들이 있다: 띄어쓰기가 AND라는 것,
+ * 같은 조가 두 번 나오는 게 「시행 예정 조문」이라는 것,
+ * 표로 된 쪽은 칸 경계가 사라진다는 것. 여기 적어 둔다. */
+function lawHelpHtml(){
+  if(!lawHelpOpen)
+    return '<button class="law-help-open" data-act="law-help">? &nbsp;검색하는 법 · 화면 보는 법</button>';
+  return '<div class="law-help">'
+    + '<div class="law-help-head"><b>법령 검색 사용법</b>'
+    +   '<button class="law-help-x" data-act="law-help" title="접기">접기 ✕</button></div>'
+
+    + '<div class="law-help-sec"><div class="law-help-t">① 찾는 법</div>'
+    +   '<ul>'
+    +     '<li><b>낱말을 띄어 쓰면 「모두 들어 있는 곳」</b>만 나와요.<br />'
+    +       '<code>냉장 운송</code> → 두 낱말이 <u>같은 조 안에</u> 다 있는 곳만.<br />'
+    +       '결과가 너무 많으면 낱말을 하나 더 넣어 좁히세요.</li>'
+    +     '<li><b>붙은 말 그대로</b> 찾으려면 따옴표로 묶어요. <code>"안전상비의약품"</code></li>'
+    +     '<li>두 글자 이상이어야 찾아요. 최대 다섯 낱말.</li>'
+    +     '<li>법에 쓰인 말로 넣어야 나와요. <u>「타이레놀」로는 안 나옵니다</u> — '
+    +       '법에는 「안전상비의약품」이라고 적혀 있으니까요. '
+    +       '<span class="law-help-soon">(이 부분은 다음 단계에서 AI가 대신 찾아 줄 예정)</span></li>'
+    +   '</ul></div>'
+
+    + '<div class="law-help-sec"><div class="law-help-t">② 결과 읽는 법</div>'
+    +   '<ul>'
+    +     '<li><b>카드 하나 = 조 하나</b>예요. 한 조 안에서 검색어가 열 번 나와도 카드는 하나입니다.</li>'
+    +     '<li>조각 앞의 <span class="law-help-chip">2호 나목</span> 같은 표시는 '
+    +       '<b>그 조 안에서 몇 항·몇 호·몇 목인지</b>예요.</li>'
+    +     '<li><b>「제N조 전체 보기」</b> — 그 조 전체를 읽어요. 조 하나가 통째로 나옵니다.</li>'
+    +     '<li><b>「이 쪽만」</b> — 조가 아니라 <b>그 쪽</b>을 봐요. 앞뒤 쪽으로 넘길 수 있어요.</li>'
+    +     '<li><b>「PDF ↗」</b> — 원본 PDF를 그 쪽으로 열어요. <b>표를 볼 때 꼭 쓰세요.</b></li>'
+    +     '<li>왼쪽 <b>체크박스</b>로 고른 뒤 <b>복사</b>·<b>텍스트로 저장</b>하면 모아서 가져갑니다.</li>'
+    +   '</ul></div>'
+
+    + '<div class="law-help-sec"><div class="law-help-t">③ 알아두면 헷갈리지 않는 것</div>'
+    +   '<ul>'
+    +     '<li><b>같은 조가 두 번 나올 때가 있어요.</b> 법제처 PDF는 '
+    +       '<u>아직 시행 전인 개정 조문</u>을 현행 조문 바로 뒤에 한 번 더 싣습니다. '
+    +       '끝에 <code>[시행일: 2027. 1. 1.]</code> 같은 표시가 있는 쪽이 <b>앞으로 바뀔 내용</b>이에요. '
+    +       '중복이 아니라 둘 다 필요한 정보입니다.</li>'
+    +     '<li><b>표로 된 쪽은 한 줄로 이어져 보여요.</b> 행정처분 기준·별표가 그렇습니다. '
+    +       'PDF에서 글자만 뽑으면 칸 경계가 사라지거든요. '
+    +       '<b>어느 칸의 값인지는 「PDF ↗」로 확인하세요.</b></li>'
+    +     '<li><b>별표·별지도 조처럼 찾아져요.</b> '
+    +       '<span class="law-help-chip">별표 8(행정처분의 기준)</span> 처럼 나옵니다.</li>'
+    +     '<li>새 PDF를 올리면 <b>조문으로 쪼개는 작업</b>이 자동으로 돌아요. '
+    +       '법령 목록에서 <b>「조문 다시 만들기」</b>를 누르면 다시 쪼갭니다 — '
+    +       'PDF를 다시 올릴 필요는 없어요.</li>'
+    +     '<li><b>공개 법령·지침서만</b> 올려주세요. 민원인 정보나 내부 검토 문서는 올리지 않습니다.</li>'
+    +   '</ul></div>'
+    + '</div>';
+}
+
 /* ---------- 화면 ---------- */
 function renderLaws(){
   var items=S.laws;
@@ -2045,6 +2107,7 @@ function renderLaws(){
     +   '<input class="input search law-input" id="law-q" placeholder="낱말을 띄어 쓰면 모두 포함 (예: 냉장 운송)" value="'+esc(lawQuery)+'" />'
     +   '<button class="btn sm law-go" data-act="law-search">검색</button>'
     + '</div>'
+    + lawHelpHtml()
     + '<button class="upload-bar'+(lawBusy?" busy":"")+'" data-act="law-upload"'+(lawBusy?" disabled":"")+'>'
     +   '<span class="upload-ic">⬆</span><div class="import-bar-text">'
     +   '<div class="import-bar-title">'+(lawBusy?"처리 중이에요...":"법령 PDF 올리기")+'</div>'
@@ -2065,7 +2128,7 @@ function renderLawResults(){
   if(lawSearching){ el.innerHTML='<p class="empty">찾는 중...</p>'; return; }
   if(lawHits===null){
     el.innerHTML=S.laws.length
-      ? '<div class="empty-box"><div class="empty-ic">⌕</div><p>찾을 단어를 넣고 Enter를 눌러요.<br />낱말을 띄어 쓰면 <b>모두 들어 있는 곳</b>만 찾아요. 붙은 말 그대로 찾으려면 "따옴표"로 묶어요.</p></div>'
+      ? '<div class="empty-box"><div class="empty-ic">⌕</div><p>찾을 단어를 넣고 Enter를 눌러요.<br />낱말을 띄어 쓰면 <b>모두 들어 있는 곳</b>만 찾아요. 붙은 말 그대로 찾으려면 "따옴표"로 묶어요.<br /><br />처음이시면 위의 <b>「검색하는 법 · 화면 보는 법」</b>을 펼쳐 보세요.</p></div>'
       : '<div class="empty-box"><div class="empty-ic">▤</div><p>법령 PDF를 올리면 여기서 검색할 수 있어요.<br />공개 법령·지침서만 올려주세요.</p></div>';
     return;
   }
@@ -2183,6 +2246,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "lv-close": closeLawView(); break;
     case "law-art": openLawArticle(parseInt(el.getAttribute("data-art-id"),10)||0,id); break;
     case "law-build-all": lawBuildAll(); break;
+    case "law-help": lawHelpToggle(); break;
     case "lv-art": lawPageToArt(); break;
     case "lv-page": lawArtToPage(); break;
     case "lv-hit-prev": lawJump(-1); break;

@@ -272,7 +272,7 @@ var TAB_LIST=[
   {id:"today",label:"오늘"},
   {id:"calendar",label:"캘린더"},
   {group:"업무"},
-  {id:"articles",label:"기고글",sub:"대한약사회"},
+  {id:"articles",label:"기고글",sub:"서울시약사회"},
   {id:"mfds",label:"식약처 업무"},
   {group:"자료"},
   {id:"archive",label:"민원 검토 서가"},
@@ -349,7 +349,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v21";
+var APP_VER="v22";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){

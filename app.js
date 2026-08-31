@@ -30,6 +30,20 @@ function showToast(msg,isErr){
   clearTimeout(_toastTimer);
   _toastTimer=setTimeout(function(){ el.className="sync-toast"; },3000);
 }
+/* 되돌릴 수 있는 알림. 삭제에 확인창을 띄우면 매번 귀찮으니,
+ * 대신 지운 뒤 잠깐 되돌릴 기회를 준다. */
+function showUndoToast(msg,onUndo,ms){
+  var el=document.getElementById("sync-toast"); if(!el){ return; }
+  el.textContent="";
+  var t=document.createElement("span"); t.textContent=msg; el.appendChild(t);
+  var b=document.createElement("button");
+  b.className="toast-undo"; b.textContent="되돌리기";
+  b.onclick=function(){ clearTimeout(_toastTimer); el.className="sync-toast"; onUndo(); };
+  el.appendChild(b);
+  el.className="sync-toast show";
+  clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(function(){ el.className="sync-toast"; },ms||6000);
+}
 
 /* ========== 인증 ========== */
 function showLogin(){
@@ -335,7 +349,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v19";
+var APP_VER="v20";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -833,7 +847,24 @@ function addMfds(){ var t=(val("m-title")||"").trim(); if(!t) return;
   S.mfds.unshift(item); formOpen.mfds=false; render(); dbInsert("mfds",item); }
 function addArchive(){ var t=(val("ar-title")||"").trim(); if(!t) return; var chk=document.getElementById("ar-check"); var item={title:t,guideline:(val("ar-law")||"").trim(),summary:(val("ar-ans")||"").trim(),keywords:(val("ar-kw")||"").trim(),needsCheck:chk?chk.checked:false}; S.archive.unshift(item); formOpen.archive=false; render(); dbInsert("archive",item); }
 
-function del(name,id){ S[name]=S[name].filter(function(x){return x.id!==id;}); render(); dbDelete(name,id); }
+/* 되돌릴 수 있는 삭제.
+ * 예전엔 ✕ 를 누르면 바로 사라지고 되돌릴 길이 없었다. ✕ 가 ☆ 바로 옆에
+ * 붙어 있어서 손가락으로는 잘못 누르기 쉽다 — 확인창 대신 되돌리기를 준다. */
+var UNDO_LABEL={schedule:"할 일",articles:"기고글",mfds:"업무",
+                archive:"검토 건",events:"일정",docs:"문서"};
+function del(name,id,quiet){
+  var it=S[name].find(function(x){ return x.id===id; });
+  S[name]=S[name].filter(function(x){ return x.id!==id; });
+  render();
+  dbDelete(name,id);
+  if(quiet||!it) return;
+  showUndoToast((UNDO_LABEL[name]||"항목")+"을 지웠어요", function(){
+    S[name].unshift(it);
+    render();
+    dbUpsert(name,it);
+    showToast("↩ 되돌렸어요");
+  });
+}
 
 function dayAdd(){
   var raw=(val("day-ev")||"").trim(); if(!raw) return;
@@ -848,7 +879,7 @@ function dayAdd(){
   var item={key:calSel,time:time,title:title};
   S.events.push(item); render(); dbInsert("events",item);
 }
-function evDel(id){ S.events=S.events.filter(function(e){return e.id!==id;}); render(); dbDelete("events",id); }
+function evDel(id){ del("events",id); }
 
 /* ========== 파일 업로드 (Supabase Storage — private bucket) ========== */
 var uploadTarget=null;

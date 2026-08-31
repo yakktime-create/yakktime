@@ -325,7 +325,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v16";
+var APP_VER="v17";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){ return '<button class="rail-tab '+(active===t.id?"on":"")+'" data-act="tab" data-id="'+t.id+'"><span class="dot"></span>'+esc(t.label)+'</button>'; }).join(""); }
@@ -1771,7 +1771,31 @@ function lawBreaks(text){
   /* 같은 자리 중복 제거 */
   var out=[];
   pts.forEach(function(p){ if(!out.length||out[out.length-1].at!==p.at) out.push(p); });
-  return out;
+
+  /* 목(가·나·다…)은 차례대로 나온다.
+   * PDF에서 "말한다 ."가 "말한 다 ."로 뽑히는 일이 있는데, 그러면 그 "다 ."가
+   * 목 번호와 똑같이 생겨서 문장 한복판에서 줄이 끊긴다.
+   * 차례를 어기는 목은 그런 가짜다 — 걸러낸다. */
+  var expect=-1, keep=[];
+  function afterEnd(at){          /* 앞의 빈칸을 건너뛴 실제 글자가 문장 끝인가 */
+    for(var k=at-1;k>=0;k--){
+      var c=text.charAt(k);
+      if(/\s/.test(c)) continue;
+      return ".)]>」』\u201D\"·;:".indexOf(c)>=0;
+    }
+    return true;                  /* 글 맨 앞 */
+  }
+  out.forEach(function(p){
+    if(p.lv<3){ expect=-1; keep.push(p); return; }
+    if(p.lv>3){ keep.push(p); return; }
+    var idx=MOK.indexOf(text.charAt(p.at));
+    if(idx<0) return;
+    /* 차례가 맞거나(가→나→다), 새 목록의 시작(가)이거나,
+     * 앞이 문장 끝(…한다 .)이면 진짜 목이다.
+     * "말한 다 ." 처럼 낱말 한복판에서 튀어나온 것만 걸린다. */
+    if(expect<0||idx===expect||idx===0||afterEnd(p.at)){ expect=idx+1; keep.push(p); }
+  });
+  return keep;
 }
 
 /* 한 토막을 HTML로 — 검색어 형광펜, <개정…> 같은 부가 표시는 흐리게 */

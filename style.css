@@ -703,3 +703,12 @@ textarea.inline-area{min-height:52px;resize:vertical;}
   .lv-foot{flex-wrap:wrap;}
   .law-acts{margin-left:0;width:100%;padding-top:2px;}
 }
+
+/* 조문이 아직 안 만들어진 법령 안내 */
+.law-need-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin:10px 0 0;padding:12px 14px;border-radius:12px;
+  background:var(--warn-bg,#fdf6e3);border:1px solid var(--warn-bd,#ecdcae);
+  color:var(--warn-fg,#7a5c14);font-size:14px;line-height:1.5}
+.law-need-bar b{font-weight:700}
+.law-need-bar .btn{margin-left:auto;flex:none}
+.link-btn.law-need{color:#b06a00;font-weight:700}

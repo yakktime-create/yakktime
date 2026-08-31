@@ -251,9 +251,19 @@ var S={ schedule:[], events:[], articles:[], mfds:[], archive:[], docs:[], laws:
 var active="today", archiveSearch="", archiveOnlyCheck=false;
 var now0=new Date(), calYear=now0.getFullYear(), calMonth=now0.getMonth(), calSel=keyOf(now0);
 var ARTICLE_STATUS=["기획","작성중","기고완료"], MFDS_STATUS=["대기","진행중","완료"];
-var TAB_LIST=[{id:"today",label:"오늘"},{id:"calendar",label:"캘린더"},{id:"articles",label:"기고글"},
-  {id:"mfds",label:"식약처 업무"},{id:"archive",label:"민원 검토 서가"},{id:"docs",label:"문서 인덱스"},
-  {id:"laws",label:"법령 검색"}];
+/* group 이 있으면 누를 수 없는 머리말이다. 탭이 7줄 평평하게 늘어서
+ * 관계가 안 보이던 것을 세 묶음으로 나눈다. */
+var TAB_LIST=[
+  {group:"일정"},
+  {id:"today",label:"오늘"},
+  {id:"calendar",label:"캘린더"},
+  {group:"업무"},
+  {id:"articles",label:"기고글",sub:"대한약사회"},
+  {id:"mfds",label:"식약처 업무"},
+  {group:"자료"},
+  {id:"archive",label:"민원 검토 서가"},
+  {id:"laws",label:"법령"}
+];
 var WD=["일","월","화","수","목","금","토"];
 
 /* ========== 시드 데이터 ========== */
@@ -325,10 +335,15 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v18";
+var APP_VER="v19";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
-  document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){ return '<button class="rail-tab '+(active===t.id?"on":"")+'" data-act="tab" data-id="'+t.id+'"><span class="dot"></span>'+esc(t.label)+'</button>'; }).join(""); }
+  document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
+    if(t.group) return '<div class="rail-group">'+esc(t.group)+'</div>';
+    return '<button class="rail-tab '+(active===t.id?"on":"")+'" data-act="tab" data-id="'+t.id+'">'
+      + '<span class="dot"></span><span class="rail-label">'+esc(t.label)
+      + (t.sub?'<span class="rail-sub">'+esc(t.sub)+'</span>':'')+'</span></button>';
+  }).join(""); }
 function pageHead(t,s){ return '<header class="page-head"><div><h1 class="page-title">'+esc(t)+'</h1>'+(s?'<p class="page-sub">'+esc(s)+'</p>':'')+'</div></header>'; }
 function seg(name,opts,def){ return '<div class="seg" data-seg="'+name+'">'+opts.map(function(o){ return '<button class="seg-btn '+(o===def?"on":"")+'" data-val="'+esc(o)+'">'+esc(o)+'</button>'; }).join("")+'</div>'; }
 function wireSeg(name){ var box=document.querySelector('[data-seg="'+name+'"]'); if(!box) return; box.addEventListener("click",function(e){ var b=e.target.closest(".seg-btn"); if(!b) return; box.querySelectorAll(".seg-btn").forEach(function(x){x.classList.remove("on");}); b.classList.add("on"); }); }
@@ -549,7 +564,7 @@ function renderToday(){
     +   statTile("articles","brass",inProg,"작성 중 기고글")
     +   statTile("mfds","blue",mfdsOpen,"진행 중 식약처 업무")
     +   statTile("archive","accent",S.archive.length,"민원 검토 건"+(needCheck?" · 확인필요 "+needCheck:""))
-    +   statTile("docs","slate",S.docs.length,"문서 인덱스")
+    +   statTile("laws","slate",S.laws.length,"올려둔 법령")
     + '</section>'+evHtml
     + '<section class="card"><div class="card-head"><h2>오늘 할 일</h2><span class="muted">별표는 위로 · 항목을 누르면 수정</span></div>'
     +   '<div class="add-row quick"><input class="input" id="new-s" placeholder="할 일을 적고 Enter" /><button class="btn" data-act="s-add" data-id="'+todayKey+'" data-input="new-s">+ 추가</button></div>'+rows
@@ -800,39 +815,11 @@ function renderArchiveList(){
   }).join("")+'</div>';
 }
 
-function renderDocs(){
-  var items=S.docs;
-  var upCount=items.filter(function(d){return d.filePath;}).length;
-  var pills=[pill("총 "+items.length+"건")];
-  if(upCount) pills.push(pill("올린 파일 "+upCount+"건"));
-
-  var body = items.length===0
-    ? '<div class="empty-box"><div class="empty-ic">▤</div><p>파일을 올리거나, 자주 찾는 자료의 위치를 적어 두면<br />매번 찾아 헤매지 않아도 돼요.</p></div>'
-    : '<div class="doc-list">'+items.map(function(it){
-        var act=it.filePath
-          ? '<button class="doc-act" data-act="d-open" data-id="'+it.id+'">열기 ↗</button>'
-          : (it.link?'<a class="doc-act" href="'+esc(it.link)+'" target="_blank" rel="noreferrer">열기 ↗</a>':'');
-        return '<div class="doc">'
-          + '<span class="doc-ic'+(it.filePath?" file":"")+'">'+(it.filePath?"⬇":"■")+'</span>'
-          + '<div class="doc-body"><span class="doc-name" data-act="edit" data-table="docs" data-field="name" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.name)+'</span>'
-          +   (it.cat?'<span class="doc-cat">'+esc(it.cat)+'</span>':'')+'</div>'
-          + act+'<button class="del doc-del" data-act="d-del" data-id="'+it.id+'" title="삭제">✕</button></div>'; }).join("")+'</div>';
-
-  var composer = formOpen.docs
-    ? '<div class="card form composer">'
-      + '<input class="input composer-title" id="d-name" placeholder="문서명 (예: 의약품 제조 및 품질관리 규정)" />'
-      + '<input class="input" id="d-cat" placeholder="분류 (예: GMP / 법령 / 서식)" />'
-      + '<input class="input" id="d-link" placeholder="링크 또는 위치 (예: 온나라 > 법령집 > 3권)" />'
-      + '<div class="composer-foot">'+composerBtns("docs","d-add","위치만 저장")+'</div></div>'
-    : composerBtn("docs","위치만 적어 두기","파일을 올리지 않고 어디에 있는지만 기록해요");
-
-  view().innerHTML='<div class="page">'
-    + pageHead2("문서 인덱스","공개 법령·지침서 PDF는 여기에 올려두고 바로 열 수 있어요.",items.length?pills:null)
-    + '<div class="notice"><span class="notice-ic">!</span><div>공개 자료(법령·지침서 등)만 올려주세요. 개인정보가 든 답변 원본·내부 비공개 문서는 온나라 등 공식 시스템에 두고, 여기엔 이름·위치만 적는 걸 권해요.</div></div>'
-    + '<button class="upload-bar" data-act="d-upload"><span class="upload-ic">⬆</span><div class="import-bar-text"><div class="import-bar-title">파일 올리기</div><div class="import-bar-sub">공개 법령·지침서 PDF</div></div><span class="import-bar-go">→</span></button>'
-    + composer + body + '</div>';
-  if(formOpen.docs) focusFirst("d-name");
-}
+/* 문서 인덱스 탭은 2026-08-31에 없앴다.
+ * 하던 일 ① 공개 PDF 올리기 → 법령 탭이 더 잘한다(전문 검색까지 된다)
+ *        ② 파일 없이 위치만 적어 두기 → 쓴 적이 없어 버렸다
+ * `docs` 표와 TABLES 항목은 그대로 둔다 — 데이터도 백업도 보존되고,
+ * 되돌리고 싶어지면 화면만 다시 붙이면 된다. */
 
 /* ========== 액션 (id 없이 insert → 서버가 uuid 생성) ========== */
 function addSchedule(dueKey,inputId){
@@ -845,7 +832,6 @@ function addMfds(){ var t=(val("m-title")||"").trim(); if(!t) return;
   var item={title:t,status:segValue("m-status")||"대기",memo:(val("m-memo")||"").trim(),due:(val("m-due")||"")||null};
   S.mfds.unshift(item); formOpen.mfds=false; render(); dbInsert("mfds",item); }
 function addArchive(){ var t=(val("ar-title")||"").trim(); if(!t) return; var chk=document.getElementById("ar-check"); var item={title:t,guideline:(val("ar-law")||"").trim(),summary:(val("ar-ans")||"").trim(),keywords:(val("ar-kw")||"").trim(),needsCheck:chk?chk.checked:false}; S.archive.unshift(item); formOpen.archive=false; render(); dbInsert("archive",item); }
-function addDocLink(){ var n=(val("d-name")||"").trim(); if(!n) return; var item={name:n,cat:(val("d-cat")||"").trim(),link:(val("d-link")||"").trim()}; S.docs.unshift(item); formOpen.docs=false; render(); dbInsert("docs",item); }
 
 function del(name,id){ S[name]=S[name].filter(function(x){return x.id!==id;}); render(); dbDelete(name,id); }
 
@@ -866,7 +852,6 @@ function evDel(id){ S.events=S.events.filter(function(e){return e.id!==id;}); re
 
 /* ========== 파일 업로드 (Supabase Storage — private bucket) ========== */
 var uploadTarget=null;
-function docsUpload(){ uploadTarget={type:"docs"}; document.getElementById("docfile").click(); }
 function archiveAttach(id){ uploadTarget={type:"archive",id:id}; document.getElementById("docfile").click(); }
 
 document.getElementById("docfile").addEventListener("change",function(e){
@@ -877,13 +862,8 @@ document.getElementById("docfile").addEventListener("change",function(e){
   showToast("파일 업로드 중...");
   sb.storage.from("files").upload(path,f).then(function(res){
     if(res.error){ showToast("업로드 실패: "+res.error.message,true); return; }
-    if(target.type==="docs"){
-      var item={name:f.name,cat:"파일",filePath:path,fileName:f.name};
-      S.docs.unshift(item); render(); dbInsert("docs",item);
-    } else {
-      var it=S.archive.find(function(x){return x.id===target.id;});
-      if(it){ it.filePath=path; it.fileName=f.name; render(); dbUpdate("archive",target.id,{filePath:path,fileName:f.name}); }
-    }
+    var it=S.archive.find(function(x){return x.id===target.id;});
+    if(it){ it.filePath=path; it.fileName=f.name; render(); dbUpdate("archive",target.id,{filePath:path,fileName:f.name}); }
     showToast("✓ 파일 업로드 완료");
   });
 });
@@ -2115,7 +2095,8 @@ function renderLaws(){
   var list="";
   if(items.length){
     var need=items.filter(function(l){ return !l.arts; }).length;
-    if(need) list+='<div class="law-need-bar">조문으로 안 쪼개진 법령이 <b>'+need+'개</b> 있어요. 이걸 해야 검색이 조 단위로 나와요. '
+    if(need) list+='<div class="notice"><span class="notice-ic">!</span>'
+      + '<div>조문으로 안 쪼개진 법령이 <b>'+need+'개</b> 있어요. 이걸 해야 검색이 조 단위로 나와요.</div>'
       + '<button class="btn sm" data-act="law-build-all"'+(lawBusy?" disabled":"")+'>'+(lawBusy?"만드는 중...":"전부 만들기")+'</button></div>';
     list+='<button class="law-toggle" data-act="law-list">'
       + (lawListOpen?"▾":"▸")+' 올려둔 법령 '+items.length+'개'
@@ -2132,7 +2113,7 @@ function renderLaws(){
   }
 
   view().innerHTML='<div class="page">'
-    + pageHead2("법령 검색","올려둔 법령 전체에서 단어를 찾고, 결과를 골라 모아요.",items.length?pills:null)
+    + pageHead2("법령","올려둔 법령 전체에서 단어를 찾고, 결과를 골라 모아요.",items.length?pills:null)
     + '<div class="search-box"><span class="search-ic">⌕</span>'
     +   '<input class="input search law-input" id="law-q" placeholder="낱말을 띄어 쓰면 모두 포함 (예: 냉장 운송)" value="'+esc(lawQuery)+'" />'
     +   '<button class="btn sm law-go" data-act="law-search">검색</button>'
@@ -2295,10 +2276,6 @@ document.getElementById("app").addEventListener("click",function(e){
     case "law-none": lawSelAll(false); break;
     case "law-copy": lawCopy(); break;
     case "law-save": lawDownload(); break;
-    case "d-upload": docsUpload(); break;
-    case "d-add": addDocLink(); break;
-    case "d-open": { var dc=S.docs.find(function(x){return x.id===id;}); if(dc&&dc.filePath) openStorageFile(dc.filePath); break; }
-    case "d-del": del("docs",id); break;
     case "export": exportData(); break;
     case "import": importData(); break;
     case "logout": doLogout(); break;
@@ -2313,7 +2290,6 @@ function render(){
   else if(active==="articles") renderArticles();
   else if(active==="mfds") renderMfds();
   else if(active==="archive") renderArchive();
-  else if(active==="docs") renderDocs();
   else if(active==="laws") renderLaws();
 }
 

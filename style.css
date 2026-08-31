@@ -184,12 +184,8 @@ textarea.input{min-height:60px;resize:vertical;line-height:var(--lh-snug);width:
 
 .notice{background:var(--warn-bg);border:1px solid var(--warn-bd);color:var(--warn-fg);border-radius:var(--r-md);padding:12px 14px;font-size:var(--fs-sm);line-height:var(--lh-snug);margin-bottom:18px;}
 
-.doc-list{display:flex;flex-direction:column;gap:var(--sp-2);}
 .doc{display:flex;align-items:center;gap:var(--sp-3);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:13px 15px;}
 .doc-ic{width:26px;height:26px;border-radius:var(--r-xs);background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:var(--fs-sm);flex-shrink:0;}
-.doc-body{flex:1;display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap;}
-.doc-name{font-size:var(--fs-md);font-weight:600;}
-.doc-cat{font-size:var(--fs-xs);color:var(--muted);background:var(--paper);padding:2px 8px;border-radius:var(--r-md);}
 .doc-act{font-size:var(--fs-sm);color:var(--accent);text-decoration:none;font-weight:600;background:none;border:none;cursor:pointer;font-family:inherit;padding:0 4px;}
 .doc-act:hover{text-decoration:underline;}
 
@@ -535,7 +531,8 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 .import-bar:hover .import-bar-go,.upload-bar:hover .import-bar-go{transform:translateX(3px);color:var(--accent);}
 
 /* --- 문서 인덱스 --- */
-.notice{display:flex;gap:var(--sp-3);align-items:flex-start;border-radius:var(--r-md);padding:13px 15px;}
+.notice{display:flex;gap:var(--sp-3);align-items:flex-start;border-radius:var(--r-md);padding:13px 15px;;flex-wrap:wrap;}
+.notice .btn{margin-left:auto;align-self:center;flex:none;}
 .notice-ic{display:grid;place-items:center;width:19px;height:19px;border-radius:50%;
   background:#E5D3A6;color:#6B5518;font-size:var(--fs-sm);font-weight:800;flex-shrink:0;margin-top:1px;}
 .doc{border-radius:var(--r-md);padding:13px 14px;box-shadow:var(--sh-1);
@@ -549,6 +546,14 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 
 /* --- 좌측 레일 --- */
 .rail-tab{border-radius:var(--r-md);}
+/* 묶음 머리말 — 누를 수 없는 표시다 */
+.rail-group{font-size:var(--fs-xs);font-weight:750;letter-spacing:.12em;
+  color:var(--muted);opacity:.7;padding:0 12px;margin:var(--sp-4) 0 var(--sp-1);
+  user-select:none;}
+.rail-group:first-child{margin-top:0;}
+.rail-label{display:flex;flex-direction:column;line-height:var(--lh-tight);min-width:0;}
+.rail-sub{font-size:var(--fs-xs);font-weight:500;color:var(--muted);opacity:.8;}
+.rail-tab.on .rail-sub{color:var(--accent);}
 .rail-tab.on{box-shadow:inset 0 0 0 1px rgba(47,93,80,.14);}
 
 @media (max-width:1024px){
@@ -563,6 +568,11 @@ textarea.inline-area{min-height:52px;resize:vertical;}
  * 첫 화면의 절반을 탭이 먹으므로 가로로 눕히고 넘치면 밀어서 본다. */
 @media (max-width:1024px){
   .rail{gap:var(--sp-2) var(--sp-2);}
+  /* 가로로 눕는 레일 — 머리말은 구분선 겸 작은 표시로 */
+  .rail-group{margin:0;padding:0 var(--sp-1) 0 var(--sp-2);align-self:center;
+    border-left:1px solid var(--line);opacity:.55;}
+  .rail-group:first-of-type{border-left:none;padding-left:0;}
+  .rail-sub{display:none;}
   .rail-tabs{flex-wrap:nowrap;width:100%;overflow-x:auto;gap:var(--sp-1);
     scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:1px;}
   .rail-tabs::-webkit-scrollbar{display:none;}
@@ -732,12 +742,6 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 }
 
 /* 조문이 아직 안 만들어진 법령 안내 */
-.law-need-bar{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap;
-  margin:10px 0 0;padding:12px 14px;border-radius:var(--r-md);
-  background:var(--warn-bg);border:1px solid var(--warn-bd);
-  color:var(--warn-fg);font-size:var(--fs-base);line-height:var(--lh-snug)}
-.law-need-bar b{font-weight:700}
-.law-need-bar .btn{margin-left:auto;flex:none}
 .link-btn.law-need{color:var(--brass);font-weight:700}
 
 /* ---------- 법령 검색 사용법 ---------- */

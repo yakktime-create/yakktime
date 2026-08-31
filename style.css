@@ -780,11 +780,14 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 
 /* --- 되돌리기 알림 --- */
 .sync-toast{display:flex;align-items:center;gap:var(--sp-3);}
-.toast-undo{border:none;background:var(--accent-soft);color:var(--accent);
+/* 토스트 자체는 pointer-events:none 이라 클릭이 통과한다(알림이 화면을 막으면 안 되므로).
+   되돌리기 버튼만 예외로 눌리게 한다. */
+.toast-undo{pointer-events:auto;border:none;background:var(--accent-soft);color:var(--accent);
   font-family:inherit;font-size:var(--fs-sm);font-weight:700;cursor:pointer;
   padding:7px 12px;border-radius:var(--r-sm);flex-shrink:0;
   -webkit-tap-highlight-color:transparent;}
 .toast-undo:active{background:var(--accent);color:#fff;}
+@media (hover:none){ .toast-undo{padding:10px 16px;font-size:var(--fs-md);} }
 
 /* --- 터치: 작은 버튼 키우기 ---
    손가락으로 누르는 앱이라 3~6px 여백은 너무 좁다. 다만 ☆ 와 ✕ 가 붙어 있어

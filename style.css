@@ -802,3 +802,15 @@ textarea.inline-area{min-height:52px;resize:vertical;}
   .lv-x{width:38px;height:38px;}
   .mini-del{width:30px;height:30px;top:6px;right:6px;}
 }
+
+/* --- 칸반: 지난 것 접기 --- */
+.col-more{width:100%;margin-top:var(--sp-2);padding:10px 8px;border:1px dashed var(--line);
+  border-radius:var(--r-sm);background:none;color:var(--muted);font-family:inherit;
+  font-size:var(--fs-sm);font-weight:600;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;}
+.col-more:active{background:var(--paper);color:var(--ink);}
+.board .search-box{margin-bottom:var(--sp-4);}
+/* 검색칸은 position:relative 라서 안쪽 버튼은 절대배치로 얹는다 (법령 검색 버튼과 같은 방식) */
+.search-box .board-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:7px 13px;}
+/* :has() 는 구형 사파리에서 안 먹는다 — 클래스를 직접 붙인다 */
+.input.search.board-q{padding-right:74px;}

@@ -349,7 +349,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v22";
+var APP_VER="v23";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -657,11 +657,13 @@ function renderArticles(){
 
   view().innerHTML='<div class="page">'
     + pageHead2("서울시약사회 동물약품 기고글","카드를 지그시 눌렀다 끌면 다른 칸으로 옮겨져요.",items.length?pills:null)
+    + boardSearchHtml("articles","제목·메모에서 찾기 (지난 기고글까지)")
     + composer
-    + boardHtml("articles",ARTICLE_STATUS,items,articleCard)
+    + boardHtml("articles",ARTICLE_STATUS,items,articleCard,{status:"기고완료",label:"지난 기고글"})
     + '</div>';
 
   if(formOpen.articles){ wireSeg("a-status"); focusFirst("a-title"); }
+  wireBoardSearch("articles");
   wireBoardDrag();
 }
 
@@ -718,18 +720,52 @@ function mfdsDue(it,todayKey){
 }
 
 /* 칸반 뼈대 — 식약처 업무·기고글이 함께 쓴다 */
-function boardHtml(table,statuses,items,cardFn){
+/* 끝난 일은 「예전에 뭐 했지」 찾을 때 쓰는 기록이다. 그런데 완료 칸에
+ * 그냥 쌓아두면 카드가 수십 개로 늘어 오히려 못 찾는다.
+ * 최근 것만 보여주고 나머지는 접어 둔다 — 찾을 땐 검색을 쓴다. */
+var BOARD_FOLD=5;
+var boardOpen={}, boardSearch={};
+function byNewest(a,b){ return String(b.createdAt||"").localeCompare(String(a.createdAt||"")); }
+
+function boardHtml(table,statuses,items,cardFn,fold){
+  var q=(boardSearch[table]||"").trim().toLowerCase();
+  if(q) items=items.filter(function(i){
+    return ((i.title||"")+" "+(i.memo||"")).toLowerCase().indexOf(q)>=0;
+  });
+  var open=!!boardOpen[table];
   return '<div class="board" data-table="'+table+'">'
     + statuses.map(function(st){
         var list=items.filter(function(i){ return i.status===st; });
+        var total=list.length, more=0, folded=(fold&&st===fold.status);
+        if(folded){
+          list=list.slice().sort(byNewest);
+          if(!q&&!open&&total>BOARD_FOLD){ more=total-BOARD_FOLD; list=list.slice(0,BOARD_FOLD); }
+        }
+        var foot="";
+        if(more) foot='<button class="col-more" data-act="board-more" data-table="'+table+'">'+esc(fold.label)+' '+more+'건 더 보기</button>';
+        else if(folded&&open&&!q&&total>BOARD_FOLD) foot='<button class="col-more" data-act="board-more" data-table="'+table+'">접기</button>';
         return '<div class="col" data-col="'+esc(st)+'">'
-          + '<div class="col-head"><span class="col-dot"></span>'+esc(st)+'<span class="col-count">'+list.length+'</span></div>'
+          + '<div class="col-head"><span class="col-dot"></span>'+esc(st)+'<span class="col-count">'+total+'</span></div>'
           + (list.length
               ? list.map(cardFn).join("")
-              : '<div class="col-empty">여기로 카드를 끌어다<br />놓을 수 있어요</div>')
+              : '<div class="col-empty">'+(q?'찾는 카드가 없어요':'여기로 카드를 끌어다<br />놓을 수 있어요')+'</div>')
+          + foot
           + '</div>';
       }).join("")
     + '</div>';
+}
+
+/* 칸반 위 검색칸 — 진행 중이든 지난 것이든 한 번에 찾는다 */
+function boardSearchHtml(table,ph){
+  var v=boardSearch[table]||"";
+  return '<div class="search-box"><span class="search-ic">⌕</span>'
+    + '<input class="input search board-q" id="bq-'+table+'" placeholder="'+esc(ph)+'" value="'+esc(v)+'" />'
+    + (v?'<button class="btn quiet sm board-clear" data-act="board-clear" data-table="'+table+'">지우기</button>':'')
+    + '</div>';
+}
+function wireBoardSearch(table){
+  var el=document.getElementById("bq-"+table); if(!el) return;
+  el.addEventListener("input",function(e){ boardSearch[table]=e.target.value; render(); });
 }
 
 function mfdsCard(it,todayKey){
@@ -765,11 +801,13 @@ function renderMfds(){
 
   view().innerHTML='<div class="page">'
     + pageHead2("식약처 업무","카드를 지그시 눌렀다 끌면 다른 칸으로 옮겨져요.",items.length?pills:null)
+    + boardSearchHtml("mfds","제목·메모에서 찾기 (지난 업무까지)")
     + mfdsComposer()
-    + boardHtml("mfds",MFDS_STATUS,items,function(it){ return mfdsCard(it,todayKey); })
+    + boardHtml("mfds",MFDS_STATUS,items,function(it){ return mfdsCard(it,todayKey); },{status:"완료",label:"지난 업무"})
     + '</div>';
 
   if(formOpen.mfds){ wireSeg("m-status"); focusFirst("m-title"); }
+  wireBoardSearch("mfds");
   wireBoardDrag();
 }
 
@@ -2289,6 +2327,8 @@ document.getElementById("app").addEventListener("click",function(e){
     case "law-art": openLawArticle(parseInt(el.getAttribute("data-art-id"),10)||0,id); break;
     case "law-build-all": lawBuildAll(); break;
     case "law-help": lawHelpToggle(); break;
+    case "board-more": { var bt=el.getAttribute("data-table"); boardOpen[bt]=!boardOpen[bt]; render(); break; }
+    case "board-clear": { var ct=el.getAttribute("data-table"); boardSearch[ct]=""; render(); break; }
     case "lv-art": lawPageToArt(); break;
     case "lv-page": lawArtToPage(); break;
     case "lv-hit-prev": lawJump(-1); break;

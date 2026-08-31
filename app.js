@@ -325,7 +325,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v12";
+var APP_VER="v13";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){ return '<button class="rail-tab '+(active===t.id?"on":"")+'" data-act="tab" data-id="'+t.id+'"><span class="dot"></span>'+esc(t.label)+'</button>'; }).join(""); }
@@ -1250,6 +1250,20 @@ function buildLawArticles(pages){
     out.push({ seq:out.length+1, label:heads[i].label, num:artShort(heads[i].label),
                page:pageAt(a), page_end:pageAt(b-1), content:text });
   }
+  /* 같은 라벨이 두 번 이상 잡히면 — 앞쪽 목차 줄이나 인용이 섞인 것이다.
+   * 가장 긴 것(=진짜 본문)만 남기고, 짧은 쪽을 버린다.
+   * 짧은 것만 버리므로 라벨이 진짜로 두 번 나오는 문서는 그대로 둔다. */
+  var best={};
+  out.forEach(function(a){
+    var k=artKey(a.label);
+    if(!best[k]||a.content.length>best[k].content.length) best[k]=a;
+  });
+  out=out.filter(function(a){
+    var k=artKey(a.label);
+    return best[k]===a||a.content.length>=200;
+  });
+  out.forEach(function(a,i){ a.seq=i+1; });
+
   /* 조가 없는 문서(지침서·안내서)는 쪽을 그대로 한 단위로 쓴다 */
   if(out.length<2){
     out=[];
@@ -1263,8 +1277,14 @@ function buildLawArticles(pages){
   return out;
 }
 
-/* 한 법령의 조문을 통째로 갈아끼운다. 두 번 눌러도 중복이 안 생긴다. */
+/* 한 법령의 조문을 통째로 갈아끼운다.
+ * 지우고 넣는 사이에 같은 법령이 또 들어오면 두 벌이 섞이므로 잠근다. */
+var lawSaving={};
 function saveLawArticles(lawId,arts,localItem){
+  if(lawSaving[lawId]) return Promise.reject(new Error("이미 조문을 만드는 중이에요."));
+  lawSaving[lawId]=1;
+  function unlock(v){ delete lawSaving[lawId]; return v; }
+  function fail(e){ delete lawSaving[lawId]; throw e; }
   return withAuthRetry(function(){
     return sb.from("law_articles").delete().eq("law_id",lawId);
   }).then(function(res){
@@ -1287,7 +1307,7 @@ function saveLawArticles(lawId,arts,localItem){
   }).then(function(){
     if(localItem) localItem.arts=arts.length;
     return dbUpdate("laws",lawId,{arts:arts.length});
-  });
+  }).then(unlock,fail);
 }
 
 /* 조문 판별 규칙이 나아질 때마다 다시 올리지 않아도 되게,
@@ -1340,12 +1360,20 @@ function lawBuildAll(){
   if(lawBusy) return;
   var todo=S.laws.filter(function(l){ return !l.arts; });
   if(!todo.length){ showToast("모두 조문이 만들어져 있어요."); return; }
-  var k=0;
+  lawBusy=true; render();
+  var k=0, ok=0;
+  function fin(){
+    lawBusy=false; render();
+    showToast("✓ "+ok+"/"+todo.length+"개 법령의 조문을 만들었어요");
+  }
   function next(){
-    if(k>=todo.length){ showToast("✓ "+todo.length+"개 법령의 조문을 만들었어요"); return; }
+    if(k>=todo.length){ fin(); return; }
     var l=todo[k++];
     showToast("("+k+"/"+todo.length+") "+l.name);
-    return lawReindexOne(l).then(next,function(){ return next(); });
+    lawReindexOne(l).then(function(){ ok++; next(); },function(err){
+      showToast(l.name+" — "+((err&&err.message)||"실패"),true);
+      next();
+    });
   }
   next();
 }

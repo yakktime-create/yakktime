@@ -325,7 +325,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v15";
+var APP_VER="v16";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){ return '<button class="rail-tab '+(active===t.id?"on":"")+'" data-act="tab" data-id="'+t.id+'"><span class="dot"></span>'+esc(t.label)+'</button>'; }).join(""); }
@@ -1230,6 +1230,7 @@ function saveLawPages(lawId,pages){
  * 딸려 왔다). 그래서 문서 전체를 한 줄로 이어 붙인 뒤 머리말 위치에서
  * 직접 자른다. 자른 결과가 곧 law_articles 한 줄이다. */
 var LAW_ART_SAVE_MAX=60000;   /* 조 하나가 이보다 길면 잘라 저장한다 */
+var SOON_RE=/\[\s*시행일\s*:\s*([^\]]{1,24})\]/;
 
 function buildLawArticles(pages){
   var buf=[], marks=[], pos=0;
@@ -1256,7 +1257,12 @@ function buildLawArticles(pages){
     var text=full.slice(a,b).replace(/\s+/g," ").trim();
     if(text.length<10) continue;
     if(text.length>LAW_ART_SAVE_MAX) text=text.slice(0,LAW_ART_SAVE_MAX);
-    out.push({ seq:out.length+1, label:heads[i].label, num:artShort(heads[i].label),
+    /* 법제처 PDF는 「곧 시행될 개정 조문」을 현행 조문 바로 뒤에 한 번 더 싣고
+     * 끝에 [시행일: 2026. 10. 8.] 을 붙인다. 같은 라벨이 두 번 나오는 진짜 이유다.
+     * 지우면 안 되는 정보이므로, 라벨에 시행일을 붙여 구분되게 한다. */
+    var lab=heads[i].label, sh=SOON_RE.exec(text);
+    if(sh) lab+=" · 시행 "+sh[1].replace(/\s+/g," ").trim();
+    out.push({ seq:out.length+1, label:lab, num:artShort(heads[i].label),
                page:pageAt(a), page_end:pageAt(b-1), content:text });
   }
   /* 같은 라벨이 두 번 이상 잡히면 — 앞쪽 목차 줄이나 인용이 섞인 것이다.

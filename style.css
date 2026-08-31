@@ -814,3 +814,13 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 .search-box .board-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:7px 13px;}
 /* :has() 는 구형 사파리에서 안 먹는다 — 클래스를 직접 붙인다 */
 .input.search.board-q{padding-right:74px;}
+
+/* --- 민원 자료: 보관 --- */
+.entry-acts{display:inline-flex;align-items:center;gap:var(--sp-2);flex-shrink:0;}
+.entry-box{flex-shrink:0;opacity:.55;}
+.entry:hover .entry-box{opacity:1;}
+.danger-link{color:var(--brick)!important;}
+.entry.boxed{opacity:.72;background:var(--paper);}
+.entry.boxed:hover{opacity:1;}
+.entry mark,.kw mark{background:#FBEFC4;color:inherit;border-radius:3px;padding:0 1px;}
+@media (hover:none){ .entry-box{opacity:1;padding:8px 6px;} }

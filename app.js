@@ -262,7 +262,7 @@ function dbDelete(table,id){
 
 /* ========== 전역 상태 ========== */
 var S={ schedule:[], events:[], articles:[], mfds:[], archive:[], docs:[], laws:[] };
-var active="today", archiveSearch="", archiveOnlyCheck=false;
+var active="today", archiveSearch="", archiveFilter="all";   /* all | check | box */
 var now0=new Date(), calYear=now0.getFullYear(), calMonth=now0.getMonth(), calSel=keyOf(now0);
 var ARTICLE_STATUS=["기획","작성중","기고완료"], MFDS_STATUS=["대기","진행중","완료"];
 /* group 이 있으면 누를 수 없는 머리말이다. 탭이 7줄 평평하게 늘어서
@@ -275,7 +275,7 @@ var TAB_LIST=[
   {id:"articles",label:"기고글",sub:"서울시약사회"},
   {id:"mfds",label:"식약처 업무"},
   {group:"자료"},
-  {id:"archive",label:"민원 검토 서가"},
+  {id:"archive",label:"민원 자료"},
   {id:"laws",label:"법령"}
 ];
 var WD=["일","월","화","수","목","금","토"];
@@ -349,7 +349,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v23";
+var APP_VER="v24";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -543,7 +543,8 @@ function renderToday(){
   var open=todayItems.filter(function(i){return !i.done;});
   var inProg=S.articles.filter(function(a){return a.status==="작성중";}).length;
   var mfdsOpen=S.mfds.filter(function(m){return m.status!=="완료";}).length;
-  var needCheck=S.archive.filter(function(a){return a.needsCheck;}).length;
+  var arLive=S.archive.filter(function(a){ return !a.archived; });   /* 보관한 건 오늘 화면에서 빼고 센다 */
+  var needCheck=arLive.filter(function(a){ return a.needsCheck; }).length;
   var todayEv=S.events.filter(function(e){return e.key===todayKey;}).sort(evSort);
   var upcoming=S.events.filter(function(e){return e.key>todayKey;}).sort(evSort).slice(0,4);
   var evHtml="";
@@ -577,7 +578,7 @@ function renderToday(){
     + '<section class="stat-row">'
     +   statTile("articles","brass",inProg,"작성 중 기고글")
     +   statTile("mfds","blue",mfdsOpen,"진행 중 식약처 업무")
-    +   statTile("archive","accent",S.archive.length,"민원 검토 건"+(needCheck?" · 확인필요 "+needCheck:""))
+    +   statTile("archive","accent",arLive.length,"민원 자료"+(needCheck?" · 확인필요 "+needCheck:""))
     +   statTile("laws","slate",S.laws.length,"올려둔 법령")
     + '</section>'+evHtml
     + '<section class="card"><div class="card-head"><h2>오늘 할 일</h2><span class="muted">별표는 위로 · 항목을 누르면 수정</span></div>'
@@ -812,8 +813,10 @@ function renderMfds(){
 }
 
 function renderArchive(){
-  var need=S.archive.filter(function(a){return a.needsCheck;}).length;
-  var pills=[pill("총 "+S.archive.length+"건")];
+  var live=S.archive.filter(function(a){ return !a.archived; });
+  var boxed=S.archive.length-live.length;
+  var need=live.filter(function(a){ return a.needsCheck; }).length;
+  var pills=[pill("자료 "+live.length+"건")];
   if(need) pills.push(pill("확인 필요 "+need+"건","warn"));
 
   var composer = formOpen.archive
@@ -826,19 +829,20 @@ function renderArchive(){
       +   '<label class="check-line"><input type="checkbox" id="ar-check" /> [확인 필요] 항목 있음</label>'
       +   composerBtns("archive","ar-add","건 추가")
       + '</div></div>'
-    : composerBtn("archive","새 검토 건 추가","건명·근거·쟁점을 함께 적어 두면 나중에 검색돼요");
+    : composerBtn("archive","새 자료 추가","건명·근거·쟁점을 함께 적어 두면 나중에 검색돼요");
 
   view().innerHTML='<div class="page">'
-    + pageHead2("민원 검토 서가","건별 검토 파일과 핵심 쟁점을 쌓아 두고, 지침서·키워드로 찾아요.",S.archive.length?pills:null)
+    + pageHead2("민원 자료","민원 검토에 쓰는 자료를 쌓아 두고, 낱말로 찾아요.",S.archive.length?pills:null)
     + '<div class="search-box"><span class="search-ic">⌕</span>'
-    +   '<input class="input search" id="ar-search" placeholder="건명·지침서·키워드로 검색 (예: 0980-05 갱신, 별표3)" value="'+esc(archiveSearch)+'" />'
+    +   '<input class="input search" id="ar-search" placeholder="낱말을 띄어 쓰면 모두 포함 (예: 갱신 적합판정)" value="'+esc(archiveSearch)+'" />'
     + '</div>'
     + '<div class="chip-row">'
-    +   '<button class="chip '+(archiveOnlyCheck?"":"on")+'" data-act="ar-filter" data-id="all">전체<span class="chip-n">'+S.archive.length+'</span></button>'
-    +   '<button class="chip '+(archiveOnlyCheck?"on":"")+'" data-act="ar-filter" data-id="check">확인 필요<span class="chip-n">'+need+'</span></button>'
+    +   '<button class="chip '+(archiveFilter==="all"?"on":"")+'" data-act="ar-filter" data-id="all">전체<span class="chip-n">'+live.length+'</span></button>'
+    +   '<button class="chip '+(archiveFilter==="check"?"on":"")+'" data-act="ar-filter" data-id="check">확인 필요<span class="chip-n">'+need+'</span></button>'
+    +   (boxed?'<button class="chip '+(archiveFilter==="box"?"on":"")+'" data-act="ar-filter" data-id="box">보관함<span class="chip-n">'+boxed+'</span></button>':"")
     + '</div>'
     + composer
-    + '<button class="import-bar" data-act="ar-import-docx"><span class="import-bar-ic">📄</span><div class="import-bar-text"><div class="import-bar-title">마스터 문서(.docx)에서 가져오기</div><div class="import-bar-sub">워드 파일을 선택하면 건별로 자동 파싱해서 서가에 채워줘요.</div></div><span class="import-bar-go">→</span></button>'
+    + '<button class="import-bar" data-act="ar-import-docx"><span class="import-bar-ic">📄</span><div class="import-bar-text"><div class="import-bar-title">마스터 문서(.docx)에서 가져오기</div><div class="import-bar-sub">워드 파일을 선택하면 건별로 나눠서 자료로 넣어줘요.</div></div><span class="import-bar-go">→</span></button>'
     + '<div id="ar-import-msg" style="display:none;margin-bottom:14px"></div>'
     + '<div id="ar-list"></div></div>';
   renderArchiveList();
@@ -846,23 +850,56 @@ function renderArchive(){
   document.getElementById("ar-search").addEventListener("input",function(e){ archiveSearch=e.target.value; renderArchiveList(); });
 }
 
+/* 찾은 낱말에 형광펜. 원문을 건드리지 않고 표시만 입힌다. */
+function markTerms(text,terms){
+  text=String(text||"");
+  if(!terms||!terms.length) return esc(text);
+  var lc=text.toLowerCase(), ranges=[];
+  terms.forEach(function(t){
+    var lt=t.toLowerCase(), from=0, at;
+    while((at=lc.indexOf(lt,from))>=0){ ranges.push([at,at+t.length]); from=at+t.length; }
+  });
+  if(!ranges.length) return esc(text);
+  ranges.sort(function(a,b){ return a[0]-b[0]; });
+  var out="", pos=0;
+  ranges.forEach(function(r){
+    if(r[0]<pos) return;
+    out+=esc(text.slice(pos,r[0]))+'<mark>'+esc(text.slice(r[0],r[1]))+'</mark>';
+    pos=r[1];
+  });
+  return out+esc(text.slice(pos));
+}
+
 function renderArchiveList(){
-  var s=archiveSearch.trim().toLowerCase();
+  var terms=lawTerms(archiveSearch);   /* 법령과 같은 규칙 — 띄어 쓰면 모두 포함, "따옴표"는 그대로 */
+  var box=(archiveFilter==="box");
   var items=S.archive.filter(function(it){
-    if(archiveOnlyCheck && !it.needsCheck) return false;
-    if(!s) return true;
-    return [it.title,it.guideline,it.summary,it.keywords].join(" ").toLowerCase().indexOf(s)>=0;
+    if(box!==!!it.archived) return false;
+    if(archiveFilter==="check" && !it.needsCheck) return false;
+    if(!terms.length) return true;
+    var hay=[it.title,it.guideline,it.summary,it.keywords].join(" ").toLowerCase();
+    return terms.every(function(t){ return hay.indexOf(t.toLowerCase())>=0; });
   });
   var el=document.getElementById("ar-list"); if(!el) return;
-  if(items.length===0){ el.innerHTML='<p class="empty">'+(S.archive.length?"검색 결과가 없어요.":"검토 건을 추가하고 파일을 첨부해 쌓아 보세요.")+'</p>'; return; }
+  if(items.length===0){
+    el.innerHTML='<p class="empty">'
+      +(box ? "보관한 자료가 없어요."
+        : terms.length ? "「"+esc(terms.join(" + "))+"」를 찾지 못했어요.<br />낱말을 줄이거나 띄어쓰기를 바꿔 보세요."
+        : "자료를 추가하고 파일을 첨부해 쌓아 보세요.")+'</p>';
+    return;
+  }
   el.innerHTML='<div class="stack">'+items.map(function(it){
-    var kw=(it.keywords||"").trim()? '<div class="entry-kw">'+it.keywords.trim().split(/\s+/).map(function(k){ return '<span class="kw">'+esc(k)+'</span>'; }).join("")+'</div>' : '';
+    var kw=(it.keywords||"").trim()? '<div class="entry-kw">'+it.keywords.trim().split(/\s+/).map(function(k){ return '<span class="kw">'+markTerms(k,terms)+'</span>'; }).join("")+'</div>' : '';
     var files= it.filePath
       ? '<div class="entry-files"><span class="file-name">📎 '+esc(it.fileName||"첨부 파일")+'</span><button class="file-btn" data-act="ar-open" data-id="'+it.id+'">열기</button><button class="file-btn plain" data-act="ar-filedel" data-id="'+it.id+'">파일 삭제</button></div>'
-      : '<div class="entry-files"><button class="file-btn" data-act="ar-attach" data-id="'+it.id+'">📎 검토 파일 첨부</button></div>';
-    return '<div class="entry"><div class="entry-top"><div class="entry-q"><span data-act="edit" data-table="archive" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</span>'+(it.needsCheck?'<span class="entry-flag">확인 필요</span>':'')+'</div><button class="del entry-del" data-act="ar-del" data-id="'+it.id+'" title="삭제">✕</button></div>'
-      + (it.guideline?'<div class="entry-law">§ '+esc(it.guideline)+'</div>':'')
-      + (it.summary?'<div class="entry-ans" data-act="edit" data-table="archive" data-field="summary" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.summary)+'</div>':'')
+      : '<div class="entry-files"><button class="file-btn" data-act="ar-attach" data-id="'+it.id+'">📎 파일 첨부</button></div>';
+    var act = box
+      ? '<span class="entry-acts"><button class="link-btn" data-act="ar-restore" data-id="'+it.id+'">되돌리기</button>'
+        + '<button class="link-btn danger-link" data-act="ar-del" data-id="'+it.id+'">영구 삭제</button></span>'
+      : '<button class="link-btn entry-box" data-act="ar-box" data-id="'+it.id+'" title="목록에서 접어 둡니다">보관</button>';
+    return '<div class="entry'+(box?" boxed":"")+'"><div class="entry-top"><div class="entry-q"><span data-act="edit" data-table="archive" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+markTerms(it.title,terms)+'</span>'+(it.needsCheck?'<span class="entry-flag">확인 필요</span>':'')+'</div>'+act+'</div>'
+      + (it.guideline?'<div class="entry-law">§ '+markTerms(it.guideline,terms)+'</div>':'')
+      + (it.summary?'<div class="entry-ans" data-act="edit" data-table="archive" data-field="summary" data-id="'+it.id+'" title="눌러서 수정">'+markTerms(it.summary,terms)+'</div>':'')
       + kw + files + '</div>';
   }).join("")+'</div>';
 }
@@ -883,13 +920,22 @@ function addArticle(){ var t=(val("a-title")||"").trim(); if(!t) return; var ite
 function addMfds(){ var t=(val("m-title")||"").trim(); if(!t) return;
   var item={title:t,status:segValue("m-status")||"대기",memo:(val("m-memo")||"").trim(),due:(val("m-due")||"")||null};
   S.mfds.unshift(item); formOpen.mfds=false; render(); dbInsert("mfds",item); }
+/* 보관 — 지우는 게 아니라 목록에서 접어 둔다.
+ * 민원 자료는 나중에 「그때 뭐라고 했지」를 찾는 기록이라 지우면 안 된다. */
+function arBox(id,on){
+  var it=S.archive.find(function(x){ return x.id===id; }); if(!it) return;
+  it.archived=!!on; render(); dbUpdate("archive",id,{archived:!!on});
+  if(on) showUndoToast("보관함으로 옮겼어요", function(){ arBox(id,false); showToast("↩ 되돌렸어요"); });
+  else showToast("✓ 목록으로 되돌렸어요");
+}
+
 function addArchive(){ var t=(val("ar-title")||"").trim(); if(!t) return; var chk=document.getElementById("ar-check"); var item={title:t,guideline:(val("ar-law")||"").trim(),summary:(val("ar-ans")||"").trim(),keywords:(val("ar-kw")||"").trim(),needsCheck:chk?chk.checked:false}; S.archive.unshift(item); formOpen.archive=false; render(); dbInsert("archive",item); }
 
 /* 되돌릴 수 있는 삭제.
  * 예전엔 ✕ 를 누르면 바로 사라지고 되돌릴 길이 없었다. ✕ 가 ☆ 바로 옆에
  * 붙어 있어서 손가락으로는 잘못 누르기 쉽다 — 확인창 대신 되돌리기를 준다. */
 var UNDO_LABEL={schedule:"할 일",articles:"기고글",mfds:"업무",
-                archive:"검토 건",events:"일정",docs:"문서"};
+                archive:"자료",events:"일정",docs:"문서"};
 function del(name,id,quiet){
   var it=S[name].find(function(x){ return x.id===id; });
   S[name]=S[name].filter(function(x){ return x.id!==id; });
@@ -2311,8 +2357,12 @@ document.getElementById("app").addEventListener("click",function(e){
     case "m-add": addMfds(); break;
     case "m-del": del("mfds",id); break;
     case "ar-add": addArchive(); break;
-    case "ar-del": del("archive",id); break;
-    case "ar-filter": archiveOnlyCheck=(id==="check"); render(); break;
+    case "ar-del": { var ad=S.archive.find(function(x){return x.id===id;});
+      if(ad&&confirm('"'+ad.title+'"\n\n보관함에서도 완전히 지웁니다. 되돌릴 수 없어요. 계속할까요?')) del("archive",id,true);
+      break; }
+    case "ar-box": arBox(id,true); break;
+    case "ar-restore": arBox(id,false); break;
+    case "ar-filter": archiveFilter=id; render(); break;
     case "ar-import-docx": importDocxClick(); break;
     case "ar-attach": archiveAttach(id); break;
     case "ar-open": { var a=S.archive.find(function(x){return x.id===id;}); if(a&&a.filePath) openStorageFile(a.filePath); break; }

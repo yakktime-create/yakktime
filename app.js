@@ -325,7 +325,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v13";
+var APP_VER="v14";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){ return '<button class="rail-tab '+(active===t.id?"on":"")+'" data-act="tab" data-id="'+t.id+'"><span class="dot"></span>'+esc(t.label)+'</button>'; }).join(""); }
@@ -1454,7 +1454,7 @@ function buildLawHits(rows,terms){
     var arts=findArticles(c,5), skips=metaSkips(c), found=[];
     terms.forEach(function(t){
       var lt=t.toLowerCase(), from=0, n=0;
-      while(n<4){
+      while(n<10){
         var at=lc.indexOf(lt,from); if(at<0) break;
         found.push({at:at,len:t.length}); from=at+t.length; n++;
       }
@@ -1462,16 +1462,26 @@ function buildLawHits(rows,terms){
     if(!found.length) return;
     found.sort(function(a,b){ return a.at-b.at; });
     var total=found.length;
-    if(found.length>MAX_SNIP) found=found.slice(0,MAX_SNIP);
-    var g={ key:"a"+r.id, artId:r.id, lawId:r.law_id, art:r.label,
-            page:r.page, pageEnd:r.page_end||r.page, total:total, snips:[] };
+
+    /* 검색어가 가까이 붙어 있으면 앞뒤 80자 창이 서로 겹쳐서
+     * 같은 문장이 두세 번 나온다. 겹치는 창은 하나로 합친다.
+     * 합친 창 안의 검색어는 어차피 표시할 때 전부 노랗게 칠해진다. */
+    var wins=[];
     found.forEach(function(f){
-      var a=articleAt(arts,c,f.at,r.label,skips);
       var st=Math.max(0,f.at-PAD), en=Math.min(c.length,f.at+f.len+PAD);
+      var last=wins.length?wins[wins.length-1]:null;
+      if(last&&st<=last.en){ if(en>last.en) last.en=en; }
+      else wins.push({st:st,en:en,at:f.at});
+    });
+    if(wins.length>MAX_SNIP) wins=wins.slice(0,MAX_SNIP);
+
+    var g={ key:"a"+r.id, artId:r.id, lawId:r.law_id, art:r.label,
+            page:r.page, pageEnd:r.page_end||r.page,
+            total:total, spots:wins.length, snips:[] };
+    wins.forEach(function(w){
+      var a=articleAt(arts,c,w.at,r.label,skips);
       g.snips.push({ where:(a&&a.detail)||"",
-        before:(st>0?"…":"")+c.slice(st,f.at),
-        match:c.slice(f.at,f.at+f.len),
-        after:c.slice(f.at+f.len,en)+(en<c.length?"…":"") });
+        text:(w.st>0?"…":"")+c.slice(w.st,w.en)+(w.en<c.length?"…":"") });
     });
     out.push(g);
   });
@@ -1966,7 +1976,7 @@ function lawExportText(){
     if(nm!==cur){ cur=nm; lines.push("■ "+nm); }
     lines.push("  ["+(g.art||"")+" · "+(g.page===g.pageEnd?g.page+"쪽":g.page+"~"+g.pageEnd+"쪽")+"]");
     g.snips.forEach(function(h){
-      lines.push("   - "+(h.where?"("+h.where+") ":"")+h.before+h.match+h.after);
+      lines.push("   - "+(h.where?"("+h.where+") ":"")+h.text);
     });
     lines.push("");
   });
@@ -2099,7 +2109,7 @@ function renderLawResults(){
       +   list.map(function(h){
             return '<div class="law-snip">'
               + (h.where?'<span class="law-where">'+esc(h.where)+'</span>':'')
-              + lawSegHtml(h.before+h.match+h.after,lawTermList,0)+'</div>';
+              + lawSegHtml(h.text,lawTermList,0)+'</div>';
           }).join("")
       +   (g.snips.length>SHOW
             ? '<button class="link-btn law-more-btn" data-act="law-expand" data-key="'+esc(g.key)+'">'

@@ -312,7 +312,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v25";
+var APP_VER="v26";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -818,6 +818,66 @@ function buildRefParts(lines,docName){
     return { seq:pt.seq, label:pt.label, level:pt.level,
              need:REF_NEED_RE.test(c), content:c };
   }).filter(function(pt){ return pt.content.trim().length>1; });
+}
+
+/* ZIP(docx) 안에서 word/document.xml 하나만 꺼낸다.
+ * 외부 라이브러리 없이 중앙 디렉터리를 직접 읽고 DecompressionStream 으로 푼다.
+ * (예전 「.docx 건별 가져오기」에 딸려 있던 함수인데, 그 기능을 걷어낼 때
+ *  같이 지워져서 워드 업로드가 깨졌다. 여기로 옮겨 온다.) */
+function extractDocXml(arrayBuffer){
+  return new Promise(function(resolve,reject){
+    try{
+      var bytes=new Uint8Array(arrayBuffer);
+      var eocd=-1;
+      for(var i=bytes.length-22;i>=0;i--){
+        if(bytes[i]===0x50&&bytes[i+1]===0x4b&&bytes[i+2]===0x05&&bytes[i+3]===0x06){ eocd=i; break; }
+      }
+      if(eocd<0){ reject(new Error("ZIP 형식이 아닌 것 같아요")); return; }
+      var dv=new DataView(arrayBuffer);
+      var cdOff=dv.getUint32(eocd+16,true), cdN=dv.getUint16(eocd+10,true), pos=cdOff;
+      for(var e=0;e<cdN;e++){
+        var fnLen=dv.getUint16(pos+28,true), exLen=dv.getUint16(pos+30,true), cmLen=dv.getUint16(pos+32,true);
+        var method=dv.getUint16(pos+10,true), compSz=dv.getUint32(pos+20,true);
+        var locOff=dv.getUint32(pos+42,true);
+        var fn=new TextDecoder().decode(bytes.slice(pos+46,pos+46+fnLen));
+        if(fn==="word/document.xml"){
+          var lfn=dv.getUint16(locOff+26,true), lex=dv.getUint16(locOff+28,true);
+          var start=locOff+30+lfn+lex, raw=bytes.slice(start,start+compSz);
+          if(method===0){ resolve(new TextDecoder().decode(raw)); return; }
+          if(method===8){
+            if(typeof DecompressionStream!=="undefined"){
+              var ds=new DecompressionStream("deflate-raw");
+              new Response(new Blob([raw]).stream().pipeThrough(ds)).text().then(resolve).catch(reject);
+            } else { reject(new Error("이 브라우저에서는 압축 해제를 지원하지 않아요.")); }
+            return;
+          }
+        }
+        pos+=46+fnLen+exLen+cmLen;
+      }
+      reject(new Error("word/document.xml을 찾지 못했어요"));
+    }catch(ex){ reject(ex); }
+  });
+}
+
+/* 찾은 낱말에 형광펜. 원문을 건드리지 않고 표시만 입힌다.
+ * HTML 특수문자를 먼저 이스케이프하므로 자료에 < & " 가 있어도 안전하다. */
+function markTerms(text,terms){
+  text=String(text||"");
+  if(!terms||!terms.length) return esc(text);
+  var lc=text.toLowerCase(), ranges=[];
+  terms.forEach(function(t){
+    var lt=t.toLowerCase(), from=0, at;
+    while((at=lc.indexOf(lt,from))>=0){ ranges.push([at,at+t.length]); from=at+t.length; }
+  });
+  if(!ranges.length) return esc(text);
+  ranges.sort(function(a,b){ return a[0]-b[0]; });
+  var out="", pos=0;
+  ranges.forEach(function(r){
+    if(r[0]<pos) return;
+    out+=esc(text.slice(pos,r[0]))+'<mark>'+esc(text.slice(r[0],r[1]))+'</mark>';
+    pos=r[1];
+  });
+  return out+esc(text.slice(pos));
 }
 
 /* 워드: 문단 그대로 / PDF: 쪽 텍스트를 이어 붙여 줄로 나눈다 */

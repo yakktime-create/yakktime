@@ -17,3 +17,7 @@ if [ -n "$dup" ]; then
   exit 1
 fi
 echo "✓ 중복 정의 없음"
+
+# 없는 함수를 부르고 있지 않은지도 함께 본다.
+# 코드 뭉치를 걷어낼 때 다른 데서 쓰던 함수까지 딸려 지워지는 사고가 두 번 있었다.
+python3 "$(dirname "$0")/check-refs.py" || exit 1

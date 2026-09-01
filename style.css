@@ -165,7 +165,6 @@ textarea.input{min-height:60px;resize:vertical;line-height:var(--lh-snug);width:
 .chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600;}
 .entry{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:16px;}
 .entry-flag{display:inline-block;font-size:var(--fs-xs);font-weight:700;color:var(--brick);background:#FBECE8;padding:2px 8px;border-radius:var(--r-md);margin-left:8px;vertical-align:middle;white-space:nowrap;}
-.file-btn:hover{opacity:.85;} .file-btn.plain{background:#fff;border:1px solid var(--line);color:var(--muted);}
 
 .notice{background:var(--warn-bg);border:1px solid var(--warn-bd);color:var(--warn-fg);border-radius:var(--r-md);padding:12px 14px;font-size:var(--fs-sm);line-height:var(--lh-snug);margin-bottom:18px;}
 

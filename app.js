@@ -312,7 +312,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v26";
+var APP_VER="v27";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -783,17 +783,32 @@ function renderMfds(){
 var refQuery="", refTerms=[], refHits=null, refBusy=false, refListOpen=false,
     refOpen={}, refNeedOnly=false;
 
-/* 절 머리말 — 주신 문서의 실제 표기를 그대로 읽는다.
- *   제1부.  /  §1  /  1-1.  /  1-2-3.
- * 뒤에 오는 줄 전체를 제목으로 삼는다. */
-var REF_HEAD_RE=/^\s*(제\s*\d+\s*부\.|§\s*\d+|\d+-\d+(?:-\d+)?\.)\s*(.*)$/;
+/* 절 머리말 — 실제 쓰시는 문서들의 표기를 읽는다.
+ *   건 1.  /  제1부.  /  §1  /  1-1.  /  1-2-3.  /  ○ 무엇
+ *
+ * 길이 제한이 핵심이다. 「§6.4 단서는 요건 두 가지를…」처럼 조문 인용으로
+ * 시작하는 본문 문장이 흔한데, 이걸 제목으로 오인하면 문장 한복판에서
+ * 절이 갈린다. 제목은 짧다 — 그 성질로 가른다. */
+var REF_HEAD_MAX=60;
+var REF_HEAD_RE=/^\s*(건\s*\d+\s*\.|제\s*\d+\s*부\s*\.|§\s*\d+(?:\s*\.\s*\d+)?|\d+-\d+(?:-\d+)?\.|○)\s*(.*)$/;
 var REF_NEED_RE=/\[\s*확인\s*필요/;
 var REF_PART_MAX=40000;
+var REF_MIN_BODY=80;   /* 이보다 짧은 절은 앞 절에 붙인다 */
 
 function refHeadLevel(mark){
+  if(/^건/.test(mark)) return 0;
   if(/^제/.test(mark)) return 0;
   if(/^§/.test(mark)) return 0;
+  if(/^○/.test(mark)) return 1;
   return (mark.split("-").length>=3)?2:1;
+}
+/* 머리말처럼 생겼어도 문장이면 본문이다 */
+function refIsHead(line,m){
+  if(line.length>REF_HEAD_MAX) return false;
+  var title=(m[2]||"").trim();
+  if(/[.。]$/.test(title)&&title.length>20) return false;   /* 문장으로 끝나면 본문 */
+  if(/^[○]$/.test(m[1])&&!title) return false;
+  return true;
 }
 
 /* 줄 배열 → 절 배열. 머리말이 하나도 없으면 통째로 한 절이다. */
@@ -802,6 +817,7 @@ function buildRefParts(lines,docName){
   lines.forEach(function(ln){
     var t=(ln||"").trim(); if(!t) return;
     var m=REF_HEAD_RE.exec(t);
+    if(m&&!refIsHead(t,m)) m=null;
     if(m){
       var mark=m[1].replace(/\s+/g,""), title=(m[2]||"").trim();
       cur={ seq:parts.length+1, label:(mark+(title?" "+title:"")).slice(0,120),
@@ -812,10 +828,21 @@ function buildRefParts(lines,docName){
     if(!cur){ cur={seq:1,label:docName||"머리말",level:0,need:false,lines:[]}; parts.push(cur); }
     cur.lines.push(t);
   });
-  return parts.map(function(pt){
+  /* 목차 줄이나 표 한 칸이 머리말처럼 생겨서 짧은 절로 흩어진다.
+   * 알맹이가 거의 없는 절은 앞 절에 붙인다 — 글자는 그대로 남으니 검색에는 다 걸린다. */
+  var merged=[];
+  parts.forEach(function(pt){
+    var body=pt.lines.join("\n");
+    if(merged.length && body.trim().length<REF_MIN_BODY){
+      merged[merged.length-1].lines=merged[merged.length-1].lines.concat(pt.lines);
+      return;
+    }
+    merged.push(pt);
+  });
+  return merged.map(function(pt,i){
     var c=pt.lines.join("\n");
     if(c.length>REF_PART_MAX) c=c.slice(0,REF_PART_MAX);
-    return { seq:pt.seq, label:pt.label, level:pt.level,
+    return { seq:i+1, label:pt.label, level:pt.level,
              need:REF_NEED_RE.test(c), content:c };
   }).filter(function(pt){ return pt.content.trim().length>1; });
 }

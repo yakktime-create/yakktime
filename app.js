@@ -312,7 +312,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v28";
+var APP_VER="v29";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -812,12 +812,35 @@ function refIsHead(line,m){
 }
 
 /* 줄 배열 → 절 배열. 머리말이 하나도 없으면 통째로 한 절이다. */
+/* 번호가 안 붙은 제목 — 「공통 적용 근거」 「[역할]」처럼 짧은 줄 뒤에
+ * 긴 문단이 이어지면 제목이다. 표 머리칸(「구분」 「결론」)은 뒤에 오는 것도
+ * 짧으므로 걸리지 않는다. 이걸 안 잡으면 앞 절에 남의 내용이 딸려 들어간다
+ * (건3 요약에 건1·건2 얘기가 섞였던 게 그 경우다). */
+var REF_PLAIN_MAX=20, REF_PLAIN_NEXT=60;
+function refIsPlainHead(t,next){
+  if(t.length>REF_PLAIN_MAX) return false;
+  if(!next||next.length<REF_PLAIN_NEXT) return false;
+  if(/[.。?!]$/.test(t)) return false;
+  if(REF_HEAD_RE.test(next)) return false;   /* 다음 줄이 번호 제목이면 그건 묶음 이름이다 */
+  return true;
+}
+
 function buildRefParts(lines,docName){
-  var parts=[], cur=null, seen={}, lastShort="", group="";
-  lines.forEach(function(ln){
-    var t=(ln||"").trim(); if(!t) return;
+  var parts=[], cur=null, seen={}, lastShort="", group="", lastNumbered="";
+  var clean=lines.map(function(x){ return (x||"").trim(); }).filter(function(x){ return x; });
+  clean.forEach(function(t,ci){
     var m=REF_HEAD_RE.exec(t);
     if(m&&!refIsHead(t,m)) m=null;
+    if(!m&&refIsPlainHead(t,clean[ci+1])){
+      /* 「□ 근거」만 있으면 어느 건인지 알 수 없다. 앞의 번호 절을 붙인다.
+       * 이미 「A › B」로 붙어 있으면 뒤쪽만 써서 두 단으로 끝낸다. */
+      var par=lastNumbered;
+      if(par&&par.indexOf(" › ")>=0) par=par.split(" › ").pop();
+      if(par&&par.length>30) par=par.slice(0,30)+"…";
+      cur={ seq:parts.length+1, label:(par?par+" › "+t:t).slice(0,120),
+            level:2, need:false, lines:[t] };
+      parts.push(cur); lastShort=""; return;
+    }
     if(m){
       var mark=m[1].replace(/\s+/g,""), title=(m[2]||"").trim();
       var label=(mark+(title?" "+title:""));
@@ -840,6 +863,7 @@ function buildRefParts(lines,docName){
       cur={ seq:parts.length+1, label:label.slice(0,120),
             level:refHeadLevel(mark), need:false, lines:[t] };
       parts.push(cur);
+      lastNumbered=cur.label;
       lastShort="";
       return;
     }

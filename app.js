@@ -312,7 +312,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v27";
+var APP_VER="v28";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -813,18 +813,37 @@ function refIsHead(line,m){
 
 /* 줄 배열 → 절 배열. 머리말이 하나도 없으면 통째로 한 절이다. */
 function buildRefParts(lines,docName){
-  var parts=[], cur=null;
+  var parts=[], cur=null, seen={}, lastShort="", group="";
   lines.forEach(function(ln){
     var t=(ln||"").trim(); if(!t) return;
     var m=REF_HEAD_RE.exec(t);
     if(m&&!refIsHead(t,m)) m=null;
     if(m){
       var mark=m[1].replace(/\s+/g,""), title=(m[2]||"").trim();
-      cur={ seq:parts.length+1, label:(mark+(title?" "+title:"")).slice(0,120),
+      var label=(mark+(title?" "+title:""));
+      /* 「건3.」 같은 번호는 문서 안에서 한 번만 나오는 게 정상이다.
+       * 두 번째로 나오면 맨 뒤 요약 표처럼 본문을 다시 훑는 자리다.
+       * 그대로 두면 본문 건3과 라벨이 똑같아 보여 헷갈리므로,
+       * 바로 앞에 있던 짧은 줄(그 표의 제목)을 앞에 붙여 구분한다.
+       * ○ 나 § 는 원래 여러 번 나오므로 이 검사에서 뺀다. */
+      if(/^(건|제)/.test(mark)||/^\d+-/.test(mark)){
+        if(seen[mark]){
+          /* 요약 구역에 들어섰다. 표 중간에 긴 줄이 끼어도 맥락이 끊기지
+           * 않도록, 한 번 잡은 제목을 그 구역 내내 붙인다. */
+          if(!group) group=lastShort||"요약";
+          label=group+" › "+label;
+        } else {
+          group="";
+          seen[mark]=true;
+        }
+      }
+      cur={ seq:parts.length+1, label:label.slice(0,120),
             level:refHeadLevel(mark), need:false, lines:[t] };
       parts.push(cur);
+      lastShort="";
       return;
     }
+    if(t.length<=30) lastShort=t; else lastShort="";
     if(!cur){ cur={seq:1,label:docName||"머리말",level:0,need:false,lines:[]}; parts.push(cur); }
     cur.lines.push(t);
   });

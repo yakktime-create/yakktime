@@ -156,7 +156,8 @@ document.getElementById("login-pw").addEventListener("keydown",function(e){ if(e
 document.getElementById("login-email").addEventListener("keydown",function(e){ if(e.key==="Enter") document.getElementById("login-pw").focus(); });
 
 /* ========== DB 레이어 (Supabase) — OPUS SQL 스키마 ========== */
-var TABLES=["schedule","events","articles","mfds","archive","docs","laws"];
+/* archive·docs 는 화면이 없어졌지만 표는 남겨 둔다 — 데이터와 백업이 보존된다 */
+var TABLES=["schedule","events","articles","mfds","archive","docs","laws","refs"];
 
 /*
  * OPUS SQL 컬럼명 매핑:
@@ -261,8 +262,8 @@ function dbDelete(table,id){
 }
 
 /* ========== 전역 상태 ========== */
-var S={ schedule:[], events:[], articles:[], mfds:[], archive:[], docs:[], laws:[] };
-var active="today", archiveSearch="", archiveFilter="all";   /* all | check | box */
+var S={ schedule:[], events:[], articles:[], mfds:[], archive:[], docs:[], laws:[], refs:[] };
+var active="today";
 var now0=new Date(), calYear=now0.getFullYear(), calMonth=now0.getMonth(), calSel=keyOf(now0);
 var ARTICLE_STATUS=["기획","작성중","기고완료"], MFDS_STATUS=["대기","진행중","완료"];
 /* group 이 있으면 누를 수 없는 머리말이다. 탭이 7줄 평평하게 늘어서
@@ -279,44 +280,6 @@ var TAB_LIST=[
   {id:"laws",label:"법령"}
 ];
 var WD=["일","월","화","수","목","금","토"];
-
-/* ========== 시드 데이터 ========== */
-function seedIfNeeded(){
-  if(S.archive.length>0) return Promise.resolve();
-  var cases=getMasterDocCases();
-  /* id 없이 넣으면 Supabase가 uuid 자동 생성 */
-  var inserts=cases.map(function(c){ return dbInsert("archive",c); });
-  return Promise.all(inserts).then(function(){
-    /* dbInsert에서 id가 채워진 cases를 S에 반영 */
-    S.archive=cases;
-  });
-}
-
-function getMasterDocCases(){
-  return [
-    {
-      title:"건1. OOS 부적합 배치 — 적합판정서 갱신 가능 여부",
-      guideline:"「바이오의약품 전문수탁 제조업체 GMP 평가 절차」(지침서-0980-05, 2026.6.15. 시행) §6.4·§6.5",
-      summary:"[질의 요지]\nCMO 업체의 GMP 적합판정서 유효기간이 2025.12.까지로, 만료 전 갱신 신청 희망. 최근 3년 내 제조 배치 3개 중 2개 OOS 부적합, 적합 배치는 1개뿐인 상황에서 갱신 가능 여부.\n\n[쟁점]\n① OOS 부적합 배치의 \"생산 실적\" 산입 여부\n② §6.4 단서 적용 가능성\n[확인 필요: \"생산 실적\"에 OOS 부적합 배치 포함 여부]\n\n[검토 의견(안)]\n선례 없는 해석 사안 → 사무관 검토 후 해석 기준 확정 건의.",
-      keywords:"OOS 부적합 갱신 생산실적 0980-05 §6.4 §6.5 적합판정서 CMO",
-      needsCheck:true
-    },
-    {
-      title:"건2. 엔지니어링 배치 — 신규 발급 및 갱신 가능 여부",
-      guideline:"「바이오의약품 전문수탁 제조업체 GMP 평가 절차」(지침서-0980-05) 적용범위 나·마목, 사례11·12, §6.4·§6.5",
-      summary:"[질의 요지]\n바이오 CMO 업체가 엔지니어링 배치(Engineering run) 실적으로 신규 발급 및 갱신 가능 여부.\n\n[신규 발급 — 가능]\n근거: 적용범위 나목, 사례11.\n\n[갱신]\n원칙(§6.4): 최근 3년 내 3개 단위 미달 시 평가 대상 제외.\n예외(§6.4 단서): 동시적 밸리데이션 가능 + 연간 생산 1개 이하 → 1개 단위로 평가 가능.\n[확인 필요: 회수 시점, 업체 생산 곤란 사유]",
-      keywords:"엔지니어링배치 신규발급 갱신 시험생산용 0980-05 사례11 사례12 §6.4 CMO",
-      needsCheck:true
-    },
-    {
-      title:"건3. 유전자재조합의약품 — 전공정·포장 위탁 및 자사 펜 조립 시 적합판정 필요 범위",
-      guideline:"「의약품 GMP 적합판정 및 적합판정서 발급 관련 업무처리방안」 / 안전규칙 제4조, [별표1]·[별표3]",
-      summary:"[질의 요지]\n유전자재조합 세부제형 GMP 적합판정 수탁사(CMO)에 제조 위탁, 위탁사 펜 조립 시 별도 적합판정 필요 여부.\n\n[쟁점]\n① 완제 적합판정 위탁사 필요 여부 → 불필요\n② 펜 조립 공정 분류 → 2차 포장/조립\n③ 케미컬 포장 GMP로 생물 포장 갈음 가능 여부 → 어려움\n[확인 필요: 조립 과정 중 카트리지 밀봉 유지 여부]",
-      keywords:"유전자재조합 위탁 펜조립 별표1 별표3 생물학적제제 콜드체인 세부제형 적합판정",
-      needsCheck:true
-    }
-  ];
-}
 
 /* ========== NL date parser ========== */
 function parseNL(input){
@@ -349,7 +312,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v24";
+var APP_VER="v25";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -543,8 +506,7 @@ function renderToday(){
   var open=todayItems.filter(function(i){return !i.done;});
   var inProg=S.articles.filter(function(a){return a.status==="작성중";}).length;
   var mfdsOpen=S.mfds.filter(function(m){return m.status!=="완료";}).length;
-  var arLive=S.archive.filter(function(a){ return !a.archived; });   /* 보관한 건 오늘 화면에서 빼고 센다 */
-  var needCheck=arLive.filter(function(a){ return a.needsCheck; }).length;
+  var refParts=0; S.refs.forEach(function(r){ refParts+=(r.parts||0); });
   var todayEv=S.events.filter(function(e){return e.key===todayKey;}).sort(evSort);
   var upcoming=S.events.filter(function(e){return e.key>todayKey;}).sort(evSort).slice(0,4);
   var evHtml="";
@@ -578,7 +540,7 @@ function renderToday(){
     + '<section class="stat-row">'
     +   statTile("articles","brass",inProg,"작성 중 기고글")
     +   statTile("mfds","blue",mfdsOpen,"진행 중 식약처 업무")
-    +   statTile("archive","accent",arLive.length,"민원 자료"+(needCheck?" · 확인필요 "+needCheck:""))
+    +   statTile("archive","accent",S.refs.length,"민원 자료"+(refParts?" · 절 "+refParts:""))
     +   statTile("laws","slate",S.laws.length,"올려둔 법령")
     + '</section>'+evHtml
     + '<section class="card"><div class="card-head"><h2>오늘 할 일</h2><span class="muted">별표는 위로 · 항목을 누르면 수정</span></div>'
@@ -672,7 +634,7 @@ function renderArticles(){
  * 입력 폼은 평소엔 접어 둔다. 화면 위쪽 절반을 폼이 차지하면
  * 정작 봐야 할 목록이 스크롤 아래로 밀린다.
  * 탭을 옮기면 모두 다시 접힌다. */
-var formOpen={mfds:false,articles:false,archive:false,docs:false};
+var formOpen={mfds:false,articles:false};
 function closeForms(){ Object.keys(formOpen).forEach(function(k){ formOpen[k]=false; }); }
 function composerBtn(key,label,hint){
   return '<button class="composer-open" data-act="f-open" data-id="'+key+'">'
@@ -812,96 +774,225 @@ function renderMfds(){
   wireBoardDrag();
 }
 
-function renderArchive(){
-  var live=S.archive.filter(function(a){ return !a.archived; });
-  var boxed=S.archive.length-live.length;
-  var need=live.filter(function(a){ return a.needsCheck; }).length;
-  var pills=[pill("자료 "+live.length+"건")];
-  if(need) pills.push(pill("확인 필요 "+need+"건","warn"));
+/* ========== 민원 자료 ==========
+ * 처음엔 「건별 카드」로 만들었는데, 실제로는 마스터 문서 하나를 계속 고쳐가며
+ * 올리는 방식이었다. 그래서 법령 탭과 같은 구조로 바꿨다 —
+ * 문서를 올리면 절 단위로 쪼개 저장하고, 그 안을 검색한다.
+ * 같은 자료에 새 파일을 올리면 통째로 갈아끼운다(갱신). 자료가 늘지 않는다. */
 
-  var composer = formOpen.archive
-    ? '<div class="card form composer">'
-      + '<input class="input composer-title" id="ar-title" placeholder="건명 (예: 건4. OOS 배치 재시험 처리)" />'
-      + '<input class="input" id="ar-law" placeholder="적용 지침서 / 근거 (예: 0980-05 §6.4)" />'
-      + '<textarea class="input" id="ar-ans" placeholder="핵심 쟁점·검토 요지"></textarea>'
-      + '<input class="input" id="ar-kw" placeholder="키워드 (띄어쓰기로 구분)" />'
-      + '<div class="composer-foot">'
-      +   '<label class="check-line"><input type="checkbox" id="ar-check" /> [확인 필요] 항목 있음</label>'
-      +   composerBtns("archive","ar-add","건 추가")
-      + '</div></div>'
-    : composerBtn("archive","새 자료 추가","건명·근거·쟁점을 함께 적어 두면 나중에 검색돼요");
+var refQuery="", refTerms=[], refHits=null, refBusy=false, refListOpen=false,
+    refOpen={}, refNeedOnly=false;
 
-  view().innerHTML='<div class="page">'
-    + pageHead2("민원 자료","민원 검토에 쓰는 자료를 쌓아 두고, 낱말로 찾아요.",S.archive.length?pills:null)
-    + '<div class="search-box"><span class="search-ic">⌕</span>'
-    +   '<input class="input search" id="ar-search" placeholder="낱말을 띄어 쓰면 모두 포함 (예: 갱신 적합판정)" value="'+esc(archiveSearch)+'" />'
-    + '</div>'
-    + '<div class="chip-row">'
-    +   '<button class="chip '+(archiveFilter==="all"?"on":"")+'" data-act="ar-filter" data-id="all">전체<span class="chip-n">'+live.length+'</span></button>'
-    +   '<button class="chip '+(archiveFilter==="check"?"on":"")+'" data-act="ar-filter" data-id="check">확인 필요<span class="chip-n">'+need+'</span></button>'
-    +   (boxed?'<button class="chip '+(archiveFilter==="box"?"on":"")+'" data-act="ar-filter" data-id="box">보관함<span class="chip-n">'+boxed+'</span></button>':"")
-    + '</div>'
-    + composer
-    + '<button class="import-bar" data-act="ar-import-docx"><span class="import-bar-ic">📄</span><div class="import-bar-text"><div class="import-bar-title">마스터 문서(.docx)에서 가져오기</div><div class="import-bar-sub">워드 파일을 선택하면 건별로 나눠서 자료로 넣어줘요.</div></div><span class="import-bar-go">→</span></button>'
-    + '<div id="ar-import-msg" style="display:none;margin-bottom:14px"></div>'
-    + '<div id="ar-list"></div></div>';
-  renderArchiveList();
-  if(formOpen.archive) focusFirst("ar-title");
-  document.getElementById("ar-search").addEventListener("input",function(e){ archiveSearch=e.target.value; renderArchiveList(); });
+/* 절 머리말 — 주신 문서의 실제 표기를 그대로 읽는다.
+ *   제1부.  /  §1  /  1-1.  /  1-2-3.
+ * 뒤에 오는 줄 전체를 제목으로 삼는다. */
+var REF_HEAD_RE=/^\s*(제\s*\d+\s*부\.|§\s*\d+|\d+-\d+(?:-\d+)?\.)\s*(.*)$/;
+var REF_NEED_RE=/\[\s*확인\s*필요/;
+var REF_PART_MAX=40000;
+
+function refHeadLevel(mark){
+  if(/^제/.test(mark)) return 0;
+  if(/^§/.test(mark)) return 0;
+  return (mark.split("-").length>=3)?2:1;
 }
 
-/* 찾은 낱말에 형광펜. 원문을 건드리지 않고 표시만 입힌다. */
-function markTerms(text,terms){
-  text=String(text||"");
-  if(!terms||!terms.length) return esc(text);
-  var lc=text.toLowerCase(), ranges=[];
-  terms.forEach(function(t){
-    var lt=t.toLowerCase(), from=0, at;
-    while((at=lc.indexOf(lt,from))>=0){ ranges.push([at,at+t.length]); from=at+t.length; }
+/* 줄 배열 → 절 배열. 머리말이 하나도 없으면 통째로 한 절이다. */
+function buildRefParts(lines,docName){
+  var parts=[], cur=null;
+  lines.forEach(function(ln){
+    var t=(ln||"").trim(); if(!t) return;
+    var m=REF_HEAD_RE.exec(t);
+    if(m){
+      var mark=m[1].replace(/\s+/g,""), title=(m[2]||"").trim();
+      cur={ seq:parts.length+1, label:(mark+(title?" "+title:"")).slice(0,120),
+            level:refHeadLevel(mark), need:false, lines:[t] };
+      parts.push(cur);
+      return;
+    }
+    if(!cur){ cur={seq:1,label:docName||"머리말",level:0,need:false,lines:[]}; parts.push(cur); }
+    cur.lines.push(t);
   });
-  if(!ranges.length) return esc(text);
-  ranges.sort(function(a,b){ return a[0]-b[0]; });
-  var out="", pos=0;
-  ranges.forEach(function(r){
-    if(r[0]<pos) return;
-    out+=esc(text.slice(pos,r[0]))+'<mark>'+esc(text.slice(r[0],r[1]))+'</mark>';
-    pos=r[1];
-  });
-  return out+esc(text.slice(pos));
+  return parts.map(function(pt){
+    var c=pt.lines.join("\n");
+    if(c.length>REF_PART_MAX) c=c.slice(0,REF_PART_MAX);
+    return { seq:pt.seq, label:pt.label, level:pt.level,
+             need:REF_NEED_RE.test(c), content:c };
+  }).filter(function(pt){ return pt.content.trim().length>1; });
 }
 
-function renderArchiveList(){
-  var terms=lawTerms(archiveSearch);   /* 법령과 같은 규칙 — 띄어 쓰면 모두 포함, "따옴표"는 그대로 */
-  var box=(archiveFilter==="box");
-  var items=S.archive.filter(function(it){
-    if(box!==!!it.archived) return false;
-    if(archiveFilter==="check" && !it.needsCheck) return false;
-    if(!terms.length) return true;
-    var hay=[it.title,it.guideline,it.summary,it.keywords].join(" ").toLowerCase();
-    return terms.every(function(t){ return hay.indexOf(t.toLowerCase())>=0; });
+/* 워드: 문단 그대로 / PDF: 쪽 텍스트를 이어 붙여 줄로 나눈다 */
+function refLinesFromDocx(buf){
+  return extractDocXml(buf).then(function(xml){
+    var doc=new DOMParser().parseFromString(xml,"text/xml");
+    var ns="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    var ps=doc.getElementsByTagNameNS(ns,"p"), out=[];
+    for(var i=0;i<ps.length;i++){
+      var ts=ps[i].getElementsByTagNameNS(ns,"t"), txt="";
+      for(var k=0;k<ts.length;k++) txt+=ts[k].textContent;
+      txt=txt.replace(/\s+/g," ").trim();
+      if(txt) out.push(txt);
+    }
+    return out;
   });
-  var el=document.getElementById("ar-list"); if(!el) return;
-  if(items.length===0){
-    el.innerHTML='<p class="empty">'
-      +(box ? "보관한 자료가 없어요."
-        : terms.length ? "「"+esc(terms.join(" + "))+"」를 찾지 못했어요.<br />낱말을 줄이거나 띄어쓰기를 바꿔 보세요."
-        : "자료를 추가하고 파일을 첨부해 쌓아 보세요.")+'</p>';
-    return;
-  }
-  el.innerHTML='<div class="stack">'+items.map(function(it){
-    var kw=(it.keywords||"").trim()? '<div class="entry-kw">'+it.keywords.trim().split(/\s+/).map(function(k){ return '<span class="kw">'+markTerms(k,terms)+'</span>'; }).join("")+'</div>' : '';
-    var files= it.filePath
-      ? '<div class="entry-files"><span class="file-name">📎 '+esc(it.fileName||"첨부 파일")+'</span><button class="file-btn" data-act="ar-open" data-id="'+it.id+'">열기</button><button class="file-btn plain" data-act="ar-filedel" data-id="'+it.id+'">파일 삭제</button></div>'
-      : '<div class="entry-files"><button class="file-btn" data-act="ar-attach" data-id="'+it.id+'">📎 파일 첨부</button></div>';
-    var act = box
-      ? '<span class="entry-acts"><button class="link-btn" data-act="ar-restore" data-id="'+it.id+'">되돌리기</button>'
-        + '<button class="link-btn danger-link" data-act="ar-del" data-id="'+it.id+'">영구 삭제</button></span>'
-      : '<button class="link-btn entry-box" data-act="ar-box" data-id="'+it.id+'" title="목록에서 접어 둡니다">보관</button>';
-    return '<div class="entry'+(box?" boxed":"")+'"><div class="entry-top"><div class="entry-q"><span data-act="edit" data-table="archive" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+markTerms(it.title,terms)+'</span>'+(it.needsCheck?'<span class="entry-flag">확인 필요</span>':'')+'</div>'+act+'</div>'
-      + (it.guideline?'<div class="entry-law">§ '+markTerms(it.guideline,terms)+'</div>':'')
-      + (it.summary?'<div class="entry-ans" data-act="edit" data-table="archive" data-field="summary" data-id="'+it.id+'" title="눌러서 수정">'+markTerms(it.summary,terms)+'</div>':'')
-      + kw + files + '</div>';
-  }).join("")+'</div>';
+}
+function refLinesFromPdf(buf){
+  return extractPdfPages(buf,function(i,n){ showToast("텍스트 추출 "+i+"/"+n+"쪽"); })
+    .then(function(pages){
+      var out=[];
+      pages.forEach(function(pg){
+        /* 쪽 안에서도 절 머리말 앞에서 줄을 끊는다 */
+        pg.content.split(/(?=\s(?:제\s*\d+\s*부\.|§\s*\d+|\d+-\d+(?:-\d+)?\.))/)
+          .forEach(function(x){ x=x.trim(); if(x) out.push(x); });
+      });
+      return out;
+    });
+}
+
+function refUploadClick(id){
+  if(refBusy) return;
+  refTargetId=id||null;
+  document.getElementById("reffile").click();
+}
+var refTargetId=null;
+
+function refUpload(f){
+  if(refBusy) return;
+  var target=refTargetId; refTargetId=null;
+  var isDocx=/\.docx$/i.test(f.name), isPdf=/\.pdf$/i.test(f.name);
+  if(!isDocx&&!isPdf){ showToast("PDF나 워드(.docx) 파일만 돼요.",true); return; }
+  refBusy=true; render();
+  showToast("파일 읽는 중...");
+  var path=Date.now()+"_"+f.name.replace(/[^a-zA-Z0-9._-]/g,"_"), uploaded=false, lines=[];
+  readBuffer(f).then(function(buf){
+    return isDocx?refLinesFromDocx(buf):refLinesFromPdf(buf);
+  }).then(function(ls){
+    lines=ls;
+    var chars=0; lines.forEach(function(l){ chars+=l.length; });
+    if(chars<200) throw new Error("글자를 거의 못 뽑았어요. 스캔본이면 아직 안 돼요.");
+    showToast("파일 올리는 중...");
+    return sb.storage.from("files").upload(path,f);
+  }).then(function(res){
+    if(res.error) throw new Error("업로드 실패: "+res.error.message);
+    uploaded=true;
+    var chars=0; lines.forEach(function(l){ chars+=l.length; });
+    var parts=buildRefParts(lines,f.name.replace(/\.(docx|pdf)$/i,""));
+    if(!parts.length) throw new Error("내용을 찾지 못했어요.");
+    if(target){
+      var old=S.refs.find(function(x){ return x.id===target; });
+      var oldPath=old&&old.filePath;
+      var patch={filePath:path,fileName:f.name,chars:chars,parts:parts.length};
+      if(old){ Object.keys(patch).forEach(function(k){ old[k]=patch[k]; }); }
+      return dbUpdate("refs",target,patch)
+        .then(function(){ if(oldPath&&oldPath!==path) sb.storage.from("files").remove([oldPath]); })
+        .then(function(){ return saveRefParts(target,parts); });
+    }
+    var item={name:f.name.replace(/\.(docx|pdf)$/i,""),filePath:path,fileName:f.name,
+              chars:chars,parts:parts.length};
+    return dbInsert("refs",item).then(function(row){
+      if(!row) throw new Error("자료 정보를 저장하지 못했어요.");
+      S.refs.unshift(item);
+      return saveRefParts(row.id,parts);
+    });
+  }).then(function(){
+    refBusy=false; refListOpen=true;
+    if(refQuery) refSearch(); else render();
+    showToast(target?"✓ 자료를 갱신했어요":"✓ 자료를 추가했어요");
+  }).catch(function(err){
+    refBusy=false;
+    if(uploaded&&!target) sb.storage.from("files").remove([path]);
+    render();
+    showToast((err&&err.message)||"자료를 넣지 못했어요.",true);
+  });
+}
+
+function saveRefParts(refId,parts){
+  return withAuthRetry(function(){
+    return sb.from("ref_parts").delete().eq("ref_id",refId);
+  }).then(function(res){
+    if(res.error) throw new Error("옛 내용을 지우지 못했어요: "+res.error.message);
+    var rows=parts.map(function(pt){
+      return {ref_id:refId,seq:pt.seq,label:pt.label,level:pt.level,need:pt.need,content:pt.content};
+    });
+    var i=0;
+    function chunk(){
+      if(i>=rows.length) return Promise.resolve();
+      var part=rows.slice(i,i+40); i+=40;
+      showToast("저장 중 "+Math.min(i,rows.length)+"/"+rows.length);
+      return withAuthRetry(function(){ return sb.from("ref_parts").insert(part); }).then(function(r){
+        if(r.error) throw new Error("저장 실패: "+r.error.message);
+        return chunk();
+      });
+    }
+    return chunk();
+  });
+}
+
+function refName(id){
+  var r=S.refs.find(function(x){ return x.id===id; });
+  return r?r.name:"(지운 자료)";
+}
+
+function refSearch(){
+  var q=(val("ref-q")||"").trim();
+  refQuery=q; refHits=null; refOpen={};
+  refTerms=lawTerms(q);
+  if(!refTerms.length&&!refNeedOnly){ renderRefResults(); showToast("두 글자 이상 입력해 주세요."); return; }
+  if(!S.refs.length){ renderRefResults(); showToast("먼저 자료를 올려주세요."); return; }
+  refSearching=true; renderRefResults();
+  withAuthRetry(function(){
+    var qb=sb.from("ref_parts").select("id,ref_id,seq,label,level,need,content");
+    refTerms.forEach(function(t){ qb=qb.ilike("content","%"+escLike(t)+"%"); });
+    if(refNeedOnly) qb=qb.eq("need",true);
+    return qb.order("ref_id").order("seq").limit(200);
+  }).then(function(res){
+    refSearching=false;
+    if(res.error){
+      showToast(/ref_parts/.test(res.error.message||"")?"자료 표가 아직 없어요. Supabase SQL을 먼저 돌려주세요.":"검색 실패: "+res.error.message,true);
+      refHits=[]; renderRefResults(); return;
+    }
+    refHits=buildRefHits(res.data||[],refTerms);
+    renderRefResults();
+  });
+}
+var refSearching=false;
+
+function buildRefHits(rows,terms){
+  var out=[], PAD=90, MAX=5;
+  rows.forEach(function(r){
+    var c=r.content||"", lc=c.toLowerCase(), found=[];
+    terms.forEach(function(t){
+      var lt=t.toLowerCase(), from=0, n=0, at;
+      while(n<10&&(at=lc.indexOf(lt,from))>=0){ found.push({at:at,len:t.length}); from=at+t.length; n++; }
+    });
+    found.sort(function(a,b){ return a.at-b.at; });
+    var total=found.length, wins=[];
+    found.forEach(function(f){
+      var st=Math.max(0,f.at-PAD), en=Math.min(c.length,f.at+f.len+PAD);
+      var last=wins.length?wins[wins.length-1]:null;
+      if(last&&st<=last.en){ if(en>last.en) last.en=en; }
+      else wins.push({st:st,en:en});
+    });
+    if(!wins.length) wins=[{st:0,en:Math.min(c.length,260)}];
+    if(wins.length>MAX) wins=wins.slice(0,MAX);
+    out.push({ key:"r"+r.id, refId:r.ref_id, label:r.label, level:r.level, need:r.need,
+               total:total,
+               snips:wins.map(function(w){
+                 return (w.st>0?"…":"")+c.slice(w.st,w.en)+(w.en<c.length?"…":"");
+               }) });
+  });
+  out.sort(function(a,b){
+    var na=refName(a.refId), nb=refName(b.refId);
+    return na!==nb ? (na<nb?-1:1) : 0;
+  });
+  return out;
+}
+
+function refDel(id){
+  var r=S.refs.find(function(x){ return x.id===id; }); if(!r) return;
+  if(!confirm('"'+r.name+'"\n\n자료와 뽑아둔 내용이 모두 지워집니다. 계속할까요?')) return;
+  if(r.filePath) sb.storage.from("files").remove([r.filePath]);
+  S.refs=S.refs.filter(function(x){ return x.id!==id; });
+  refHits=null; render(); dbDelete("refs",id);
 }
 
 /* 문서 인덱스 탭은 2026-08-31에 없앴다.
@@ -922,14 +1013,6 @@ function addMfds(){ var t=(val("m-title")||"").trim(); if(!t) return;
   S.mfds.unshift(item); formOpen.mfds=false; render(); dbInsert("mfds",item); }
 /* 보관 — 지우는 게 아니라 목록에서 접어 둔다.
  * 민원 자료는 나중에 「그때 뭐라고 했지」를 찾는 기록이라 지우면 안 된다. */
-function arBox(id,on){
-  var it=S.archive.find(function(x){ return x.id===id; }); if(!it) return;
-  it.archived=!!on; render(); dbUpdate("archive",id,{archived:!!on});
-  if(on) showUndoToast("보관함으로 옮겼어요", function(){ arBox(id,false); showToast("↩ 되돌렸어요"); });
-  else showToast("✓ 목록으로 되돌렸어요");
-}
-
-function addArchive(){ var t=(val("ar-title")||"").trim(); if(!t) return; var chk=document.getElementById("ar-check"); var item={title:t,guideline:(val("ar-law")||"").trim(),summary:(val("ar-ans")||"").trim(),keywords:(val("ar-kw")||"").trim(),needsCheck:chk?chk.checked:false}; S.archive.unshift(item); formOpen.archive=false; render(); dbInsert("archive",item); }
 
 /* 되돌릴 수 있는 삭제.
  * 예전엔 ✕ 를 누르면 바로 사라지고 되돌릴 길이 없었다. ✕ 가 ☆ 바로 옆에
@@ -966,22 +1049,6 @@ function dayAdd(){
 function evDel(id){ del("events",id); }
 
 /* ========== 파일 업로드 (Supabase Storage — private bucket) ========== */
-var uploadTarget=null;
-function archiveAttach(id){ uploadTarget={type:"archive",id:id}; document.getElementById("docfile").click(); }
-
-document.getElementById("docfile").addEventListener("change",function(e){
-  var f=e.target.files[0]; e.target.value=""; if(!f||!uploadTarget) return;
-  if(f.size>60*1024*1024 && !confirm("파일이 큰 편이에요("+Math.round(f.size/1048576)+"MB). 계속할까요?")) return;
-  var path=Date.now()+"_"+f.name.replace(/[^a-zA-Z0-9._-]/g,"_");
-  var target=uploadTarget; uploadTarget=null;
-  showToast("파일 업로드 중...");
-  sb.storage.from("files").upload(path,f).then(function(res){
-    if(res.error){ showToast("업로드 실패: "+res.error.message,true); return; }
-    var it=S.archive.find(function(x){return x.id===target.id;});
-    if(it){ it.filePath=path; it.fileName=f.name; render(); dbUpdate("archive",target.id,{filePath:path,fileName:f.name}); }
-    showToast("✓ 파일 업로드 완료");
-  });
-});
 
 /* 비공개 버킷: signed URL로 파일 열기 */
 function openStorageFile(path){
@@ -989,148 +1056,6 @@ function openStorageFile(path){
     if(res.error){ showToast("파일을 열지 못했어요.",true); return; }
     window.open(res.data.signedUrl,"_blank");
   });
-}
-
-function arFileDel(id){
-  var it=S.archive.find(function(x){return x.id===id;});
-  if(it&&it.filePath){
-    sb.storage.from("files").remove([it.filePath]);
-    it.filePath=null; it.fileName=null; render();
-    dbUpdate("archive",id,{filePath:null,fileName:null});
-  }
-}
-
-/* ========== .docx 가져오기 ========== */
-function importDocxClick(){ document.getElementById("docxfile").click(); }
-function showImportMsg(type,text){
-  var el=document.getElementById("ar-import-msg"); if(!el) return;
-  el.style.display="block";
-  el.className=type==="ok"?"cal-toast ok":"cal-toast no";
-  el.textContent=text;
-}
-function mergeArchiveCases(parsed){
-  var added=0, updated=0;
-  parsed.forEach(function(c){
-    var existing=S.archive.find(function(a){
-      var m=a.title.match(/^건\s*(\d+)\./);
-      return m&&parseInt(m[1])===c.num;
-    });
-    if(existing){
-      existing.title=c.title; existing.guideline=c.guideline;
-      existing.summary=c.summary; existing.keywords=c.keywords;
-      existing.needsCheck=c.needsCheck;
-      dbUpsert("archive",existing);
-      updated++;
-    } else {
-      var item={title:c.title,guideline:c.guideline,summary:c.summary,keywords:c.keywords,needsCheck:c.needsCheck};
-      S.archive.unshift(item);
-      dbInsert("archive",item);
-      added++;
-    }
-  });
-  return {added:added,updated:updated};
-}
-
-document.getElementById("lawfile").addEventListener("change",function(e){
-  var f=e.target.files[0]; e.target.value=""; if(!f) return;
-  lawUpload(f);
-});
-
-document.getElementById("docxfile").addEventListener("change",function(e){
-  var f=e.target.files[0]; e.target.value=""; if(!f) return;
-  var reader=new FileReader();
-  reader.onload=function(){ importDocxFromBuffer(reader.result); };
-  reader.readAsArrayBuffer(f);
-});
-
-function importDocxFromBuffer(buf){
-  extractDocXml(buf).then(function(xml){
-    var cases=parseDocxCases(xml);
-    if(!cases.length){ showImportMsg("no","건을 찾지 못했어요."); return; }
-    var result=mergeArchiveCases(cases);
-    render();
-    showImportMsg("ok","✓ 총 "+cases.length+"건 — 신규 "+result.added+"건, 갱신 "+result.updated+"건");
-  }).catch(function(err){ showImportMsg("no","문서를 읽지 못했어요: "+err.message); });
-}
-
-function extractDocXml(arrayBuffer){
-  return new Promise(function(resolve,reject){
-    try{
-      var bytes=new Uint8Array(arrayBuffer);
-      var eocd=-1;
-      for(var i=bytes.length-22;i>=0;i--){
-        if(bytes[i]===0x50&&bytes[i+1]===0x4b&&bytes[i+2]===0x05&&bytes[i+3]===0x06){ eocd=i; break; }
-      }
-      if(eocd<0){ reject(new Error("ZIP 형식이 아닌 것 같아요")); return; }
-      var dv=new DataView(arrayBuffer);
-      var cdOff=dv.getUint32(eocd+16,true), cdN=dv.getUint16(eocd+10,true), pos=cdOff;
-      for(var e=0;e<cdN;e++){
-        var fnLen=dv.getUint16(pos+28,true), exLen=dv.getUint16(pos+30,true), cmLen=dv.getUint16(pos+32,true);
-        var method=dv.getUint16(pos+10,true), compSz=dv.getUint32(pos+20,true);
-        var locOff=dv.getUint32(pos+42,true);
-        var fn=new TextDecoder().decode(bytes.slice(pos+46,pos+46+fnLen));
-        if(fn==="word/document.xml"){
-          var lfn=dv.getUint16(locOff+26,true), lex=dv.getUint16(locOff+28,true);
-          var start=locOff+30+lfn+lex, raw=bytes.slice(start,start+compSz);
-          if(method===0){ resolve(new TextDecoder().decode(raw)); return; }
-          if(method===8){
-            if(typeof DecompressionStream!=="undefined"){
-              var ds=new DecompressionStream("deflate-raw");
-              new Response(new Blob([raw]).stream().pipeThrough(ds)).text().then(resolve).catch(reject);
-            } else { reject(new Error("이 브라우저에서는 압축 해제를 지원하지 않아요.")); }
-            return;
-          }
-        }
-        pos+=46+fnLen+exLen+cmLen;
-      }
-      reject(new Error("word/document.xml을 찾지 못했어요"));
-    }catch(ex){ reject(ex); }
-  });
-}
-
-function parseDocxCases(xmlText){
-  var dp=new DOMParser(), doc=dp.parseFromString(xmlText,"text/xml");
-  var ns="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-  var paras=doc.getElementsByTagNameNS(ns,"p"), lines=[];
-  for(var i=0;i<paras.length;i++){
-    var txt="",ts=paras[i].getElementsByTagNameNS(ns,"t");
-    for(var j=0;j<ts.length;j++) txt+=ts[j].textContent||"";
-    lines.push(txt);
-  }
-  var starts=[],cases=[];
-  for(var i=0;i<lines.length;i++){
-    if(/^건\s*\d+\./.test(lines[i].trim())) starts.push(i);
-    if(/^민원\s*전체\s*요약|^공통\s*적용\s*근거/.test(lines[i].trim())){ break; }
-  }
-  for(var c=0;c<starts.length;c++){
-    var s=starts[c], e=c+1<starts.length?starts[c+1]:lines.length;
-    var cl=lines.slice(s,e), title=cl[0].trim();
-    var numM=title.match(/^건\s*(\d+)\./); var num=numM?parseInt(numM[1]):0;
-    var guideline="",secs={},curSec=null;
-    for(var k=1;k<cl.length;k++){
-      var ln=cl[k].trim(); if(!ln) continue;
-      if(/^적용\s*지침서/.test(ln)){ guideline=ln.replace(/^적용\s*지침서\s*[:：]?\s*/,""); curSec="_gl"; continue; }
-      if(/^□/.test(ln)){ curSec=ln.replace(/^□\s*/,""); secs[curSec]=[]; continue; }
-      if(curSec==="_gl"&&!guideline){ guideline=ln; continue; }
-      if(curSec==="_gl"&&guideline&&/^[「\[]/.test(ln)){ guideline+=" / "+ln; continue; }
-      if(curSec&&secs[curSec]) secs[curSec].push(ln);
-    }
-    var parts=[];
-    [["질의 요지","질의 요지"],["근거","근거"],["쟁점","쟁점"],["쟁점 및 검토","쟁점 및 검토"],["검토 의견(안)","검토 의견(안)"]].forEach(function(pair){
-      if(secs[pair[0]]&&secs[pair[0]].length) parts.push("["+pair[1]+"]\n"+secs[pair[0]].join("\n"));
-    });
-    var summary=parts.join("\n\n");
-    var raw=cl.join(" ");
-    var needsCheck=/\[확인\s*필요/.test(raw);
-    var kwSet=[];
-    (title+" "+guideline).replace(/[^가-힣a-zA-Z0-9§·]+/g," ").split(/\s+/).forEach(function(w){
-      if(w.length>=2) kwSet.push(w);
-    });
-    var kw=[]; var seen={};
-    kwSet.forEach(function(w){ var lw=w.toLowerCase(); if(!seen[lw]){seen[lw]=1;kw.push(w);} });
-    cases.push({num:num,title:title,guideline:guideline,summary:summary,keywords:kw.join(" "),needsCheck:needsCheck});
-  }
-  return cases;
 }
 
 /* ========== 백업 (JSON 내보내기/불러오기) ========== */
@@ -1247,6 +1172,17 @@ function extractPdfPages(buf,onProgress){
 }
 
 function lawUploadClick(){ if(!lawBusy) document.getElementById("lawfile").click(); }
+
+/* 파일 선택 배선 — 두 탭이 같은 방식이다.
+ * (예전엔 이 리스너가 .docx 가져오기 구역 안에 섞여 있었다) */
+document.getElementById("lawfile").addEventListener("change",function(e){
+  var f=e.target.files[0]; e.target.value=""; if(!f) return;
+  lawUpload(f);
+});
+document.getElementById("reffile").addEventListener("change",function(e){
+  var f=e.target.files[0]; e.target.value=""; if(!f) return;
+  refUpload(f);
+});
 
 function lawUpload(f){
   if(lawBusy) return;
@@ -2200,6 +2136,99 @@ function lawHelpHtml(){
     + '</div>';
 }
 
+
+/* ---------- 민원 자료 화면 ---------- */
+function refDate(r){
+  var d=r.updatedAt||r.createdAt; if(!d) return "";
+  var x=new Date(d); if(isNaN(x)) return "";
+  return (x.getMonth()+1)+"월 "+x.getDate()+"일";
+}
+
+function renderRefs(){
+  var items=S.refs, totalParts=0, totalChars=0;
+  items.forEach(function(r){ totalParts+=(r.parts||0); totalChars+=(r.chars||0); });
+  var pills=[pill("자료 "+items.length+"건")];
+  if(totalParts) pills.push(pill("절 "+totalParts+"개"));
+
+  var list="";
+  if(items.length){
+    list='<button class="law-toggle" data-act="ref-list">'
+      + (refListOpen?"▾":"▸")+' 올려둔 자료 '+items.length+'개'
+      + '<span class="law-toggle-hint">'+(refListOpen?"접기":"갱신 · 이름 수정 · 삭제")+'</span></button>';
+    if(refListOpen) list+='<div class="law-list">'+items.map(function(r){
+      var meta=[(r.chars?Math.round(r.chars/1000)+"천 자":""),(r.parts?"절 "+r.parts+"개":""),refDate(r)?refDate(r)+" 갱신":""].filter(Boolean).join(" · ");
+      return '<div class="law-row">'
+        + '<span class="doc-ic file">▤</span>'
+        + '<span class="law-name" data-act="edit" data-table="refs" data-field="name" data-id="'+r.id+'" title="눌러서 이름 수정">'+esc(r.name)+'</span>'
+        + '<span class="law-pages">'+esc(meta)+'</span>'
+        + '<button class="link-btn" data-act="ref-update" data-id="'+r.id+'" title="새 파일로 통째로 갈아끼웁니다">다시 올려 갱신</button>'
+        + (r.filePath?'<button class="doc-act" data-act="ref-open" data-id="'+r.id+'">열기 ↗</button>':'')
+        + '<button class="del doc-del" data-act="ref-del" data-id="'+r.id+'" title="삭제">✕</button></div>';
+    }).join("")+'</div>';
+  }
+
+  view().innerHTML='<div class="page">'
+    + pageHead2("민원 자료","마스터 문서를 올려두고 그 안을 낱말로 찾아요. 고칠 때마다 다시 올리면 갱신돼요.",items.length?pills:null)
+    + '<div class="search-box"><span class="search-ic">⌕</span>'
+    +   '<input class="input search law-input" id="ref-q" placeholder="낱말을 띄어 쓰면 모두 포함 (예: 보완요청 문안)" value="'+esc(refQuery)+'" />'
+    +   '<button class="btn sm law-go" data-act="ref-search">검색</button>'
+    + '</div>'
+    + '<div class="chip-row">'
+    +   '<button class="chip '+(refNeedOnly?"":"on")+'" data-act="ref-need" data-id="off">전체</button>'
+    +   '<button class="chip '+(refNeedOnly?"on":"")+'" data-act="ref-need" data-id="on">[확인 필요]만</button>'
+    + '</div>'
+    + '<button class="upload-bar'+(refBusy?" busy":"")+'" data-act="ref-upload"'+(refBusy?" disabled":"")+'>'
+    +   '<span class="upload-ic">⬆</span><div class="import-bar-text">'
+    +   '<div class="import-bar-title">'+(refBusy?"처리 중이에요...":"자료 올리기")+'</div>'
+    +   '<div class="import-bar-sub">'+(refBusy?"창을 닫지 마세요":"워드(.docx) · PDF · 업체명·개인정보는 지우고 올려주세요")+'</div></div>'
+    +   '<span class="import-bar-go">→</span></button>'
+    + list
+    + '<div id="ref-results"></div></div>';
+
+  renderRefResults();
+  var q=document.getElementById("ref-q");
+  if(q) q.addEventListener("keydown",function(e){ if(e.key==="Enter") refSearch(); });
+}
+
+function renderRefResults(){
+  var el=document.getElementById("ref-results"); if(!el) return;
+  if(refSearching){ el.innerHTML='<p class="empty">찾는 중...</p>'; return; }
+  if(refHits===null){
+    el.innerHTML=S.refs.length
+      ? '<div class="empty-box"><div class="empty-ic">⌕</div><p>찾을 단어를 넣고 Enter를 눌러요.<br />낱말을 띄어 쓰면 <b>모두 들어 있는 절</b>만 찾아요.<br /><br />문서 안에 <b>[확인 필요: ○○]</b>로 적어 두신 곳은 위의 칩으로 모아 볼 수 있어요.</p></div>'
+      : '<div class="empty-box"><div class="empty-ic">▤</div><p>마스터 문서를 올리면 여기서 찾을 수 있어요.<br />업체명·제조번호 같은 특정 정보는 지우고 올려주세요.</p></div>';
+    return;
+  }
+  if(!refHits.length){
+    el.innerHTML='<p class="empty">'+(refTerms.length?'「'+esc(refTerms.join(" + "))+'」를 찾지 못했어요.':'해당하는 절이 없어요.')+'</p>';
+    return;
+  }
+  var total=0; refHits.forEach(function(g){ total+=g.total; });
+  var head='<div class="law-head"><div class="law-count"><b>'+refHits.length+'</b>곳'
+    + (total?' · '+total+'건':'')
+    + (refTerms.length>1?' <span class="law-and">'+esc(refTerms.join(" + "))+' 모두 포함</span>':'')+'</div></div>';
+
+  var cur=null, body="";
+  refHits.forEach(function(g){
+    var nm=refName(g.refId);
+    if(nm!==cur){ cur=nm; body+='<div class="law-group">'+esc(nm)+'</div>'; }
+    var open=!!refOpen[g.key], list=open?g.snips:g.snips.slice(0,2);
+    body+='<div class="law-hit"><div class="law-hit-body">'
+      + '<div class="law-meta">'
+      +   '<span class="law-art lv'+(g.level||0)+'">'+esc(g.label)+'</span>'
+      +   (g.need?'<span class="entry-flag">확인 필요</span>':'')
+      +   (g.total>1?'<span class="law-n">'+g.total+'건</span>':'')
+      + '</div>'
+      + list.map(function(t){ return '<div class="law-snip">'+markTerms(t,refTerms)+'</div>'; }).join("")
+      + (g.snips.length>2
+          ? '<button class="link-btn law-more-btn" data-act="ref-expand" data-key="'+esc(g.key)+'">'
+            + (open?"접기":"이 절에서 "+(g.snips.length-2)+"곳 더 보기")+'</button>'
+          : "")
+      + '</div></div>';
+  });
+  el.innerHTML=head+body;
+}
+
 /* ---------- 화면 ---------- */
 function renderLaws(){
   var items=S.laws;
@@ -2356,17 +2385,6 @@ document.getElementById("app").addEventListener("click",function(e){
     case "f-close": formOpen[id]=false; render(); break;
     case "m-add": addMfds(); break;
     case "m-del": del("mfds",id); break;
-    case "ar-add": addArchive(); break;
-    case "ar-del": { var ad=S.archive.find(function(x){return x.id===id;});
-      if(ad&&confirm('"'+ad.title+'"\n\n보관함에서도 완전히 지웁니다. 되돌릴 수 없어요. 계속할까요?')) del("archive",id,true);
-      break; }
-    case "ar-box": arBox(id,true); break;
-    case "ar-restore": arBox(id,false); break;
-    case "ar-filter": archiveFilter=id; render(); break;
-    case "ar-import-docx": importDocxClick(); break;
-    case "ar-attach": archiveAttach(id); break;
-    case "ar-open": { var a=S.archive.find(function(x){return x.id===id;}); if(a&&a.filePath) openStorageFile(a.filePath); break; }
-    case "ar-filedel": arFileDel(id); break;
     case "law-upload": lawUploadClick(); break;
     case "law-search": lawSearch(); break;
     case "law-list": lawListOpen=!lawListOpen; render(); break;
@@ -2377,6 +2395,14 @@ document.getElementById("app").addEventListener("click",function(e){
     case "law-art": openLawArticle(parseInt(el.getAttribute("data-art-id"),10)||0,id); break;
     case "law-build-all": lawBuildAll(); break;
     case "law-help": lawHelpToggle(); break;
+    case "ref-search": refSearch(); break;
+    case "ref-list": refListOpen=!refListOpen; render(); break;
+    case "ref-upload": refUploadClick(null); break;
+    case "ref-update": refUploadClick(id); break;
+    case "ref-open": { var rr=S.refs.find(function(x){return x.id===id;}); if(rr&&rr.filePath) openStorageFile(rr.filePath); break; }
+    case "ref-del": refDel(id); break;
+    case "ref-need": refNeedOnly=(id==="on"); if(refQuery||refNeedOnly) refSearch(); else render(); break;
+    case "ref-expand": { var rk=el.getAttribute("data-key"); refOpen[rk]=!refOpen[rk]; renderRefResults(); break; }
     case "board-more": { var bt=el.getAttribute("data-table"); boardOpen[bt]=!boardOpen[bt]; render(); break; }
     case "board-clear": { var ct=el.getAttribute("data-table"); boardSearch[ct]=""; render(); break; }
     case "lv-art": lawPageToArt(); break;
@@ -2410,7 +2436,7 @@ function render(){
   else if(active==="calendar") renderCalendar();
   else if(active==="articles") renderArticles();
   else if(active==="mfds") renderMfds();
-  else if(active==="archive") renderArchive();
+  else if(active==="archive") renderRefs();
   else if(active==="laws") renderLaws();
 }
 
@@ -2422,7 +2448,7 @@ function startApp(){
   document.getElementById("loading").className="loading-overlay";
   document.getElementById("loading").querySelector(".loading-text").textContent="데이터를 불러오는 중...";
   loadAll().then(function(){
-    return seedIfNeeded();
+    return Promise.resolve();
   }).then(function(){
     render();
     hideLoading();

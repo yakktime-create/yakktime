@@ -824,3 +824,8 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 .entry.boxed:hover{opacity:1;}
 .entry mark,.kw mark{background:#FBEFC4;color:inherit;border-radius:3px;padding:0 1px;}
 @media (hover:none){ .entry-box{opacity:1;padding:8px 6px;} }
+
+/* --- 민원 자료: 절 단계 --- */
+.law-art.lv0{background:var(--accent-soft);color:var(--accent);}
+.law-art.lv1{background:var(--blue-soft);color:var(--blue-deep);}
+.law-art.lv2{background:var(--paper);color:var(--muted);}

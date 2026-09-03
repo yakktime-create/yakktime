@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v36";
+var APP_VER="v37";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -380,6 +380,7 @@ function startEdit(el,table,id,field,type){
     if(settled) return;
     settled=true; editingId=null;
     var nv=inp.value.trim();
+    if(field==="time") nv=normTime(nv);
     if(save&&(nv||allowEmpty)&&nv!==cur){
       item[field]=nv||null;
       var patch={}; patch[field]=nv||null;
@@ -659,10 +660,21 @@ function renderCalendar(){
     + '<div class="cal-grid">'+wdHtml+cells+'</div>'+panel+'</div>';
   wireSeg("day-kind");
   wirePlaceAC("day-place","day-place-ac");
-  ["day-ev","day-time","day-place"].forEach(function(id){
-    var el=document.getElementById(id);
-    if(el) el.addEventListener("keydown",function(e){ if(e.key==="Enter") dayAdd(); });
+  /* Enter 는 다음 칸으로 넘어간다. 추가는 버튼으로만 —
+   * 시간·장소를 적기도 전에 등록돼 버리는 일이 없다. */
+  var flow=["day-ev","day-time","day-place"];
+  flow.forEach(function(id,i){
+    var el=document.getElementById(id); if(!el) return;
+    el.addEventListener("keydown",function(e){
+      if(e.key!=="Enter") return;
+      e.preventDefault();
+      var next=document.getElementById(flow[i+1]);
+      if(next) next.focus(); else el.blur();
+    });
   });
+  /* 시간 칸을 벗어나면 바로 13 → 13:00 으로 보여준다 */
+  var t=document.getElementById("day-time");
+  if(t) t.addEventListener("blur",function(){ t.value=normTime(t.value); });
 }
 
 function articleCard(it){
@@ -1240,6 +1252,34 @@ function del(name,id,quiet){
   });
 }
 
+/* 시간 표기 정리 — 손으로 「13」 「7」 「930」만 쳐도 되게.
+ *   13 → 13:00   7 → 07:00   930 → 09:30   1330 → 13:30
+ *   9시 → 09:00  9시30 → 09:30  오후 2시 → 14:00
+ * 못 알아보는 글자는 그대로 둔다 — 지워버리면 적은 게 사라져 더 나쁘다. */
+function fitTime(h,mi){
+  if(isNaN(h)||isNaN(mi)||h>23||mi>59) return null;
+  return pad(h)+":"+pad(mi);
+}
+function normTime(v){
+  v=String(v==null?"":v).trim();
+  if(!v) return "";
+  var ap="", m;
+  m=/^(오전|오후|am|pm)\s*/i.exec(v);
+  if(m){ ap=m[1].toLowerCase(); v=v.slice(m[0].length).trim(); }
+  else {
+    m=/\s*(오전|오후|am|pm)$/i.exec(v);
+    if(m){ ap=m[1].toLowerCase(); v=v.slice(0,m.index).trim(); }
+  }
+  var h=null, mi=0;
+  if((m=/^(\d{1,2})\s*[:시]\s*(\d{1,2})?\s*분?$/.exec(v))){ h=+m[1]; mi=m[2]?+m[2]:0; }
+  else if((m=/^(\d{1,2})$/.exec(v))){ h=+m[1]; }
+  else if((m=/^(\d{3,4})$/.exec(v))){ h=+m[1].slice(0,m[1].length-2); mi=+m[1].slice(-2); }
+  if(h===null) return String(v||"").trim();
+  if(/오후|pm/.test(ap)&&h<12) h+=12;
+  if(/오전|am/.test(ap)&&h===12) h=0;
+  return fitTime(h,mi)||String(v).trim();
+}
+
 /* 그 달에 오늘이 있으면 오늘, 없으면 1일을 고른다 */
 function calSyncSel(){
   var n=new Date();
@@ -1325,7 +1365,7 @@ function placeACBox(id){ return '<div class="ac-list" id="'+id+'" style="display
 
 function dayAdd(){
   var raw=(val("day-ev")||"").trim(); if(!raw) return;
-  var time=(val("day-time")||"").trim();
+  var time=normTime(val("day-time"));
   var place=(val("day-place")||"").trim();
   var r=parseNL(raw), title=raw;
   if(r.ok){ if(!time) time=r.time; title=r.title; }   /* 칸을 비웠으면 말로 적은 시간을 쓴다 */

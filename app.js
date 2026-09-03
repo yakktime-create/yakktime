@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v46";
+var APP_VER="v47";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -632,11 +632,13 @@ var TRIP_MEMO="가는 편  09:20 인천 → 07:30 도착\n오는 편  11:00 출�
  * 「달력에서 시작일 → 마지막 날」을 그냥 눌러서 고른다. */
 var tripUntil=null;
 
-/* 이미 등록된 일정의 기간을 고치는 중일 때 {id, key}.
- * key 는 새로 고른 시작일 — 아직 안 골랐으면 null.
- * 처음 누른 날이 시작, 그 다음 누른 날이 마지막이 된다.
- * 새로 넣을 때와 완전히 같은 방식이라, 시작일을 뒤로 미는 것도 그냥 된다. */
+/* 이미 등록된 일정의 기간을 고치는 중일 때 {id}.
+ * 날을 누르면 「가까운 쪽 끝」이 그리로 옮겨간다 — 시작을 당기든 마지막을
+ * 늘리든 한 번만 누르면 되고, 무엇을 먼저 고를지 정할 필요가 없다.
+ * 예전엔 시작·마지막을 처음부터 다시 고르게 했는데, 시작을 한 번 더 누르면
+ * 하루짜리가 되면서 기간이 통째로 사라진 것처럼 보였다. */
 var tripEdit=null;
+
 
 /* 입력창에 치던 글자. 마지막 날을 고르면 화면을 다시 그리므로,
  * 그 사이에 적어둔 제목·장소·메모가 날아가지 않게 잠깐 들고 있는다. */
@@ -674,17 +676,20 @@ function renderCalendar(){
     var evs=S.events.filter(function(e){ return e.key<=k && k<=(e.until||e.key); }).sort(evSort);
     /* 식약처 업무를 같은 칸에 함께 얹는다 (복사본이 아니라 mfds를 직접 읽음) */
     var tasks=S.mfds.filter(function(m){ return m.due===k; });
-    var chipItems=tasks.map(function(m){ return {task:true,done:m.status==="완료",label:m.title}; })
-      .concat(evs.map(function(e){
-        var end=e.until||e.key;
-        if(end===e.key) return {task:false,done:false,label:(e.time?e.time+" ":"")+e.title};
-        /* 여러 날짜리는 시작·마지막 칸에만 이름을 달고, 사이의 날은 칸 색으로만 알린다
-         * (네이버 항공권의 「가는 날 / 오는 날」과 같은 방식).
-         * 예전엔 매 칸을 굵은 막대로 채웠는데, 가운데가 텅 빈 큰 덩어리로 보였다. */
-        if(k===e.key) return {trip:"l",label:e.title};
-        if(k===end)   return {trip:"r",label:e.title};
-        return null;
-      }).filter(function(c){ return c; }));
+    /* 여러 날짜리는 시작·마지막 칸에만 이름을 달고, 사이의 날은 칸 색으로만 알린다
+     * (네이버 항공권의 「가는 날 / 오는 날」과 같은 방식).
+     * 예전엔 매 칸을 굵은 막대로 채웠는데, 가운데가 텅 빈 큰 덩어리로 보였다. */
+    var tripChips=[], evChips=[];
+    evs.forEach(function(e){
+      var end=e.until||e.key;
+      if(end===e.key){ evChips.push({label:(e.time?e.time+" ":"")+e.title}); return; }
+      if(k===e.key)    tripChips.push({trip:"l",label:e.title});
+      else if(k===end) tripChips.push({trip:"r",label:e.title});
+    });
+    /* 출장·여행이 맨 위 — 그 날의 큰 틀이라 먼저 눈에 들어와야 한다 */
+    var chipItems=tripChips
+      .concat(tasks.map(function(m){ return {task:true,done:m.status==="완료",label:m.title}; }))
+      .concat(evChips);
     var chips=chipItems.slice(0,CAL_CHIPS).map(function(c){
       if(c.trip) return '<div class="cal-ev trip trip-'+c.trip+'">'
         + (c.trip==="r"?'<span class="tp">‹</span>':'')
@@ -698,7 +703,7 @@ function renderCalendar(){
     /* 기간을 고르는 중이면 시작~끝 칸에 색을 깔아 한눈에 보이게 한다.
      * 새로 넣을 때(출장)와 이미 있는 걸 고칠 때(기간 칩) 모두 같은 표시를 쓴다. */
     var rng="", rs=null, re=null;
-    if(te) rs=tripEdit.key;                 /* 고치는 중 — 지금까지 고른 만큼만 보여준다 */
+    if(te){ rs=te.key; re=te.until||null; }              /* 고치는 중인 일정의 지금 기간 */
     else if(dayKind===KIND_TRIP&&tripUntil){ rs=calSel; re=tripUntil; }
     if(rs&&k>=rs&&k<=(re||rs))
       rng=" rng"+(k===rs?" rng-s":"")+(re&&k===re?" rng-e":"");
@@ -758,9 +763,9 @@ function renderCalendar(){
   var mTask=S.mfds.filter(function(m){ return m.due&&m.due.indexOf(mk)===0; }).length;
   var calPills=[]; if(mEv) calPills.push(pill("이번 달 일정 "+mEv+"건")); if(mTask) calPills.push(pill("기한 있는 업무 "+mTask+"건"));
   view().innerHTML='<div class="page">'+pageHead2("캘린더","",calPills)
-    + (te?'<div class="trip-bar"><span class="tb-t">「'+esc(te.title)+'」 기간 다시 고르기</span>'
-          + '<span class="tb-h">달력에서 '+(tripEdit.key?"마지막 날":"시작하는 날")+'을 누르세요</span>'
-          + '<button class="link-btn" data-act="trip-edit-off">그만두기</button></div>':'')
+    + (te?'<div class="trip-bar"><span class="tb-t">「'+esc(te.title)+'」 기간 고치기</span>'
+          + '<span class="tb-h">날짜를 누르면 가까운 쪽 끝이 그리로 옮겨가요</span>'
+          + '<button class="link-btn" data-act="trip-edit-off">다 됐어요</button></div>':'')
     + '<div class="cal-nav"><button class="cal-arrow" data-act="cal-prev">‹</button><span class="cal-month">'+calYear+'년 '+(calMonth+1)+'월</span><button class="cal-arrow" data-act="cal-next">›</button></div>'
     + '<div class="cal-grid">'+wdHtml+cells+'</div>'+panel+'</div>';
   wireSeg("day-kind",function(v){ if(v===dayKind) return;
@@ -2889,17 +2894,20 @@ document.getElementById("app").addEventListener("click",function(e){
     case "cal-prev": calMonth--; if(calMonth<0){calMonth=11;calYear--;} calSyncSel(); render(); break;
     case "cal-next": calMonth++; if(calMonth>11){calMonth=0;calYear++;} calSyncSel(); render(); break;
     case "cal-day":
-      /* 기간을 고치는 중이면 처음 누른 날이 시작, 그 다음 누른 날이 마지막이다.
-       * 시작보다 앞을 누르면 그 날이 새 시작이 된다 (항공권 예매와 같은 방식).
-       * 시작을 한 번 더 누르면 하루짜리로 돌아간다. */
+      /* 기간을 고치는 중 — 누른 날로 「가까운 쪽 끝」이 옮겨간다.
+       * 시작 앞을 누르면 시작이 당겨지고, 마지막 뒤를 누르면 마지막이 늘어난다.
+       * 기간 안쪽을 누르면 가까운 쪽이 그리로 줄어든다.
+       * 한 번 누를 때마다 저장하고, 계속 고칠 수 있게 그대로 둔다. */
       if(tripEdit){
         var te2=S.events.find(function(x){ return x.id===tripEdit.id; });
         if(!te2){ tripEdit=null; render(); break; }
-        if(!tripEdit.key||id<tripEdit.key){ tripEdit.key=id; render(); break; }
-        var tp={key:tripEdit.key,until:(id===tripEdit.key)?null:id};
-        tripEdit=null;
+        var ka=te2.key, kb=te2.until||te2.key, na=ka, nb=kb;
+        if(id<ka) na=id;
+        else if(id>kb) nb=id;
+        else if(Math.abs(dayGap(ka,id))<=Math.abs(dayGap(id,kb))) na=id; else nb=id;
+        var tp={key:na,until:(na===nb)?null:nb};
         te2.key=tp.key; te2.until=tp.until;
-        calSel=tp.key; render(); dbUpdate("events",te2.id,tp); focusDayPanel();
+        calSel=na; render(); dbUpdate("events",te2.id,tp);
         break;
       }
       /* 출장을 고른 상태면 두 번째 누른 날이 마지막 날이 된다.
@@ -2910,7 +2918,7 @@ document.getElementById("app").addEventListener("click",function(e){
       tripUntil=null; calSel=id; render(); focusDayPanel(); break;
     case "trip-reset": saveDayDraft(); tripUntil=null; render(); break;
     case "trip-edit":
-      tripEdit=(tripEdit&&tripEdit.id===id)?null:{id:id,key:null};
+      tripEdit=(tripEdit&&tripEdit.id===id)?null:{id:id};
       render(); focusCal(); break;
     case "trip-edit-off": tripEdit=null; render(); break;
     case "map": openMap(el.getAttribute("data-q")); break;

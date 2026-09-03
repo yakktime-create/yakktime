@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v30";
+var APP_VER="v31";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -605,11 +605,20 @@ function renderCalendar(){
       + '</div>'
       + '<span class="row-acts"><button class="del" data-act="mfds-del" data-id="'+t.id+'" title="삭제">✕</button></span></li>'; }).join("");
   var panel='<div class="day-panel"><div class="day-title">'+(selD.getMonth()+1)+'월 '+selD.getDate()+'일 ('+WD[selD.getDay()]+')'+(calSel===todayKey?' <span class="day-today">오늘</span>':'')+'</div>'
-    + '<div class="add-row quick day-add"><input class="input day-what" id="day-ev" placeholder="할 일 / 일정 (예: 오후 2시 GMP 실사)" />'
-    +   '<input class="input day-when" id="day-time" placeholder="시간 (예: 14:00)" />'
-    +   '<input class="input day-where" id="day-place" placeholder="장소 (예: 오송 본관 3층)" />'
-    +   '<label class="chk"><input type="checkbox" id="day-mfds" /> 식약처 업무</label>'
-    +   '<button class="btn" data-act="day-add">+ 추가</button></div>'
+    + '<div class="card form composer day-form">'
+    +   '<input class="input composer-title" id="day-ev" placeholder="무엇을 하나요? (예: GMP 실사 사전회의)" />'
+    +   '<div class="field-row">'
+    +     '<label class="field"><span class="field-lbl">시간</span>'
+    +       '<input class="input" id="day-time" inputmode="numeric" placeholder="14:00" /></label>'
+    +     '<label class="field grow"><span class="field-lbl">장소</span>'
+    +       '<input class="input" id="day-place" list="place-opts" placeholder="오송 본관 3층 · 전에 적은 곳이 자동으로 떠요" /></label>'
+    +   '</div>'
+    +   '<div class="composer-foot">'
+    +     segC("day-kind",["일정","식약처 업무"],"일정")
+    +     '<div class="composer-btns"><button class="btn" data-act="day-add">+ 추가</button></div>'
+    +   '</div>'
+    + '</div>'
+    + placeDatalist("place-opts")
     + ((selEvs.length||selTasks.length)? '<ul class="list">'+taskRows+selEvs.map(function(e){ return '<li class="ev-row">'
       + '<span class="ev-time" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'+(e.time?esc(e.time):"종일")+'</span>'
       + '<div class="ev-body">'
@@ -624,7 +633,11 @@ function renderCalendar(){
   view().innerHTML='<div class="page">'+pageHead2("캘린더","",calPills)
     + '<div class="cal-nav"><button class="cal-arrow" data-act="cal-prev">‹</button><span class="cal-month">'+calYear+'년 '+(calMonth+1)+'월</span><button class="cal-arrow" data-act="cal-next">›</button></div>'
     + '<div class="cal-grid">'+wdHtml+cells+'</div>'+panel+'</div>';
-  document.getElementById("day-ev").addEventListener("keydown",function(e){ if(e.key==="Enter") dayAdd(); });
+  wireSeg("day-kind");
+  ["day-ev","day-time","day-place"].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el) el.addEventListener("keydown",function(e){ if(e.key==="Enter") dayAdd(); });
+  });
 }
 
 function articleCard(it){
@@ -785,9 +798,9 @@ function mfdsComposer(){
     +   segC("m-status",MFDS_STATUS,"대기")
     +   '<div class="due-field"><label for="m-due">기한</label><input class="input" type="date" id="m-due" /></div>'
     +   '<div class="due-field"><label for="m-time">시간</label><input class="input" id="m-time" placeholder="14:00" /></div>'
-    +   '<div class="due-field wide"><label for="m-place">장소</label><input class="input" id="m-place" placeholder="오송 본관 3층" /></div>'
+    +   '<div class="due-field wide"><label for="m-place">장소</label><input class="input" id="m-place" list="place-opts-m" placeholder="오송 본관 3층" /></div>'
     +   composerBtns("mfds","m-add")
-    + '</div></div>';
+    + '</div>'+placeDatalist("place-opts-m")+'</div>';
 }
 
 function renderMfds(){
@@ -1207,14 +1220,31 @@ function calSyncSel(){
   calSel=calYear+"-"+pad(calMonth+1)+"-"+pad(d);
 }
 
+/* 전에 적어둔 장소를 모아 자동완성으로 쓴다.
+ * 같은 곳(오송 본관, 건국대…)을 반복해 적게 되므로 이것만으로도 대부분 해결된다.
+ * 새 장소는 그냥 쳐 넣으면 되고, 다음부터 목록에 들어온다. */
+function placeList(){
+  var seen={}, out=[];
+  S.events.concat(S.mfds).forEach(function(x){
+    var p=(x&&x.place||"").trim();
+    if(!p||seen[p]) return;
+    seen[p]=1; out.push(p);
+  });
+  return out.sort();
+}
+function placeDatalist(id){
+  return '<datalist id="'+id+'">'
+    + placeList().map(function(p){ return '<option value="'+esc(p)+'"></option>'; }).join("")
+    + '</datalist>';
+}
+
 function dayAdd(){
   var raw=(val("day-ev")||"").trim(); if(!raw) return;
   var time=(val("day-time")||"").trim();
   var place=(val("day-place")||"").trim();
   var r=parseNL(raw), title=raw;
   if(r.ok){ if(!time) time=r.time; title=r.title; }   /* 칸을 비웠으면 말로 적은 시간을 쓴다 */
-  var chk=document.getElementById("day-mfds");
-  if(chk&&chk.checked){
+  if(segValue("day-kind")==="식약처 업무"){
     /* 일정이 아니라 식약처 업무로 등록. 캘린더는 mfds를 직접 읽으므로 여기에도 그대로 뜬다. */
     var task={title:title,status:"대기",memo:"",due:calSel,time:time||null,place:place||null};
     S.mfds.unshift(task); render(); dbInsert("mfds",task); return;

@@ -820,14 +820,26 @@ textarea.inline-area{min-height:52px;resize:vertical;}
   padding:2px 8px;border-radius:var(--r-full);flex-shrink:0;white-space:nowrap;}
 .up-place{font-size:var(--fs-sm);color:var(--muted);}
 
-/* 캘린더 입력줄 — 「무엇」은 한 줄 통째로, 그 아래 「언제 / 어디 / 식약처 / 추가」.
-   flex-basis 만 100%로 두면 줄어들어 한 줄에 끼어드므로 shrink 를 막는다. */
-/* .add-row.quick 이 flex-wrap:nowrap 이라 선택자를 같은 무게로 맞춰야 이긴다 */
-.add-row.quick.day-add{flex-wrap:wrap;row-gap:var(--sp-1);}
-.add-row.quick.day-add .day-what{flex:0 0 100%;}
-.add-row.quick.day-add .day-when{flex:0 1 110px;min-width:80px;}
-.add-row.quick.day-add .day-where{flex:1 1 150px;min-width:0;}
-.due-field.wide{flex:1 1 200px;}
+}
+
+/* --- 캘린더 입력창 — 무엇 / 시간 · 장소 / 종류 · 추가 --- */
+.day-form{margin-bottom:var(--sp-4);}
+.field-row{display:flex;gap:var(--sp-3);flex-wrap:wrap;}
+.field{display:flex;flex-direction:column;gap:var(--sp-1);flex:0 0 108px;}
+.field.grow{flex:1 1 200px;min-width:0;}
+.field-lbl{font-size:var(--fs-xs);font-weight:700;color:var(--muted);
+  letter-spacing:.04em;padding-left:2px;}
+.field .input{width:100%;}
+/* .seg.compact .seg-btn 이 더 무거우므로 같은 무게로 맞춘다 */
+.day-form .seg.compact{flex:0 1 auto;}
+.day-form .seg.compact .seg-btn{flex:0 0 auto;padding:8px 16px;}
+/* 아이패드 폭에서는 기존 규칙이 버튼에 flex:1 을 걸어 한 줄을 다 먹는다.
+   버튼이 큰 건 터치에 좋으니 그대로 두되, 종류 고르는 칸도 같이 넓혀 짝을 맞춘다. */
+@media (max-width:1024px){
+  .day-form .seg.compact{flex:1 1 100%;}
+  .day-form .seg.compact .seg-btn{flex:1;}
+  .day-form .composer-btns{margin-left:0;width:100%;}
+}
 @media (max-width:640px){
-  .add-row.quick.day-add .day-when,.add-row.quick.day-add .day-where{flex:0 0 100%;}
+  .field{flex:1 1 100%;}
 }

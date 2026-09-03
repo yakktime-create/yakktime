@@ -140,6 +140,10 @@ textarea.input{min-height:60px;resize:vertical;line-height:var(--lh-snug);width:
 .day-title{font-size:var(--fs-base);font-weight:650;margin-bottom:10px;}
 .ev-row{display:flex;align-items:center;gap:var(--sp-2);padding:9px 4px;border-bottom:1px solid var(--line);}
 .ev-row:last-child{border-bottom:none;}
+/* 여러 날짜리 일정 — 하루짜리와 한 목록에 섞이므로 왼쪽에 옅은 줄 하나로 표시한다.
+   칸을 칠하면 그 날의 다른 일정을 덮으므로 줄만 긋는다. */
+.ev-row.trip{box-shadow:inset 3px 0 0 var(--brass-bd);padding-left:11px;}
+.ev-time.trip-tag{color:var(--brass);opacity:.8;font-weight:700;}
 .ev-time{font-size:var(--fs-sm);color:var(--brass);font-weight:600;min-width:52px;}
 .ev-title{flex:1;font-size:var(--fs-md);}
 .up-row{display:flex;align-items:center;gap:var(--sp-3);padding:9px 4px;border-bottom:1px solid var(--line);}

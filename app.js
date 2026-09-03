@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v50";
+var APP_VER="v51";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -724,9 +724,15 @@ function renderCalendar(){
       +     '<span class="mfds-status">'+esc(t.status)+'</span></span>'
       + '</div>'
       + '<span class="row-acts"><button class="del" data-act="mfds-del" data-id="'+t.id+'" title="삭제">✕</button></span></li>'; }).join("");
-  function evRowHtml(e){ return '<li class="ev-row">'
+  function evRowHtml(e){ return '<li class="ev-row'+(isTrip(e)?" trip":"")+'">'
       + '<span class="check-gap"></span>'
-      + '<span class="ev-time" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'+(e.time?esc(e.time):"종일")+'</span>'
+      /* 여러 날짜리는 「종일」이 아니라 「출장」이라고 적는다. 하루짜리 일정과
+       * 한 줄에 섞여 있어도 무엇인지 바로 보인다. 시간을 적어두면 시간이 이긴다
+       * (몇 시 비행기처럼 출발 시각을 적어두는 경우). */
+      + '<span class="ev-time'+(isTrip(e)&&!e.time?" trip-tag":"")+'" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'
+      +   (e.time?esc(e.time)
+            : isTrip(e)?(/여행/.test(e.title||"")?"여행":"출장")   /* 제목에 여행이라 적었으면 여행 */
+            : "종일")+'</span>'
       + '<div class="ev-body">'
       +   '<span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span>'
       +   whereHtml(e,"events")

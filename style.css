@@ -1,4 +1,5 @@
 :root{
+  --accent-band:#E9F2EC;   /* 여러 날짜리 일정이 지나가는 날 — accent-soft 보다 옅다 */
   --paper:#F3F5F2; --surface:#FFFFFF; --ink:#1E2A24; --muted:#6C7A72;
   --line:#E3E7E2; --accent:#2F5D50; --accent-soft:#E5EEE9; --brass:#A67C2E; --brick:#A4503E;
   /* 식약처 업무 — 세이지 그린과 같은 명도·채도대의 슬레이트 블루 (형제색) */
@@ -889,15 +890,14 @@ textarea.inline-area{min-height:52px;resize:vertical;}
   .ev-row .input.inline-edit.ie-place,.ev-row .inline-ac{flex:1 1 100%;}
 }
 
-/* --- 여러 날짜리 일정: 칸을 넘어 한 줄로 이어지는 막대 ---
-   칸 여백(6) + 테두리(1) + 칸 사이 틈의 절반(2) = 9px 만큼 밖으로 나가면
-   옆 칸에서 나온 막대와 정확히 맞닿는다.
-   그냥 넘기면 다음 칸 배경에 덮이므로 z-index 로 위에 올린다. */
-.cal-ev.span{border-radius:0;margin-left:-9px;margin-right:-9px;
-  position:relative;z-index:2;min-height:19px;}
-.cal-ev.span.sp-l{border-radius:var(--r-xs) 0 0 var(--r-xs);margin-left:0;padding-left:6px;}
-.cal-ev.span.sp-r{border-radius:0 var(--r-xs) var(--r-xs) 0;margin-right:0;}
-.cal-ev.span:not(.sp-l){padding-left:9px;}
+/* --- 여러 날짜리 일정: 시작 칸에 「이름 ›」, 마지막 칸에 「‹ 이름」 ---
+   사이의 날은 칸 색으로만 알린다. 칸을 넘어 이어지는 굵은 막대를 쓴 적이
+   있는데, 가운데가 텅 빈 큰 덩어리로 보여 달력이 지저분했다. */
+.cal-ev.trip{display:flex;align-items:center;gap:2px;background:var(--accent);}
+.cal-ev.trip .tt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cal-ev.trip .tp{flex:none;font-weight:800;opacity:.8;}
+.cal-ev.trip-l{border-radius:var(--r-full) var(--r-xs) var(--r-xs) var(--r-full);padding-left:8px;}
+.cal-ev.trip-r{border-radius:var(--r-xs) var(--r-full) var(--r-full) var(--r-xs);padding-right:8px;}
 /* 기간이 있는 일정에만 붙는 칩 — 하루짜리엔 아무것도 안 붙는다 */
 .ev-span{flex-shrink:0;font-size:var(--fs-xs);font-weight:650;color:var(--accent);
   background:var(--accent-soft);border-radius:var(--r-full);padding:2px 9px;cursor:pointer;}
@@ -940,3 +940,6 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .trip-range .tr-b.none{color:var(--muted);font-size:var(--fs-md);}
 .trip-range .tr-n{margin-left:auto;flex:none;font-size:var(--fs-sm);font-weight:700;
   color:var(--accent);background:var(--accent-soft);border-radius:var(--r-full);padding:2px 10px;}
+/* 여러 날짜리 일정이 지나가는 날. .cal-cell 규칙보다 뒤에 와야 이긴다. */
+.cal-cell.trip{background:var(--accent-band);}
+.cal-cell.trip.today{background:var(--accent-soft);}

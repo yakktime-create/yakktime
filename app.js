@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v41";
+var APP_VER="v42";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -645,7 +645,6 @@ function renderCalendar(){
   var dim=new Date(calYear,calMonth+1,0).getDate(), todayKey=keyOf(new Date()), cells="";
   for(var i=0;i<startDay;i++) cells+='<div class="cal-cell blank"></div>';
   for(var d=1;d<=dim;d++){ var k=calYear+"-"+pad(calMonth+1)+"-"+pad(d);
-    var dow=(startDay+d-1)%7;   /* 0=일 … 6=토. 주가 바뀌는 자리를 알아야 막대를 끊는다 */
     /* 기간 일정은 시작~끝 칸에 모두 나온다 */
     var evs=S.events.filter(function(e){ return e.key<=k && k<=(e.until||e.key); }).sort(evSort);
     /* 식약처 업무를 같은 칸에 함께 얹는다 (복사본이 아니라 mfds를 직접 읽음) */
@@ -654,23 +653,28 @@ function renderCalendar(){
       .concat(evs.map(function(e){
         var end=e.until||e.key;
         if(end===e.key) return {task:false,done:false,label:(e.time?e.time+" ":"")+e.title};
-        /* 여러 날짜리는 한 줄로 이어진 막대로 그린다.
-         * 이름은 시작한 날과 주가 바뀌는 날(일요일)에만 적는다 —
-         * 매 칸에 적으면 같은 말이 일곱 번 반복돼 지저분하다. */
-        var lEnd=(k===e.key||dow===0), rEnd=(k===end||dow===6);
-        return {task:false,done:false,span:true,lEnd:lEnd,rEnd:rEnd,
-                label:lEnd?e.title:""};
-      }));
+        /* 여러 날짜리는 시작·마지막 칸에만 이름을 달고, 사이의 날은 칸 색으로만 알린다
+         * (네이버 항공권의 「가는 날 / 오는 날」과 같은 방식).
+         * 예전엔 매 칸을 굵은 막대로 채웠는데, 가운데가 텅 빈 큰 덩어리로 보였다. */
+        if(k===e.key) return {trip:"l",label:e.title};
+        if(k===end)   return {trip:"r",label:e.title};
+        return null;
+      }).filter(function(c){ return c; }));
     var chips=chipItems.slice(0,CAL_CHIPS).map(function(c){
+      if(c.trip) return '<div class="cal-ev trip trip-'+c.trip+'">'
+        + (c.trip==="r"?'<span class="tp">‹</span>':'')
+        + '<span class="tt">'+esc(c.label)+'</span>'
+        + (c.trip==="l"?'<span class="tp">›</span>':'')+'</div>';
       return '<div class="cal-ev'+(c.task?" mfds":"")+(c.done?" done":"")
-        +(c.span?" span"+(c.lEnd?" sp-l":"")+(c.rEnd?" sp-r":""):"")
         +'">'+esc(c.label)+'</div>'; }).join("");
     if(chipItems.length>CAL_CHIPS) chips+='<div class="cal-more">+'+(chipItems.length-CAL_CHIPS)+'</div>';
+    /* 이미 등록된 여러 날짜리 일정 안에 든 날은 옅게 깔아 이어져 보이게 한다 */
+    var inTrip=evs.some(function(e){ return (e.until||e.key)!==e.key; })?" trip":"";
     /* 출장 기간을 고르는 중이면 시작~끝 칸에 색을 깔아 한눈에 보이게 한다 */
     var rng="";
     if(dayKind==="출장"&&tripUntil&&k>=calSel&&k<=tripUntil)
       rng=" rng"+(k===calSel?" rng-s":"")+(k===tripUntil?" rng-e":"");
-    cells+='<div class="cal-cell'+(k===todayKey?" today":"")+(k===calSel?" sel":"")+rng+'" data-act="cal-day" data-id="'+k+'"><span class="cal-num">'+d+'</span>'+chips+'</div>'; }
+    cells+='<div class="cal-cell'+(k===todayKey?" today":"")+(k===calSel?" sel":"")+inTrip+rng+'" data-act="cal-day" data-id="'+k+'"><span class="cal-num">'+d+'</span>'+chips+'</div>'; }
   var wdHtml=WD.map(function(w,i){ return '<div class="cal-wd'+(i===0?" sun":"")+'">'+w+'</div>'; }).join("");
   var selEvs=S.events.filter(function(e){ return e.key<=calSel && calSel<=(e.until||e.key); }).sort(evSort);
   var selD=new Date(calSel+"T00:00:00");

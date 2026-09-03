@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v35";
+var APP_VER="v36";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -345,7 +345,15 @@ function startEdit(el,table,id,field,type){
   var area=(type==="textarea");
   var inp=document.createElement(area?"textarea":"input");
   if(type&&!area) inp.type=type;
-  inp.className="input inline-edit"+(area?" inline-area":"");
+  /* 고치는 칸은 원래 자리만큼만 커야 한다.
+   * 예전엔 전부 flex:1 이라, 좁은 「시간」 칸을 눌러도 입력창이 줄 전체를 먹었다. */
+  var sizeCls="";
+  if(el.classList){
+    if(el.classList.contains("ev-time")) sizeCls=" ie-time";
+    else if(el.classList.contains("ev-place")) sizeCls=" ie-place";
+    else if(el.classList.contains("mfds-status")) sizeCls=" ie-time";
+  }
+  inp.className="input inline-edit"+(area?" inline-area":"")+sizeCls;
   inp.value=cur;
   /* 장소 칸은 기존 항목을 고칠 때도 자동완성이 떠야 한다.
    * 목록을 띄우려면 자리를 잡아줄 감싸개가 필요해서 한 겹 두른다. */

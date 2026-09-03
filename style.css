@@ -875,3 +875,14 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 /* 기존 항목의 장소를 고칠 때도 목록이 뜨게 — 자리를 잡아줄 감싸개 */
 .inline-ac{position:relative;flex:1 1 auto;min-width:0;display:inline-block;}
 .inline-ac .input.inline-edit{width:100%;}
+
+/* --- 고칠 때 입력칸 크기 — 원래 자리만큼만 --- */
+.ev-row .input.inline-edit.ie-time{flex:0 0 92px;width:92px;text-align:left;}
+.ev-row .input.inline-edit.ie-place{flex:1 1 200px;width:auto;min-width:120px;}
+.ev-row .inline-ac{flex:1 1 200px;min-width:120px;}
+/* 카드 안에서 고칠 때 ✕ 버튼과 겹치지 않게 */
+.mini .input.inline-edit{padding-right:26px;}
+@media (max-width:640px){
+  .ev-row .input.inline-edit.ie-time{flex:0 0 80px;width:80px;}
+  .ev-row .input.inline-edit.ie-place,.ev-row .inline-ac{flex:1 1 100%;}
+}

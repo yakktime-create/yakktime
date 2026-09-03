@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v53";
+var APP_VER="v54";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1989,7 +1989,7 @@ function isNoArtCol(err){
  * 답변은 쓰지 않는다. 어디를 볼지만 고른다.
  * 값이 싼 쪽(Haiku)만 쓰므로 엉뚱한 질문을 해도 재시도가 싸다.
  * API 키는 Supabase Edge Function(law-pick) 비밀값에만 있다 — 여기엔 없다. */
-var lawAsk=null, lawAsking=false, lawAskUsed=null, lawAskMax=null;
+var lawAsk=null, lawAsking=false, lawAskMore=false;
 /* 어느 법령에서만 고를지. 비어 있으면 전부 본다 —
  * 「아무것도 안 고르면 아무 데서도 안 찾는다」는 헷갈리므로 그 반대로 둔다. */
 var lawOnly={};
@@ -2014,8 +2014,8 @@ function lawAskRun(){
     var d=r&&r.data;
     if(!d){ showToast("물어보지 못했어요: "+((r&&r.error&&r.error.message)||"응답이 비었어요"),true); done(); return; }
     if(d.error){ showToast(d.error,true); done(); return; }
-    d.q=q; lawAsk=d; lawAskSel={};
-    if(d.used!=null){ lawAskUsed=d.used; lawAskMax=d.max; }
+    d.q=q; lawAsk=d; lawAskSel={}; lawAskMore=false;
+    (d.picks||[]).forEach(function(p){ if(p.rank!=="혹시") lawAskSel[p.id]=true; });
     done();
   }).catch(function(e){ showToast("물어보지 못했어요: "+e.message,true); done(); });
 }
@@ -2069,26 +2069,38 @@ function lawAskSelAll(on){
 function lawAskHtml(){
   var d=lawAsk;
   var head='<div class="ask-head"><span class="ask-qt">「'+esc(d.q)+'」</span>'
-    + '<span class="ask-cost">이번 '+(d.krw||0)+'원'
-    +   (d.used!=null?' · 오늘 '+d.used+'/'+d.max:'')+'</span></div>';
+    + '<span class="ask-cost">이번 '+(d.krw||0)+'원</span></div>';
   if(!d.picks||!d.picks.length)
     return '<div class="ask-box">'+head
       + '<p class="ask-none">올려둔 법령에서는 관련 조문을 못 찾았어요.</p>'
       + (d.note?'<p class="ask-note">'+esc(d.note)+'</p>':'')+'</div>';
-  var items=d.picks.map(function(p){
+  /* 「혹시」는 접어 둔다. 결과가 길어지면 위쪽 확실한 것부터 보이지 않는다 —
+   * 화면을 넘기지 않고도 볼 것부터 보이게 하는 게 이 접기의 목적이다. */
+  var sure=d.picks.filter(function(p){ return p.rank!=="혹시"; });
+  var maybe=d.picks.filter(function(p){ return p.rank==="혹시"; });
+  var shown=lawAskMore?d.picks:sure;
+  function askItem(p){
     var on=!!lawAskSel[p.id];
-    return '<li class="ask-item'+(on?" on":"")+'">'
+    return '<li class="ask-item'+(on?" on":"")+' r-'+(p.rank==="꼭"?"1":p.rank==="참고"?"2":"3")+'">'
       + '<label class="ask-check"><input type="checkbox" data-act="ask-pick" data-id="'+esc(p.id)+'"'+(on?" checked":"")+' /></label>'
       + '<div class="ask-item-body">'
-      +   '<div class="ask-art"><b>'+esc(p.label)+'</b>'
+      +   '<div class="ask-art"><span class="ask-rank">'+esc(p.rank)+'</span><b>'+esc(p.label)+'</b>'
       +     '<span class="ask-law">'+esc(p.law)+'</span>'
       +     '<button class="link-btn law-go-art" data-act="law-art" data-art-id="'+esc(p.id)+'" data-id="'+esc(p.lawId)+'">전체 보기</button></div>'
       +   '<div class="ask-why">'+esc(p.why)+'</div>'
+      /* 본문 앞부분을 같이 보여준다 — 창을 열었다 닫지 않아도 맞는지 가늠된다 */
+      +   (p.head?'<div class="ask-head-txt">'+esc(p.head)+'</div>':'')
       + '</div></li>';
-  }).join("");
+  }
+  var items=shown.map(askItem).join("")
+    + (maybe.length&&!lawAskMore
+        ? '<li class="ask-more"><button class="link-btn" data-act="ask-more">'
+          + '「혹시」로 고른 '+maybe.length+'개 더 보기</button></li>' : '');
   var nSel=Object.keys(lawAskSel).filter(function(k){ return lawAskSel[k]; }).length;
+  var nSure=sure.length;
   /* 낱말 검색 결과와 같은 부품·같은 자리 — 한쪽만 다르게 생기면 매번 다시 배워야 한다 */
   var acts='<div class="law-head"><div class="law-count">'+d.picks.length+'곳'
+    + (maybe.length?' <span class="law-and">볼 만한 것 '+nSure+'곳</span>':'')
     + (nSel?' · <span class="law-picked">'+nSel+'곳 선택</span>':'')+'</div>'
     + '<div class="law-actions">'
     +   '<button class="link-btn" data-act="ask-all">모두 선택</button>'
@@ -2098,10 +2110,21 @@ function lawAskHtml(){
     + '</div></div>';
   return '<div class="ask-box">'+head
     + (d.note?'<p class="ask-note">'+esc(d.note)+'</p>':'')
+    + (d.truncated?'<p class="ask-warn">올려둔 조문이 너무 많아 <b>앞쪽 '+d.arts+'개만</b> 봤어요. 위에서 법령을 골라 범위를 좁혀주세요.</p>':'')
     + acts+'<ol class="ask-list">'+items+'</ol>'
     /* 도구지 답변자가 아니다. 이 줄을 지우면 안 된다. */
     + '<p class="ask-foot">AI는 <b>제목만 보고</b> 어디를 볼지 골랐어요. 조문을 열어 직접 확인하세요.<br />'
     +   '골라서 「복사」하면 <b>조문 원문</b>이 통째로 따라옵니다.</p></div>';
+}
+
+/* 문장처럼 보이면 ✦ 를 내보낸다. 낱말 한둘일 땐 쓸 일이 없다. */
+function lawAskFits(t){ return String(t||"").trim().length>=12; }
+/* 칸이 내용만큼 자라게 + ✦ 줄을 보이거나 감추기 */
+function lawQBox(q){
+  q.style.height="auto";
+  q.style.height=Math.min(q.scrollHeight,168)+"px";
+  var bar=document.querySelector(".ask-bar");
+  if(bar) bar.classList.toggle("gone",!lawAskFits(q.value));
 }
 
 function lawSearch(){
@@ -2914,16 +2937,18 @@ function renderLaws(){
   view().innerHTML='<div class="page">'
     + pageHead2("법령","올려둔 법령 전체에서 단어를 찾고, 결과를 골라 모아요.",items.length?pills:null)
     + '<div class="search-box"><span class="search-ic">⌕</span>'
-    +   '<input class="input search law-input" id="law-q" placeholder="낱말로 찾거나, 민원 질문을 그대로 붙여넣어요" value="'+esc(lawQuery)+'" />'
+    +   '<textarea class="input search law-input" id="law-q" rows="1" placeholder="낱말로 찾거나, 민원 질문을 그대로 붙여넣어요">'+esc(lawQuery)+'</textarea>'
     +   '<button class="btn sm law-go" data-act="law-search">검색</button>'
     + '</div>'
-    /* 돈이 드는 동작이라 검색칸 안에 넣지 않는다. 눌러야만 나간다. */
-    + '<button class="ask-bar'+(lawAsking?" busy":"")+'" data-act="law-ask"'+(lawAsking?" disabled":"")+'>'
+    /* 돈이 드는 동작이라 검색칸 안에 넣지 않는다. 눌러야만 나간다.
+     * 게다가 낱말 두어 개를 칠 때는 쓸 일이 없으므로, 문장을 적었을 때만
+     * 나타난다 — 평소 화면은 예전과 똑같이 조용하다. */
+    + '<button class="ask-bar'+(lawAskFits(lawQuery)?"":" gone")+(lawAsking?" busy":"")+'" data-act="law-ask"'+(lawAsking?" disabled":"")+'>'
     +   '<span class="ask-ic">✦</span>'
     +   '<span class="ask-bar-t">'+(lawAsking?"관련 조문을 고르는 중..."
           :(lawOnlyLabel()?"<b>"+esc(lawOnlyLabel())+"</b>에서 관련 조문 찾아줘"
                           :"위에 적은 말로 <b>관련 조문 찾아줘</b>"))+'</span>'
-    +   '<span class="ask-bar-n">'+(lawAskUsed!=null?"오늘 "+lawAskUsed+"/"+lawAskMax:"한 번에 약 5원")+'</span>'
+    +   '<span class="ask-bar-n">한 번에 약 5원</span>'
     + '</button>'
     + lawHelpHtml()
     + '<button class="upload-bar'+(lawBusy?" busy":"")+'" data-act="law-upload"'+(lawBusy?" disabled":"")+'>'
@@ -2937,7 +2962,16 @@ function renderLaws(){
   renderLawResults();
   renderLawModal();
   var q=document.getElementById("law-q");
-  if(q) q.addEventListener("keydown",function(e){ if(e.key==="Enter") lawSearch(); });
+  if(q){
+    /* Enter 는 예전처럼 검색. 줄바꿈이 필요하면 Shift+Enter.
+     * (민원 글은 붙여넣기로 들어오므로 여러 줄이 그대로 살아 있다) */
+    q.addEventListener("keydown",function(e){
+      if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); lawSearch(); }
+    });
+    /* 치는 동안 render() 를 부르면 커서가 날아간다. 두 가지만 직접 손댄다. */
+    q.addEventListener("input",function(){ lawQBox(q); });
+    lawQBox(q);
+  }
 }
 
 function renderLawResults(){
@@ -3110,6 +3144,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "law-only": { if(lawOnly[id]) delete lawOnly[id]; else lawOnly[id]=true; render(); break; }
     case "ask-pick": { if(lawAskSel[id]) delete lawAskSel[id]; else lawAskSel[id]=true;
       renderLawResults(); break; }
+    case "ask-more": lawAskMore=true; renderLawResults(); break;
     case "ask-all":  lawAskSelAll(true);  break;
     case "ask-none": lawAskSelAll(false); break;
     case "ask-copy": lawAskCopy(); break;

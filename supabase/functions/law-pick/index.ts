@@ -4,10 +4,10 @@
 //  왜 서버에서 하나:
 //   · API 키가 브라우저에 절대 안 나와야 한다. 여기 비밀값으로만 둔다.
 //   · 조 목록(수만 토큰)을 서버에서 만들면 프롬프트 캐싱이 걸린다.
-//   · 하루 몇 번까지만 부르게 여기서 막을 수 있다.
+//   · 고른 조문의 본문 앞부분도 여기서 같이 붙여 보낸다 — 화면에서
+//     「전체 보기」를 눌러 창을 열었다 닫지 않아도 맞는지 판단할 수 있다.
 //
-//  이 함수는 답변을 쓰지 않는다. 「어디를 볼지」만 고른다 (2단계).
-//  답변 초안(3단계)은 따로 만든다.
+//  이 함수는 답변을 쓰지 않는다. 「어디를 볼지」만 고른다.
 //
 //  Supabase → Edge Functions → law-pick 에 통째로 붙여넣고 Deploy.
 //  비밀값(Secrets)에 ANTHROPIC_API_KEY 를 넣어야 동작한다.
@@ -16,13 +16,13 @@
 import Anthropic from "npm:@anthropic-ai/sdk";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const MODEL      = "claude-haiku-4-5-20251001";
-const DAILY_MAX  = 20;      // 하루 호출 상한 — 실수로 연타해도 여기서 막힌다
-const MAX_ARTS   = 3000;    // 조 목록 상한 (토큰이 무한정 늘지 않게)
-const MAX_PICKS  = 8;
-const KRW        = 1400;    // 원/달러
+const MODEL     = "claude-haiku-4-5-20251001";
+const MAX_ARTS  = 3000;   // 조 목록 상한 — 토큰이 무한정 늘지 않게
+const MAX_PICKS = 10;
+const PREVIEW   = 180;    // 본문 미리보기 글자 수
+const KRW       = 1400;   // 원/달러
 
-// Haiku 4.5 값 ($/100만 토큰). 캐시 읽기는 0.1배, 캐시 쓰기는 1.25배.
+// Haiku 4.5 값 ($/100만 토큰). 캐시 읽기 0.1배, 캐시 쓰기 1.25배.
 const IN_USD = 1.0, OUT_USD = 5.0;
 
 const CORS = {
@@ -31,12 +31,12 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// 사람에게 보여줄 사정(상한 초과·조문 없음·질문이 짧음)은 200 으로 돌려준다.
-// supabase-js 는 200 이 아니면 본문을 안 넘겨주고 FunctionsHttpError 만 준다 —
-// 그러면 「하루 20번 다 썼어요」 같은 말이 화면까지 오지 못한다.
-function json(body: unknown, status = 200) {
+// 사람에게 보여줄 사정은 200 으로 돌려준다. supabase-js 는 200 이 아니면
+// 본문을 안 넘겨주고 FunctionsHttpError 만 주기 때문에, 그러면 무엇이
+// 잘못됐는지가 화면까지 오지 못한다.
+function json(body: unknown) {
   return new Response(JSON.stringify(body), {
-    status,
+    status: 200,
     headers: { ...CORS, "Content-Type": "application/json" },
   });
 }
@@ -48,13 +48,21 @@ const RULES = `너는 대한민국 식품의약품안전처 GMP 담당 공무원
 
 지켜야 할 것
 - 목록에 실제로 있는 번호만 고른다. 없는 번호를 지어내지 않는다.
-- 많아야 ${MAX_PICKS}개. 관련이 확실한 것부터 순서대로.
+- 많아야 ${MAX_PICKS}개. 관련이 높은 것부터 순서대로 낸다.
+- 관련이 어중간한 것을 채워 넣지 않는다. 확실한 게 둘뿐이면 둘만 낸다.
+  목록을 길게 만드는 것보다 쳐내는 것이 이 도구의 일이다.
+- rank 는 셋 중 하나로 매긴다.
+    "꼭"   질문에 바로 답하는 조. 이것부터 편다.
+    "참고" 앞뒤 사정(정의·벌칙·절차)을 아는 데 필요한 조.
+    "혹시" 관련될 수도 있으나 확신이 없는 조.
+  "꼭" 은 정말 확실한 것에만 붙인다. 애매하면 "참고" 나 "혹시" 로 내린다.
 - 조문 본문을 못 봤으므로 답을 만들지 않는다. 여기서 하는 일은 「어디를 볼지 고르는 것」뿐이다.
-- why 에는 왜 그 조를 골랐는지 한 문장으로 적는다. 본문을 못 봤다는 사실이 드러나게
+- why 에는 왜 그 조를 골랐는지 한 문장. 본문을 못 봤다는 사실이 드러나게
   「제목으로 보아 …」처럼 적는다.
 - 질문이 이 법령들과 상관없어 보이면 picks 를 비우고, note 에 무엇이 없어서 못 골랐는지 적는다.
 - note 는 한두 문장. 어느 법령을 훑었는지, 빠진 게 있어 보이면 무엇인지 적는다.
-- 모두 한국어로 쓴다.`;
+- 모두 한국어로 쓴다.
+- 답은 JSON 하나만 낸다. 앞뒤에 설명이나 \`\`\` 를 붙이지 않는다.`;
 
 const SCHEMA = {
   type: "object",
@@ -64,10 +72,11 @@ const SCHEMA = {
       items: {
         type: "object",
         properties: {
-          n:   { type: "integer" },
-          why: { type: "string" },
+          n:    { type: "integer" },
+          rank: { type: "string", enum: ["꼭", "참고", "혹시"] },
+          why:  { type: "string" },
         },
-        required: ["n", "why"],
+        required: ["n", "rank", "why"],
         additionalProperties: false,
       },
     },
@@ -85,25 +94,16 @@ Deno.serve(async (req) => {
     if (!apiKey) return json({ error: "ANTHROPIC_API_KEY 가 없어요. Edge Functions 비밀값에 넣어주세요." });
 
     const { q, lawIds } = await req.json().catch(() => ({ q: "", lawIds: null }));
+    const question = String(q || "").trim();
+    if (question.length < 5)    return json({ error: "질문을 조금 더 길게 적어주세요." });
+    if (question.length > 4000) return json({ error: "질문이 너무 길어요. 4000자 안으로 줄여주세요." });
     // 화면에서 법령을 골랐으면 그 안에서만 고른다. 안 골랐으면(null) 전부 본다.
     const only: string[] | null = Array.isArray(lawIds) && lawIds.length ? lawIds.map(String) : null;
-    const question = String(q || "").trim();
-    if (question.length < 5)   return json({ error: "질문을 조금 더 길게 적어주세요." });
-    if (question.length > 4000) return json({ error: "질문이 너무 길어요. 4000자 안으로 줄여주세요." });
 
     const db = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-
-    // --- 하루 상한 ------------------------------------------------------
-    const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-    const { count } = await db.from("ai_log")
-      .select("id", { count: "exact", head: true })
-      .gte("at", since);
-    if ((count ?? 0) >= DAILY_MAX) {
-      return json({ error: `하루 ${DAILY_MAX}번까지만 물어볼 수 있어요. 내일 다시 해주세요.`, used: count });
-    }
 
     // --- 조 목록 만들기 --------------------------------------------------
     let lawQ = db.from("laws").select("id,name");
@@ -114,8 +114,7 @@ Deno.serve(async (req) => {
 
     let artQ = db.from("law_articles").select("id,law_id,seq,label");
     if (only) artQ = artQ.in("law_id", only);
-    const { data: arts, error: ae } = await artQ
-      .order("law_id").order("seq").limit(MAX_ARTS);
+    const { data: arts, error: ae } = await artQ.order("law_id").order("seq").limit(MAX_ARTS);
     if (ae) return json({ error: "조문을 못 읽었어요: " + ae.message });
     if (!arts || !arts.length) {
       return json({ error: only
@@ -137,7 +136,7 @@ Deno.serve(async (req) => {
     const client = new Anthropic({ apiKey });
     const res: any = await client.messages.create({
       model: MODEL,
-      max_tokens: 1500,
+      max_tokens: 2000,
       system: [
         { type: "text", text: RULES },
         // 조 목록은 매번 똑같으므로 캐시에 재운다. 두 번째 질문부터 1/10 값.
@@ -148,39 +147,57 @@ Deno.serve(async (req) => {
       output_config: { format: { type: "json_schema", schema: SCHEMA } },
     } as any);
 
-    let parsed: any = { picks: [], note: "" };
-    for (const b of res.content || []) {
-      if (b.type === "text") { try { parsed = JSON.parse(b.text); } catch (_) {} }
+    // 보통은 output_config 덕분에 본문이 곧 JSON 이다. 그래도 앞뒤에 말이
+    // 붙어 오는 경우를 대비해 { … } 만 떼어내 한 번 더 시도한다.
+    let parsed: any = null, raw = "";
+    for (const b of res.content || []) if (b.type === "text") raw += b.text;
+    try { parsed = JSON.parse(raw); } catch (_) {
+      const i = raw.indexOf("{"), j = raw.lastIndexOf("}");
+      if (i >= 0 && j > i) { try { parsed = JSON.parse(raw.slice(i, j + 1)); } catch (_) {} }
     }
+    if (!parsed) return json({ error: "AI 답을 읽지 못했어요. 다시 한 번 눌러주세요." });
 
-    const picks = (parsed.picks || []).slice(0, MAX_PICKS)
+    const RANKS: Record<string, number> = { "꼭": 0, "참고": 1, "혹시": 2 };
+    let picks = (parsed.picks || []).slice(0, MAX_PICKS)
       .map((p: any) => {
         const hit = index[p.n];
-        return hit ? { id: hit.id, lawId: hit.law_id, law: hit.law, label: hit.label, why: String(p.why || "") } : null;
+        if (!hit) return null;   // 없는 번호를 지어냈으면 조용히 버린다
+        const rank = RANKS[p.rank] != null ? p.rank : "참고";
+        return { id: hit.id, lawId: hit.law_id, law: hit.law, label: hit.label,
+                 rank, why: String(p.why || "") };
       })
       .filter(Boolean);
+    // AI가 순서를 흐트러뜨려도 화면에서는 늘 「꼭 → 참고 → 혹시」 로 선다.
+    picks = picks
+      .map((p: any, i: number) => ({ p, i }))
+      .sort((a: any, b: any) => (RANKS[a.p.rank] - RANKS[b.p.rank]) || (a.i - b.i))
+      .map((x: any) => x.p);
 
-    // --- 값 계산 · 기록 --------------------------------------------------
+    // --- 고른 조문의 본문 앞부분을 붙인다 ---------------------------------
+    if (picks.length) {
+      const { data: bodies } = await db.from("law_articles")
+        .select("id,content").in("id", picks.map((p: any) => p.id));
+      const byId = new Map((bodies || []).map((b: any) => [b.id, b.content || ""]));
+      picks.forEach((p: any) => {
+        const t = String(byId.get(p.id) || "").replace(/\s+/g, " ").trim();
+        p.head = t.length > PREVIEW ? t.slice(0, PREVIEW) + "…" : t;
+      });
+    }
+
+    // --- 이번에 든 값 ----------------------------------------------------
     const u = res.usage || {};
-    const inTok = u.input_tokens || 0;
-    const cRead = u.cache_read_input_tokens || 0;
-    const cWrite = u.cache_creation_input_tokens || 0;
-    const outTok = u.output_tokens || 0;
-    const usd = (inTok * IN_USD + cRead * IN_USD * 0.1 + cWrite * IN_USD * 1.25 + outTok * OUT_USD) / 1e6;
-    const krw = Math.round(usd * KRW);
-
-    await db.from("ai_log").insert({
-      kind: "pick", model: MODEL, q: question.slice(0, 500),
-      in_tokens: inTok, cache_read: cRead, cache_write: cWrite, out_tokens: outTok, krw,
-    });
+    const usd = ((u.input_tokens || 0) * IN_USD
+               + (u.cache_read_input_tokens || 0) * IN_USD * 0.1
+               + (u.cache_creation_input_tokens || 0) * IN_USD * 1.25
+               + (u.output_tokens || 0) * OUT_USD) / 1e6;
 
     return json({
       picks,
       note: String(parsed.note || ""),
       arts: arts.length,
-      krw,
-      used: (count ?? 0) + 1,
-      max: DAILY_MAX,
+      // 조문이 상한에 닿으면 뒤쪽 법령을 아예 못 봤다는 뜻이라 알려준다
+      truncated: arts.length >= MAX_ARTS,
+      krw: Math.round(usd * KRW),
     });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) });

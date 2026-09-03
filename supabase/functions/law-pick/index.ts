@@ -51,11 +51,14 @@ const RULES = `너는 대한민국 식품의약품안전처 GMP 담당 공무원
 - 많아야 ${MAX_PICKS}개. 관련이 높은 것부터 순서대로 낸다.
 - 관련이 어중간한 것을 채워 넣지 않는다. 확실한 게 둘뿐이면 둘만 낸다.
   목록을 길게 만드는 것보다 쳐내는 것이 이 도구의 일이다.
-- rank 는 셋 중 하나로 매긴다.
-    "꼭"   질문에 바로 답하는 조. 이것부터 편다.
-    "참고" 앞뒤 사정(정의·벌칙·절차)을 아는 데 필요한 조.
-    "혹시" 관련될 수도 있으나 확신이 없는 조.
-  "꼭" 은 정말 확실한 것에만 붙인다. 애매하면 "참고" 나 "혹시" 로 내린다.
+- score 는 이 질문과 얼마나 관련 있는지를 0~100 으로 매긴다. 눈금은 이렇게 쓴다.
+    90~100  질문에 바로 답하는 조. 이것부터 편다.
+    70~89   답하려면 같이 봐야 하는 조 (정의·절차·수량·기준).
+    50~69   앞뒤 사정을 아는 데 도움이 되는 조 (벌칙·경과규정 등).
+    40~49   관련될 수도 있으나 확신이 없는 조.
+  40 미만이면 아예 내지 않는다.
+  전부 90점대로 몰아 주지 않는다. 점수가 다 같으면 순서를 매긴 뜻이 없다.
+  같은 값을 두 조에 주지 않도록 조금씩 벌린다.
 - 조문 본문을 못 봤으므로 답을 만들지 않는다. 여기서 하는 일은 「어디를 볼지 고르는 것」뿐이다.
 - why 에는 왜 그 조를 골랐는지 한 문장. 본문을 못 봤다는 사실이 드러나게
   「제목으로 보아 …」처럼 적는다.
@@ -72,11 +75,11 @@ const SCHEMA = {
       items: {
         type: "object",
         properties: {
-          n:    { type: "integer" },
-          rank: { type: "string", enum: ["꼭", "참고", "혹시"] },
-          why:  { type: "string" },
+          n:     { type: "integer" },
+          score: { type: "integer", minimum: 40, maximum: 100 },
+          why:   { type: "string" },
         },
-        required: ["n", "rank", "why"],
+        required: ["n", "score", "why"],
         additionalProperties: false,
       },
     },
@@ -157,20 +160,22 @@ Deno.serve(async (req) => {
     }
     if (!parsed) return json({ error: "AI 답을 읽지 못했어요. 다시 한 번 눌러주세요." });
 
-    const RANKS: Record<string, number> = { "꼭": 0, "참고": 1, "혹시": 2 };
     let picks = (parsed.picks || []).slice(0, MAX_PICKS)
       .map((p: any) => {
         const hit = index[p.n];
         if (!hit) return null;   // 없는 번호를 지어냈으면 조용히 버린다
-        const rank = RANKS[p.rank] != null ? p.rank : "참고";
+        // 눈금 밖 값이 오면 잘라 맞춘다. 화면이 0~100 을 전제로 그려진다.
+        let sc = Math.round(Number(p.score));
+        if (!isFinite(sc)) sc = 50;
+        sc = Math.max(0, Math.min(100, sc));
         return { id: hit.id, lawId: hit.law_id, law: hit.law, label: hit.label,
-                 rank, why: String(p.why || "") };
+                 score: sc, why: String(p.why || "") };
       })
       .filter(Boolean);
-    // AI가 순서를 흐트러뜨려도 화면에서는 늘 「꼭 → 참고 → 혹시」 로 선다.
+    // AI가 순서를 흐트러뜨려도 화면에서는 늘 점수 높은 것부터 선다.
     picks = picks
       .map((p: any, i: number) => ({ p, i }))
-      .sort((a: any, b: any) => (RANKS[a.p.rank] - RANKS[b.p.rank]) || (a.i - b.i))
+      .sort((a: any, b: any) => (b.p.score - a.p.score) || (a.i - b.i))
       .map((x: any) => x.p);
 
     // --- 고른 조문의 본문 앞부분을 붙인다 ---------------------------------

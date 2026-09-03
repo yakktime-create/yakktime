@@ -546,8 +546,10 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 /* 검색창 안의 검색 버튼 */
 /* 칸이 여러 줄로 자라도 버튼은 첫 줄 옆에 머문다 (가운데 정렬이면 아래로 내려간다) */
 .search-box .law-go{position:absolute;right:6px;top:7px;padding:7px 15px;}
-textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;
-  line-height:var(--lh-snug);display:block;}
+/* 네 줄까지만 자라고 그 뒤로는 칸 안에서 스크롤한다.
+   글만큼 끝없이 자라면 아래 내용이 화면 밖으로 밀린다. */
+textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-height:118px;
+  line-height:var(--lh-snug);display:block;-webkit-overflow-scrolling:touch;}
 .input.search.law-input{padding-right:78px;}
 
 .upload-bar.busy{cursor:progress;opacity:.75;border-style:solid;border-color:var(--blue);
@@ -971,11 +973,13 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .ask-law{font-size:var(--fs-xs);color:var(--muted);background:var(--paper);
   border-radius:var(--r-full);padding:2px 8px;}
 .ask-why{margin-top:3px;font-size:var(--fs-md);color:var(--muted);line-height:var(--lh-snug);}
-/* 관련도 — 「꼭」만 진하게. 셋 다 진하면 순서가 안 읽힌다 */
-.ask-rank{flex:none;font-size:var(--fs-2xs);font-weight:800;border-radius:var(--r-full);
-  padding:2px 8px;background:var(--paper);color:var(--muted);}
-.ask-item.r-1 .ask-rank{background:var(--accent);color:#fff;}
-.ask-item.r-2 .ask-rank{background:var(--accent-soft);color:var(--accent);}
+/* 관련도 — 숫자로 적되 색으로 한 번 더 갈라 준다. 숫자만 있으면 훑을 때 안 읽힌다.
+   90↑ 진하게 · 60↑ 옅게 · 그 아래 회색. 폭을 고정해 숫자가 세로로 줄을 맞춘다. */
+.ask-score{flex:none;width:34px;text-align:center;font-size:var(--fs-xs);font-weight:800;
+  font-variant-numeric:tabular-nums;border-radius:var(--r-full);padding:2px 0;
+  background:var(--paper);color:var(--muted);}
+.ask-item.r-1 .ask-score{background:var(--accent);color:#fff;}
+.ask-item.r-2 .ask-score{background:var(--accent-soft);color:var(--accent);}
 .ask-item.r-1{border-left-color:var(--accent);}
 /* 조문 본문 앞부분 — 창을 열지 않고도 맞는지 가늠하라고 붙인다 */
 .ask-head-txt{margin-top:6px;padding:8px 11px;background:var(--paper);

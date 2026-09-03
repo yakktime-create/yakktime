@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v54";
+var APP_VER="v55";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2015,7 +2015,7 @@ function lawAskRun(){
     if(!d){ showToast("물어보지 못했어요: "+((r&&r.error&&r.error.message)||"응답이 비었어요"),true); done(); return; }
     if(d.error){ showToast(d.error,true); done(); return; }
     d.q=q; lawAsk=d; lawAskSel={}; lawAskMore=false;
-    (d.picks||[]).forEach(function(p){ if(p.rank!=="혹시") lawAskSel[p.id]=true; });
+    (d.picks||[]).forEach(function(p){ if(p.score>=ASK_KEEP) lawAskSel[p.id]=true; });
     done();
   }).catch(function(e){ showToast("물어보지 못했어요: "+e.message,true); done(); });
 }
@@ -2074,17 +2074,20 @@ function lawAskHtml(){
     return '<div class="ask-box">'+head
       + '<p class="ask-none">올려둔 법령에서는 관련 조문을 못 찾았어요.</p>'
       + (d.note?'<p class="ask-note">'+esc(d.note)+'</p>':'')+'</div>';
-  /* 「혹시」는 접어 둔다. 결과가 길어지면 위쪽 확실한 것부터 보이지 않는다 —
+  /* 점수가 낮은 것은 접어 둔다. 결과가 길어지면 위쪽 확실한 것부터 보이지 않는다 —
    * 화면을 넘기지 않고도 볼 것부터 보이게 하는 게 이 접기의 목적이다. */
-  var sure=d.picks.filter(function(p){ return p.rank!=="혹시"; });
-  var maybe=d.picks.filter(function(p){ return p.rank==="혹시"; });
+  var sure=d.picks.filter(function(p){ return p.score>=ASK_KEEP; });
+  var maybe=d.picks.filter(function(p){ return p.score<ASK_KEEP; });
   var shown=lawAskMore?d.picks:sure;
   function askItem(p){
     var on=!!lawAskSel[p.id];
-    return '<li class="ask-item'+(on?" on":"")+' r-'+(p.rank==="꼭"?"1":p.rank==="참고"?"2":"3")+'">'
+    /* 점수는 AI가 스스로 매긴 값이라 잰 값이 아니다. 그래도 숫자로 보여야
+     * 순서가 읽히고, 어디서 끊을지도 눈으로 정할 수 있다. */
+    var band=p.score>=90?"1":p.score>=ASK_KEEP?"2":"3";
+    return '<li class="ask-item'+(on?" on":"")+' r-'+band+'">'
       + '<label class="ask-check"><input type="checkbox" data-act="ask-pick" data-id="'+esc(p.id)+'"'+(on?" checked":"")+' /></label>'
       + '<div class="ask-item-body">'
-      +   '<div class="ask-art"><span class="ask-rank">'+esc(p.rank)+'</span><b>'+esc(p.label)+'</b>'
+      +   '<div class="ask-art"><span class="ask-score" title="AI가 매긴 관련도">'+p.score+'</span><b>'+esc(p.label)+'</b>'
       +     '<span class="ask-law">'+esc(p.law)+'</span>'
       +     '<button class="link-btn law-go-art" data-act="law-art" data-art-id="'+esc(p.id)+'" data-id="'+esc(p.lawId)+'">전체 보기</button></div>'
       +   '<div class="ask-why">'+esc(p.why)+'</div>'
@@ -2095,12 +2098,12 @@ function lawAskHtml(){
   var items=shown.map(askItem).join("")
     + (maybe.length&&!lawAskMore
         ? '<li class="ask-more"><button class="link-btn" data-act="ask-more">'
-          + '「혹시」로 고른 '+maybe.length+'개 더 보기</button></li>' : '');
+          + '관련도 '+ASK_KEEP+' 미만 '+maybe.length+'개 더 보기</button></li>' : '');
   var nSel=Object.keys(lawAskSel).filter(function(k){ return lawAskSel[k]; }).length;
   var nSure=sure.length;
   /* 낱말 검색 결과와 같은 부품·같은 자리 — 한쪽만 다르게 생기면 매번 다시 배워야 한다 */
   var acts='<div class="law-head"><div class="law-count">'+d.picks.length+'곳'
-    + (maybe.length?' <span class="law-and">볼 만한 것 '+nSure+'곳</span>':'')
+    + (maybe.length?' <span class="law-and">관련도 '+ASK_KEEP+' 이상 '+nSure+'곳</span>':'')
     + (nSel?' · <span class="law-picked">'+nSel+'곳 선택</span>':'')+'</div>'
     + '<div class="law-actions">'
     +   '<button class="link-btn" data-act="ask-all">모두 선택</button>'
@@ -2117,12 +2120,15 @@ function lawAskHtml(){
     +   '골라서 「복사」하면 <b>조문 원문</b>이 통째로 따라옵니다.</p></div>';
 }
 
+/* 이 점수부터를 「볼 만한 것」으로 친다. 처음부터 체크되고, 접히지 않는다. */
+var ASK_KEEP=60;
+
 /* 문장처럼 보이면 ✦ 를 내보낸다. 낱말 한둘일 땐 쓸 일이 없다. */
 function lawAskFits(t){ return String(t||"").trim().length>=12; }
 /* 칸이 내용만큼 자라게 + ✦ 줄을 보이거나 감추기 */
 function lawQBox(q){
   q.style.height="auto";
-  q.style.height=Math.min(q.scrollHeight,168)+"px";
+  q.style.height=Math.min(q.scrollHeight,118)+"px";   /* 네 줄까지. 그 뒤는 칸 안에서 스크롤 */
   var bar=document.querySelector(".ask-bar");
   if(bar) bar.classList.toggle("gone",!lawAskFits(q.value));
 }

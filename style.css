@@ -804,11 +804,15 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 .law-art.lv1{background:var(--blue-soft);color:var(--blue-deep);}
 .law-art.lv2{background:var(--paper);color:var(--muted);}
 
-/* --- 일정 행: 시간 · 제목 · 장소 --- */
-.ev-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
-.ev-line{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap;min-width:0;}
-.ev-line.sub{font-size:var(--fs-sm);color:var(--muted);}
-.ev-place{cursor:pointer;border-radius:var(--r-xs);padding:1px 3px;}
+/* --- 일정 행: 시간 · 제목 · 장소를 한 줄에.
+   좁은 화면에서만 자연스럽게 다음 줄로 넘어간다. --- */
+.ev-body{flex:1;min-width:0;display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap;}
+/* .ev-title 의 flex:1 이 제목을 늘려 장소를 오른쪽 끝으로 밀어낸다.
+   제목이 짧으면 멀고 길면 붙어서 위치가 들쭉날쭉하므로, 장소는 제목 바로 옆에 둔다. */
+.ev-body .ev-title{flex:0 1 auto;min-width:0;}
+.ev-body .mfds-status{margin-left:auto;}
+.ev-place{cursor:pointer;border-radius:var(--r-xs);padding:1px 4px;
+  font-size:var(--fs-sm);color:var(--muted);min-width:0;}
 .ev-place:hover{background:var(--paper);}
 /* 아직 안 적은 자리 — 너무 흐리면 누를 수 있다는 걸 모른다 */
 .ev-place .none,.ev-time .none{color:var(--muted);opacity:.55;font-weight:500;}

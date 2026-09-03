@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v31";
+var APP_VER="v32";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -521,9 +521,9 @@ function renderToday(){
   var evHtml="";
   if(todayEv.length){ evHtml+='<div class="card"><div class="card-head"><h2>오늘 일정</h2></div>'+todayEv.map(function(e){ return '<div class="ev-row">'
       + '<span class="ev-time">'+esc(e.time||"종일")+'</span>'
-      + '<div class="ev-body"><div class="ev-line"><span class="ev-title">'+esc(e.title)+'</span></div>'
-      +   (e.place? '<div class="ev-line sub"><span class="ev-place">📍 '+esc(e.place)+'</span>'
-                    +'<button class="link-btn map-btn" data-act="map" data-q="'+esc(e.place)+'">지도 ↗</button></div>' : '')
+      + '<div class="ev-body"><span class="ev-title">'+esc(e.title)+'</span>'
+      +   (e.place? '<span class="ev-place">\ud83d\udccd '+esc(e.place)+'</span>'
+                    +'<button class="link-btn map-btn" data-act="map" data-q="'+esc(e.place)+'">지도 \u2197</button>' : '')
       + '</div></div>'; }).join("")+'</div>'; }
   if(upcoming.length){ evHtml+='<div class="card"><div class="card-head"><h2>다가오는 일정</h2><span class="muted" data-act="tab" data-id="calendar" style="cursor:pointer">캘린더 열기 →</span></div>'+upcoming.map(function(e){ return '<div class="up-row">'
       + '<span class="up-date">'+esc(shortDate(e.key))+'</span>'
@@ -598,10 +598,10 @@ function renderCalendar(){
       + '<input class="day-check" type="checkbox" data-act="mfds-done" data-id="'+t.id+'"'+(done?' checked':'')+' />'
       + '<span class="ev-time" data-act="edit" data-table="mfds" data-field="time" data-id="'+t.id+'" title="눌러서 시간 수정">'+(t.time?esc(t.time):'<span class="none">시간</span>')+'</span>'
       + '<div class="ev-body">'
-      +   '<div class="ev-line"><span class="mfds-badge">식약처</span>'
-      +     '<span class="ev-title" data-act="edit" data-table="mfds" data-field="title" data-id="'+t.id+'" title="눌러서 수정">'+esc(t.title)+'</span>'
-      +     '<span class="mfds-status">'+esc(t.status)+'</span></div>'
-      +   '<div class="ev-line sub">'+whereHtml(t,"mfds")+'</div>'
+      +   '<span class="mfds-badge">식약처</span>'
+      +   '<span class="ev-title" data-act="edit" data-table="mfds" data-field="title" data-id="'+t.id+'" title="눌러서 수정">'+esc(t.title)+'</span>'
+      +   whereHtml(t,"mfds")
+      +   '<span class="mfds-status">'+esc(t.status)+'</span>'
       + '</div>'
       + '<span class="row-acts"><button class="del" data-act="mfds-del" data-id="'+t.id+'" title="삭제">✕</button></span></li>'; }).join("");
   var panel='<div class="day-panel"><div class="day-title">'+(selD.getMonth()+1)+'월 '+selD.getDate()+'일 ('+WD[selD.getDay()]+')'+(calSel===todayKey?' <span class="day-today">오늘</span>':'')+'</div>'
@@ -622,8 +622,8 @@ function renderCalendar(){
     + ((selEvs.length||selTasks.length)? '<ul class="list">'+taskRows+selEvs.map(function(e){ return '<li class="ev-row">'
       + '<span class="ev-time" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'+(e.time?esc(e.time):"종일")+'</span>'
       + '<div class="ev-body">'
-      +   '<div class="ev-line"><span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span></div>'
-      +   '<div class="ev-line sub">'+whereHtml(e,"events")+'</div>'
+      +   '<span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span>'
+      +   whereHtml(e,"events")
       + '</div>'
       + '<span class="row-acts"><button class="del" data-act="ev-del" data-id="'+e.id+'" title="삭제">✕</button></span></li>'; }).join("")+'</ul>' : '<p class="empty">이 날은 아직 일정이 없어요.</p>')+'</div>';
   var mk=calYear+"-"+pad(calMonth+1);

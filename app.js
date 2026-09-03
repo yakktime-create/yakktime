@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v32";
+var APP_VER="v33";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -610,15 +610,15 @@ function renderCalendar(){
     +   '<div class="field-row">'
     +     '<label class="field"><span class="field-lbl">시간</span>'
     +       '<input class="input" id="day-time" inputmode="numeric" placeholder="14:00" /></label>'
-    +     '<label class="field grow"><span class="field-lbl">장소</span>'
-    +       '<input class="input" id="day-place" list="place-opts" placeholder="오송 본관 3층 · 전에 적은 곳이 자동으로 떠요" /></label>'
+    +     '<label class="field grow ac-wrap"><span class="field-lbl">장소</span>'
+    +       '<input class="input" id="day-place" autocomplete="off" placeholder="두 글자 이상 치면 장소를 찾아요" />'
+    +       placeACBox("day-place-ac")+'</label>'
     +   '</div>'
     +   '<div class="composer-foot">'
     +     segC("day-kind",["일정","식약처 업무"],"일정")
     +     '<div class="composer-btns"><button class="btn" data-act="day-add">+ 추가</button></div>'
     +   '</div>'
     + '</div>'
-    + placeDatalist("place-opts")
     + ((selEvs.length||selTasks.length)? '<ul class="list">'+taskRows+selEvs.map(function(e){ return '<li class="ev-row">'
       + '<span class="ev-time" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'+(e.time?esc(e.time):"종일")+'</span>'
       + '<div class="ev-body">'
@@ -634,6 +634,7 @@ function renderCalendar(){
     + '<div class="cal-nav"><button class="cal-arrow" data-act="cal-prev">‹</button><span class="cal-month">'+calYear+'년 '+(calMonth+1)+'월</span><button class="cal-arrow" data-act="cal-next">›</button></div>'
     + '<div class="cal-grid">'+wdHtml+cells+'</div>'+panel+'</div>';
   wireSeg("day-kind");
+  wirePlaceAC("day-place","day-place-ac");
   ["day-ev","day-time","day-place"].forEach(function(id){
     var el=document.getElementById(id);
     if(el) el.addEventListener("keydown",function(e){ if(e.key==="Enter") dayAdd(); });
@@ -798,9 +799,11 @@ function mfdsComposer(){
     +   segC("m-status",MFDS_STATUS,"대기")
     +   '<div class="due-field"><label for="m-due">기한</label><input class="input" type="date" id="m-due" /></div>'
     +   '<div class="due-field"><label for="m-time">시간</label><input class="input" id="m-time" placeholder="14:00" /></div>'
-    +   '<div class="due-field wide"><label for="m-place">장소</label><input class="input" id="m-place" list="place-opts-m" placeholder="오송 본관 3층" /></div>'
+    +   '<div class="due-field wide ac-wrap"><label for="m-place">장소</label>'
+    +     '<input class="input" id="m-place" autocomplete="off" placeholder="두 글자 이상 치면 장소를 찾아요" />'
+    +     placeACBox("m-place-ac")+'</div>'
     +   composerBtns("mfds","m-add")
-    + '</div>'+placeDatalist("place-opts-m")+'</div>';
+    + '</div></div>';
 }
 
 function renderMfds(){
@@ -818,7 +821,7 @@ function renderMfds(){
     + boardHtml("mfds",MFDS_STATUS,items,function(it){ return mfdsCard(it,todayKey); },{status:"완료",label:"지난 업무"})
     + '</div>';
 
-  if(formOpen.mfds){ wireSeg("m-status"); focusFirst("m-title"); }
+  if(formOpen.mfds){ wireSeg("m-status"); focusFirst("m-title"); wirePlaceAC("m-place","m-place-ac"); }
   wireBoardSearch("mfds");
   wireBoardDrag();
 }
@@ -1232,11 +1235,66 @@ function placeList(){
   });
   return out.sort();
 }
-function placeDatalist(id){
-  return '<datalist id="'+id+'">'
-    + placeList().map(function(p){ return '<option value="'+esc(p)+'"></option>'; }).join("")
-    + '</datalist>';
+/* ---------- 장소 자동완성 ----------
+ * 두 갈래를 한 목록에 합친다.
+ *   1) 전에 적은 장소  — 즉시, 자주 가는 곳
+ *   2) 카카오 장소 검색 — 처음 가는 곳
+ * 카카오 열쇠는 Supabase 함수 안에만 있고 앱은 그 함수만 부른다.
+ * 함수가 실패해도 1)은 계속 되므로 입력이 막히지 않는다. */
+var placeAC={ box:null, input:null, items:[], timer:null, seq:0 };
+
+function placeSearch(q){
+  return withAuthRetry(function(){
+    return sb.functions.invoke("place-search",{body:{q:q}});
+  }).then(function(res){
+    if(res.error) return [];
+    return (res.data&&res.data.places)||[];
+  }).catch(function(){ return []; });
 }
+
+function placeACHtml(){
+  if(!placeAC.items.length) return "";
+  return placeAC.items.map(function(it,i){
+    return '<button class="ac-item" data-act="ac-pick" data-i="'+i+'">'
+      + '<span class="ac-name">'+esc(it.name)+'</span>'
+      + (it.addr?'<span class="ac-addr">'+esc(it.addr)+'</span>':'')
+      + (it.old?'<span class="ac-tag">전에 적음</span>':'')
+      + '</button>';
+  }).join("");
+}
+function placeACRender(){
+  if(!placeAC.box) return;
+  placeAC.box.innerHTML=placeACHtml();
+  placeAC.box.style.display=placeAC.items.length?"block":"none";
+}
+function placeACHide(){ placeAC.items=[]; placeACRender(); }
+
+function wirePlaceAC(inputId,boxId){
+  var input=document.getElementById(inputId), box=document.getElementById(boxId);
+  if(!input||!box) return;
+  placeAC.input=input; placeAC.box=box; placeAC.items=[];
+  input.addEventListener("input",function(){
+    var q=input.value.trim();
+    clearTimeout(placeAC.timer);
+    if(q.length<2){ placeACHide(); return; }
+    /* 전에 적은 곳은 기다릴 것 없이 바로 보여준다 */
+    var mine=placeList().filter(function(p){ return p.toLowerCase().indexOf(q.toLowerCase())>=0; })
+      .slice(0,3).map(function(p){ return {name:p,addr:"",old:true}; });
+    placeAC.items=mine; placeACRender();
+    var seq=++placeAC.seq;
+    placeAC.timer=setTimeout(function(){
+      placeSearch(q).then(function(found){
+        if(seq!==placeAC.seq||document.activeElement!==input) return;
+        var have={}; mine.forEach(function(m){ have[m.name]=1; });
+        placeAC.items=mine.concat(found.filter(function(f){ return !have[f.name]; }));
+        placeACRender();
+      });
+    },350);
+  });
+  input.addEventListener("blur",function(){ setTimeout(placeACHide,180); });
+}
+
+function placeACBox(id){ return '<div class="ac-list" id="'+id+'" style="display:none"></div>'; }
 
 function dayAdd(){
   var raw=(val("day-ev")||"").trim(); if(!raw) return;
@@ -2602,6 +2660,11 @@ document.getElementById("app").addEventListener("click",function(e){
     case "cal-next": calMonth++; if(calMonth>11){calMonth=0;calYear++;} calSyncSel(); render(); break;
     case "cal-day": calSel=id; render(); focusDayPanel(); break;
     case "map": openMap(el.getAttribute("data-q")); break;
+    case "ac-pick": {
+      var it=placeAC.items[parseInt(el.getAttribute("data-i"),10)];
+      if(it&&placeAC.input){ placeAC.input.value=it.name; placeAC.input.focus(); }
+      placeACHide(); break;
+    }
     case "day-add": dayAdd(); break;
     case "ev-del": evDel(id); break;
     case "a-add": addArticle(); break;

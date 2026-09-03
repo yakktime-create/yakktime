@@ -847,3 +847,23 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 @media (max-width:640px){
   .field{flex:1 1 100%;}
 }
+
+/* --- 장소 자동완성 목록 --- */
+.ac-wrap{position:relative;}
+.ac-list{position:absolute;left:0;right:0;top:100%;z-index:40;margin-top:var(--sp-1);
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);
+  box-shadow:var(--sh-2);overflow:hidden;max-height:280px;overflow-y:auto;
+  -webkit-overflow-scrolling:touch;}
+.ac-item{display:flex;align-items:baseline;gap:var(--sp-2);width:100%;text-align:left;
+  border:none;background:none;font-family:inherit;cursor:pointer;
+  padding:11px 14px;border-bottom:1px solid var(--line);
+  -webkit-tap-highlight-color:transparent;}
+.ac-item:last-child{border-bottom:none;}
+.ac-item:hover,.ac-item:active{background:var(--accent-soft);}
+.ac-name{font-size:var(--fs-md);font-weight:600;color:var(--ink);flex-shrink:0;}
+.ac-addr{font-size:var(--fs-sm);color:var(--muted);min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;}
+.ac-tag{margin-left:auto;flex-shrink:0;font-size:var(--fs-xs);font-weight:650;
+  color:var(--accent);background:var(--accent-soft);border-radius:var(--r-full);
+  padding:2px 8px;}
+@media (hover:none){ .ac-item{padding:13px 14px;} }

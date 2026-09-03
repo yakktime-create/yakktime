@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v39";
+var APP_VER="v40";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -669,7 +669,7 @@ function renderCalendar(){
     +       placeACBox("day-place-ac")+'</label>'
     +   '</div>'
     +   (dayKind==="출장"
-        ? '<label class="field grow"><span class="field-lbl">메모 — 비행·숙소처럼 한눈에 볼 것</span>'
+        ? '<label class="field memo"><span class="field-lbl">메모 — 비행·숙소처럼 한눈에 볼 것</span>'
           + '<textarea class="input day-memo" id="day-memo" rows="2">'+esc(TRIP_MEMO)+'</textarea></label>'
         : '')
     +   '<div class="composer-foot">'

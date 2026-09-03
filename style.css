@@ -129,10 +129,12 @@ textarea.input{min-height:60px;resize:vertical;line-height:var(--lh-snug);width:
 .cal-month{font-size:var(--fs-xl);font-weight:680;font-family:Georgia,serif;}
 .cal-arrow{background:none;border:1px solid var(--line);border-radius:var(--r-sm);width:32px;height:32px;cursor:pointer;color:var(--ink);font-size:var(--fs-lg);}
 .cal-arrow:hover{border-color:var(--accent);color:var(--accent);}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:var(--sp-1);}
+/* 1fr 은 내용이 길면 칸을 밀어낸다. 막대가 칸 밖으로 나가야 해서 overflow 를
+   풀었더니 긴 제목이 열 너비를 흔들었다. minmax(0,1fr) 로 못 늘어나게 막는다. */
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:var(--sp-1);}
 .cal-wd{text-align:center;font-size:var(--fs-xs);color:var(--muted);padding:4px 0;font-weight:600;}
 .cal-wd.sun{color:var(--brick);}
-.cal-cell{min-height:74px;border:1px solid var(--line);border-radius:var(--r-sm);padding:6px;cursor:pointer;background:var(--surface);transition:.12s;display:flex;flex-direction:column;gap:var(--sp-1);}
+.cal-cell{min-height:74px;min-width:0;border:1px solid var(--line);border-radius:var(--r-sm);padding:6px;cursor:pointer;background:var(--surface);transition:.12s;display:flex;flex-direction:column;gap:var(--sp-1);}
 .cal-cell:hover{border-color:var(--accent);}
 .cal-cell.blank{background:transparent;border:none;cursor:default;}
 .cal-cell.today{background:var(--accent-soft);border-color:var(--accent);}
@@ -903,11 +905,15 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 
 /* --- 출장: 메모를 한눈에 --- */
 .field.wide{flex:1 1 180px;}
-textarea.day-memo{resize:vertical;height:60px;min-height:60px;line-height:var(--lh-snug);
-  font-family:inherit;font-size:var(--fs-md);padding-top:8px;padding-bottom:8px;}
+/* 세로로 쌓이는 자리에서는 flex-basis 가 높이가 된다 — .grow 를 쓰면 칸이 늘어난다 */
+.field.memo{flex:none;width:100%;}
+textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
+  overflow-y:auto;line-height:var(--lh-snug);font-family:inherit;
+  font-size:var(--fs-md);padding-top:8px;padding-bottom:8px;}
 /* 메모가 있으면 제목 아래 줄로 통째로 보인다 (비행·숙소 시각을 한눈에) */
 .ev-memo{flex:1 1 100%;font-size:var(--fs-sm);color:var(--muted);
   white-space:pre-wrap;line-height:var(--lh-snug);cursor:pointer;
-  border-radius:var(--r-xs);padding:1px 4px;margin-top:2px;}
+  border-radius:var(--r-xs);padding:1px 4px;margin-top:2px;
+  max-height:96px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 .ev-memo:hover{background:var(--paper);}
 .ev-memo .none{opacity:.55;font-weight:500;}

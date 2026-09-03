@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v43";
+var APP_VER="v44";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -503,18 +503,20 @@ function cleanupDrag(){
   dragState=null;
 }
 
-/* 캘린더에서 날짜를 누르면 아래 입력칸이 보이도록 스크롤 + 포커스 */
+/* 화면을 함부로 움직이지 않는다.
+ * 예전엔 날짜를 누를 때마다 아래 입력칸을 화면 한가운데로 끌어오고
+ * 자동으로 커서까지 넣었다. 그러면 아이패드에선 자판까지 올라와
+ * 날짜만 이리저리 눌러보는데 화면이 계속 튀었다.
+ * 이제는 「아예 안 보일 때만, 보일 만큼만」 움직인다. */
+function scrollIntoViewIfHidden(el){
+  if(!el||!el.getBoundingClientRect||!el.scrollIntoView) return;
+  var r=el.getBoundingClientRect(), vh=window.innerHeight||document.documentElement.clientHeight;
+  if(r.bottom>60 && r.top<vh-60) return;   /* 조금이라도 보이면 그대로 둔다 */
+  el.scrollIntoView({behavior:"smooth",block:"nearest"});
+}
 /* 기간을 고르라고 해놓고 달력이 화면 밖에 있으면 안 된다 */
-function focusCal(){
-  var g=document.querySelector(".cal-grid");
-  if(g&&g.scrollIntoView) g.scrollIntoView({behavior:"smooth",block:"center"});
-}
-function focusDayPanel(){
-  var panel=document.querySelector(".day-panel");
-  var inp=document.getElementById("day-ev");
-  if(panel&&panel.scrollIntoView) panel.scrollIntoView({behavior:"smooth",block:"center"});
-  if(inp) inp.focus();
-}
+function focusCal(){ scrollIntoViewIfHidden(document.querySelector(".cal-grid")); }
+function focusDayPanel(){ scrollIntoViewIfHidden(document.querySelector(".day-panel")); }
 
 /* 9/11~9/20 (10일) */
 function spanLabel(a,b){

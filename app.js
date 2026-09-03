@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v51";
+var APP_VER="v52";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1985,9 +1985,55 @@ function isNoArtCol(err){
   return m.indexOf("article")>=0&&(m.indexOf("column")>=0||m.indexOf("does not exist")>=0);
 }
 
+/* ===== 법령 AI — 「어느 조를 펴 볼까」 고르기 =====
+ * 답변은 쓰지 않는다. 어디를 볼지만 고른다.
+ * 값이 싼 쪽(Haiku)만 쓰므로 엉뚱한 질문을 해도 재시도가 싸다.
+ * API 키는 Supabase Edge Function(law-pick) 비밀값에만 있다 — 여기엔 없다. */
+var lawAsk=null, lawAsking=false, lawAskUsed=null, lawAskMax=null;
+
+function lawAskRun(){
+  var q=(val("law-q")||"").trim();
+  if(q.length<5){ showToast("질문을 문장으로 적어주세요. 민원 글을 그대로 붙여넣어도 돼요."); return; }
+  if(!S.laws.length){ showToast("먼저 법령 PDF를 올려주세요."); return; }
+  lawQuery=q; lawHits=null; lawSel={}; lawOpen={};
+  lawAsking=true; lawAsk=null; renderLawResults();
+  function done(){ lawAsking=false; renderLawResults(); }
+  sb.functions.invoke("law-pick",{body:{q:q}}).then(function(r){
+    var d=r&&r.data;
+    if(!d){ showToast("물어보지 못했어요: "+((r&&r.error&&r.error.message)||"응답이 비었어요"),true); done(); return; }
+    if(d.error){ showToast(d.error,true); done(); return; }
+    d.q=q; lawAsk=d;
+    if(d.used!=null){ lawAskUsed=d.used; lawAskMax=d.max; }
+    done();
+  }).catch(function(e){ showToast("물어보지 못했어요: "+e.message,true); done(); });
+}
+
+function lawAskHtml(){
+  var d=lawAsk;
+  var head='<div class="ask-head"><span class="ask-qt">「'+esc(d.q)+'」</span>'
+    + '<span class="ask-cost">이번 '+(d.krw||0)+'원'
+    +   (d.used!=null?' · 오늘 '+d.used+'/'+d.max:'')+'</span></div>';
+  if(!d.picks||!d.picks.length)
+    return '<div class="ask-box">'+head
+      + '<p class="ask-none">올려둔 법령에서는 관련 조문을 못 찾았어요.</p>'
+      + (d.note?'<p class="ask-note">'+esc(d.note)+'</p>':'')+'</div>';
+  var items=d.picks.map(function(p){
+    return '<li class="ask-item">'
+      + '<div class="ask-art"><b>'+esc(p.label)+'</b>'
+      +   '<span class="ask-law">'+esc(p.law)+'</span>'
+      +   '<button class="link-btn law-go-art" data-act="law-art" data-art-id="'+esc(p.id)+'" data-id="'+esc(p.lawId)+'">전체 보기</button></div>'
+      + '<div class="ask-why">'+esc(p.why)+'</div></li>';
+  }).join("");
+  return '<div class="ask-box">'+head
+    + (d.note?'<p class="ask-note">'+esc(d.note)+'</p>':'')
+    + '<ol class="ask-list">'+items+'</ol>'
+    /* 도구지 답변자가 아니다. 이 줄을 지우면 안 된다. */
+    + '<p class="ask-foot">AI는 <b>제목만 보고</b> 어디를 볼지 골랐어요. 조문을 열어 직접 확인하세요.</p></div>';
+}
+
 function lawSearch(){
   var q=(val("law-q")||"").trim();
-  lawQuery=q; lawSel={}; lawHits=null; lawOpen={};
+  lawQuery=q; lawSel={}; lawHits=null; lawOpen={}; lawAsk=null; lawAsking=false;
   lawTermList=lawTerms(q);
   if(!lawTermList.length){ renderLawResults(); showToast("두 글자 이상 입력해 주세요."); return; }
   if(!S.laws.length){ renderLawResults(); showToast("먼저 법령 PDF를 올려주세요."); return; }
@@ -2792,9 +2838,15 @@ function renderLaws(){
   view().innerHTML='<div class="page">'
     + pageHead2("법령","올려둔 법령 전체에서 단어를 찾고, 결과를 골라 모아요.",items.length?pills:null)
     + '<div class="search-box"><span class="search-ic">⌕</span>'
-    +   '<input class="input search law-input" id="law-q" placeholder="낱말을 띄어 쓰면 모두 포함 (예: 냉장 운송)" value="'+esc(lawQuery)+'" />'
+    +   '<input class="input search law-input" id="law-q" placeholder="낱말로 찾거나, 민원 질문을 그대로 붙여넣어요" value="'+esc(lawQuery)+'" />'
     +   '<button class="btn sm law-go" data-act="law-search">검색</button>'
     + '</div>'
+    /* 돈이 드는 동작이라 검색칸 안에 넣지 않는다. 눌러야만 나간다. */
+    + '<button class="ask-bar'+(lawAsking?" busy":"")+'" data-act="law-ask"'+(lawAsking?" disabled":"")+'>'
+    +   '<span class="ask-ic">✦</span>'
+    +   '<span class="ask-bar-t">'+(lawAsking?"관련 조문을 고르는 중...":"위에 적은 말로 <b>관련 조문 찾아줘</b>")+'</span>'
+    +   '<span class="ask-bar-n">'+(lawAskUsed!=null?"오늘 "+lawAskUsed+"/"+lawAskMax:"한 번에 약 5원")+'</span>'
+    + '</button>'
     + lawHelpHtml()
     + '<button class="upload-bar'+(lawBusy?" busy":"")+'" data-act="law-upload"'+(lawBusy?" disabled":"")+'>'
     +   '<span class="upload-ic">⬆</span><div class="import-bar-text">'
@@ -2813,6 +2865,10 @@ function renderLaws(){
 function renderLawResults(){
   var el=document.getElementById("law-results"); if(!el) return;
 
+  /* AI가 고른 조문이 있으면 그걸 보여준다. 낱말 검색과 한 자리를 나눠 쓴다 —
+   * 둘이 같이 떠 있으면 무엇을 보고 있는지 헷갈린다. */
+  if(lawAsking){ el.innerHTML='<p class="empty">질문을 읽고 관련 조문을 고르는 중이에요...</p>'; return; }
+  if(lawAsk){ el.innerHTML=lawAskHtml(); return; }
   if(lawSearching){ el.innerHTML='<p class="empty">찾는 중...</p>'; return; }
   if(lawHits===null){
     el.innerHTML=S.laws.length
@@ -2972,6 +3028,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "m-del": del("mfds",id); break;
     case "law-upload": lawUploadClick(); break;
     case "law-search": lawSearch(); break;
+    case "law-ask": lawAskRun(); break;
     case "law-list": lawListOpen=!lawListOpen; render(); break;
     case "law-view": openLawView(id,parseInt(el.getAttribute("data-page"),10)||1); break;
     case "law-reindex": lawReindex(id); break;

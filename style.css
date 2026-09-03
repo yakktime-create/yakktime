@@ -917,12 +917,49 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
   min-height:var(--tap);display:flex;align-items:center;}
 .ev-span.on{background:var(--brass);color:#fff;}
 
+/* ===== 법령 AI — 관련 조문 골라주기 =====
+   돈이 드는 동작이라 검색칸 안에 숨기지 않는다. 한 줄을 따로 내주고,
+   이번에 얼마 들었는지·오늘 몇 번 썼는지를 그 자리에 적는다.
+   값이 안 보이면 얼마나 쓰는지 모르게 된다. */
+.ask-bar{display:flex;align-items:center;gap:var(--sp-2);width:100%;
+  min-height:var(--tap);margin:-6px 0 var(--sp-4);
+  padding:10px var(--sp-4);border:1px dashed var(--brass-bd);border-radius:var(--r-md);
+  background:var(--brass-band);color:var(--ink);font-family:inherit;font-size:var(--fs-md);
+  text-align:left;cursor:pointer;transition:.15s;-webkit-tap-highlight-color:transparent;}
+.ask-bar:active{background:var(--brass-soft);}
+.ask-bar[disabled]{opacity:.6;cursor:default;}
+.ask-ic{flex:none;color:var(--brass);font-size:var(--fs-lg);}
+.ask-bar-t{min-width:0;}
+.ask-bar-t b{color:var(--brass);font-weight:700;}
+.ask-bar-n{margin-left:auto;flex:none;font-size:var(--fs-xs);color:var(--muted);}
+
+.ask-box{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);
+  padding:var(--sp-4);box-shadow:var(--sh-1);}
+.ask-head{display:flex;align-items:baseline;gap:var(--sp-3);flex-wrap:wrap;
+  padding-bottom:var(--sp-3);border-bottom:1px solid var(--line);margin-bottom:var(--sp-3);}
+.ask-qt{font-weight:700;min-width:0;}
+.ask-cost{margin-left:auto;flex:none;font-size:var(--fs-xs);font-weight:700;color:var(--brass);
+  background:var(--brass-soft);border-radius:var(--r-full);padding:2px 10px;}
+.ask-note{margin:0 0 var(--sp-3);font-size:var(--fs-md);color:var(--muted);line-height:var(--lh-snug);}
+.ask-none{margin:0 0 var(--sp-2);font-weight:600;}
+.ask-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--sp-4);}
+/* 왼쪽 줄 하나로 한 건임을 표시 — 카드로 감싸면 목록이 무거워진다 */
+.ask-item{border-left:3px solid var(--accent-soft);padding-left:var(--sp-3);}
+.ask-art{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap;}
+.ask-art b{font-size:var(--fs-lg);}
+.ask-law{font-size:var(--fs-xs);color:var(--muted);background:var(--paper);
+  border-radius:var(--r-full);padding:2px 8px;}
+.ask-why{margin-top:3px;font-size:var(--fs-md);color:var(--muted);line-height:var(--lh-snug);}
+.ask-foot{margin:var(--sp-4) 0 0;padding-top:var(--sp-3);border-top:1px solid var(--line);
+  font-size:var(--fs-sm);color:var(--muted);}
+
 /* ===== 마우스가 있을 때만 = hover =====
  * iOS 사파리는 hover 규칙이 걸린 것을 누르면 첫 탭을 「hover 적용」으로 쓰고
  * 클릭을 흘려버린다. 그래서 목록의 ✕ 를 두 번 눌러야 지워졌다
  * (첫 탭 뒤 ✕ 만 빨갛게 남아 있는 게 증거였다).
  * hover 는 꾸밈일 뿐이므로, 마우스가 있는 기기에서만 켠다. */
 @media (hover:hover){
+  .ask-bar:hover{border-color:var(--brass);background:var(--brass-soft);}
   .ac-item:hover{background:var(--accent-soft);}
   .ev-span:hover{filter:brightness(.96);}
   .ev-memo:hover{background:var(--paper);}

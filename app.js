@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v45";
+var APP_VER="v46";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -352,6 +352,14 @@ function startEdit(el,table,id,field,type){
     if(el.classList.contains("ev-time")) sizeCls=" ie-time";
     else if(el.classList.contains("ev-place")) sizeCls=" ie-place";
     else if(el.classList.contains("mfds-status")) sizeCls=" ie-time";
+  }
+  /* 제 줄을 통째로 쓰던 글자(메모처럼)를 고칠 때는 입력창도 그 줄을 통째로 쓴다.
+   * 안 그러면 flex 가 옆 칩 뒤에 끼워 넣어서, 누른 자리가 아닌 엉뚱한 데
+   * 입력창이 나타난다. 클래스를 하나씩 맞추면 탭마다 빠뜨리게 되므로,
+   * 바꾸기 직전에 원래 글자가 어떻게 놓여 있었는지를 읽어서 따라간다. */
+  if(!sizeCls&&window.getComputedStyle){
+    var cs=window.getComputedStyle(el);
+    if(cs&&(cs.flexBasis==="100%"||cs.display==="block")) sizeCls=" ie-row";
   }
   inp.className="input inline-edit"+(area?" inline-area":"")+sizeCls;
   inp.value=cur;

@@ -233,6 +233,10 @@ textarea.input{min-height:60px;resize:vertical;line-height:var(--lh-snug);width:
 .mini .input.inline-edit{display:block;width:100%;}
 .row .input.inline-edit,.ev-row .input.inline-edit{flex:1 1 auto;width:auto;}
 textarea.inline-area{min-height:52px;resize:vertical;}
+/* 제 줄을 통째로 쓰던 글자 자리 — 입력창도 그대로 한 줄을 다 쓴다.
+   위 .row/.ev-row 규칙(0,3,0)보다 무거워야 이긴다. */
+.input.inline-edit.ie-row,.row .input.inline-edit.ie-row,
+.ev-row .input.inline-edit.ie-row{flex:1 1 100%;width:100%;}
 
 /* 기한이 지난 미완료 할 일 배지 (.entry-flag와 같은 pill 형태) */
 .row-late{display:inline-block;font-size:var(--fs-xs);font-weight:700;color:var(--brass);

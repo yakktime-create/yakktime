@@ -132,7 +132,7 @@ textarea.input{min-height:60px;resize:vertical;line-height:var(--lh-snug);width:
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:var(--sp-1);}
 .cal-wd{text-align:center;font-size:var(--fs-xs);color:var(--muted);padding:4px 0;font-weight:600;}
 .cal-wd.sun{color:var(--brick);}
-.cal-cell{min-height:74px;border:1px solid var(--line);border-radius:var(--r-sm);padding:6px;cursor:pointer;background:var(--surface);transition:.12s;display:flex;flex-direction:column;gap:var(--sp-1);overflow:hidden;}
+.cal-cell{min-height:74px;border:1px solid var(--line);border-radius:var(--r-sm);padding:6px;cursor:pointer;background:var(--surface);transition:.12s;display:flex;flex-direction:column;gap:var(--sp-1);}
 .cal-cell:hover{border-color:var(--accent);}
 .cal-cell.blank{background:transparent;border:none;cursor:default;}
 .cal-cell.today{background:var(--accent-soft);border-color:var(--accent);}
@@ -886,3 +886,28 @@ textarea.inline-area{min-height:52px;resize:vertical;}
   .ev-row .input.inline-edit.ie-time{flex:0 0 80px;width:80px;}
   .ev-row .input.inline-edit.ie-place,.ev-row .inline-ac{flex:1 1 100%;}
 }
+
+/* --- 여러 날짜리 일정: 칸을 넘어 한 줄로 이어지는 막대 ---
+   칸 여백(6) + 테두리(1) + 칸 사이 틈의 절반(2) = 9px 만큼 밖으로 나가면
+   옆 칸에서 나온 막대와 정확히 맞닿는다.
+   그냥 넘기면 다음 칸 배경에 덮이므로 z-index 로 위에 올린다. */
+.cal-ev.span{border-radius:0;margin-left:-9px;margin-right:-9px;
+  position:relative;z-index:2;min-height:19px;}
+.cal-ev.span.sp-l{border-radius:var(--r-xs) 0 0 var(--r-xs);margin-left:0;padding-left:6px;}
+.cal-ev.span.sp-r{border-radius:0 var(--r-xs) var(--r-xs) 0;margin-right:0;}
+.cal-ev.span:not(.sp-l){padding-left:9px;}
+/* 기간이 있는 일정에만 붙는 칩 — 하루짜리엔 아무것도 안 붙는다 */
+.ev-span{flex-shrink:0;font-size:var(--fs-xs);font-weight:650;color:var(--accent);
+  background:var(--accent-soft);border-radius:var(--r-full);padding:2px 9px;cursor:pointer;}
+.ev-span:hover{filter:brightness(.96);}
+
+/* --- 출장: 메모를 한눈에 --- */
+.field.wide{flex:1 1 180px;}
+textarea.day-memo{resize:vertical;height:60px;min-height:60px;line-height:var(--lh-snug);
+  font-family:inherit;font-size:var(--fs-md);padding-top:8px;padding-bottom:8px;}
+/* 메모가 있으면 제목 아래 줄로 통째로 보인다 (비행·숙소 시각을 한눈에) */
+.ev-memo{flex:1 1 100%;font-size:var(--fs-sm);color:var(--muted);
+  white-space:pre-wrap;line-height:var(--lh-snug);cursor:pointer;
+  border-radius:var(--r-xs);padding:1px 4px;margin-top:2px;}
+.ev-memo:hover{background:var(--paper);}
+.ev-memo .none{opacity:.55;font-weight:500;}

@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v38";
+var APP_VER="v39";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -325,7 +325,7 @@ function renderTabs(){
   }).join(""); }
 function pageHead(t,s){ return '<header class="page-head"><div><h1 class="page-title">'+esc(t)+'</h1>'+(s?'<p class="page-sub">'+esc(s)+'</p>':'')+'</div></header>'; }
 function seg(name,opts,def){ return '<div class="seg" data-seg="'+name+'">'+opts.map(function(o){ return '<button class="seg-btn '+(o===def?"on":"")+'" data-val="'+esc(o)+'">'+esc(o)+'</button>'; }).join("")+'</div>'; }
-function wireSeg(name){ var box=document.querySelector('[data-seg="'+name+'"]'); if(!box) return; box.addEventListener("click",function(e){ var b=e.target.closest(".seg-btn"); if(!b) return; box.querySelectorAll(".seg-btn").forEach(function(x){x.classList.remove("on");}); b.classList.add("on"); }); }
+function wireSeg(name,onChange){ var box=document.querySelector('[data-seg="'+name+'"]'); if(!box) return; box.addEventListener("click",function(e){ var b=e.target.closest(".seg-btn"); if(!b) return; box.querySelectorAll(".seg-btn").forEach(function(x){x.classList.remove("on");}); b.classList.add("on"); if(onChange) onChange(b.getAttribute("data-val")); }); }
 function segValue(name){ var on=document.querySelector('[data-seg="'+name+'"] .seg-btn.on'); return on?on.getAttribute("data-val"):null; }
 function val(id){ var e=document.getElementById(id); return e?e.value:""; }
 function evSort(a,b){ if(a.key!==b.key) return a.key<b.key?-1:1; var ta=a.time||"99:99", tb=b.time||"99:99"; return ta<tb?-1:ta>tb?1:0; }
@@ -511,6 +511,14 @@ function focusDayPanel(){
   if(inp) inp.focus();
 }
 
+/* 9/11~9/20 (10일) */
+function spanLabel(a,b){
+  var d1=new Date(a+"T00:00:00"), d2=new Date(b+"T00:00:00");
+  if(isNaN(d1)||isNaN(d2)) return a+"~"+b;
+  var days=Math.round((d2-d1)/86400000)+1;
+  return (d1.getMonth()+1)+"/"+d1.getDate()+"~"+(d2.getMonth()+1)+"/"+d2.getDate()+" ("+days+"일)";
+}
+
 /* 2026-09-05 → 9월 5일(금) */
 function shortDate(key){
   var d=new Date(key+"T00:00:00");
@@ -598,23 +606,42 @@ function renderToday(){
   document.getElementById("new-s2").addEventListener("keydown",function(e){ if(e.key==="Enter") addSchedule(tmrKey,"new-s2"); });
 }
 
+/* 캘린더 입력창에서 고른 종류. 출장일 때만 「마지막 날」과 메모 칸이 나타난다 —
+ * 평소엔 안 보이므로 화면이 안 늘어난다. */
+var dayKind="일정";
+var TRIP_MEMO="가는 편  09:20 인천 → 07:30 도착\n오는 편  11:00 출발 → 16:40 인천";
+
 var CAL_CHIPS=3;   /* 한 칸에 보여줄 일정 수. 아이패드 가로에선 3개까지 들어간다 */
 function renderCalendar(){
   var first=new Date(calYear,calMonth,1), startDay=first.getDay();
   var dim=new Date(calYear,calMonth+1,0).getDate(), todayKey=keyOf(new Date()), cells="";
   for(var i=0;i<startDay;i++) cells+='<div class="cal-cell blank"></div>';
   for(var d=1;d<=dim;d++){ var k=calYear+"-"+pad(calMonth+1)+"-"+pad(d);
-    var evs=S.events.filter(function(e){return e.key===k;}).sort(evSort);
+    var dow=(startDay+d-1)%7;   /* 0=일 … 6=토. 주가 바뀌는 자리를 알아야 막대를 끊는다 */
+    /* 기간 일정은 시작~끝 칸에 모두 나온다 */
+    var evs=S.events.filter(function(e){ return e.key<=k && k<=(e.until||e.key); }).sort(evSort);
     /* 식약처 업무를 같은 칸에 함께 얹는다 (복사본이 아니라 mfds를 직접 읽음) */
     var tasks=S.mfds.filter(function(m){ return m.due===k; });
     var chipItems=tasks.map(function(m){ return {task:true,done:m.status==="완료",label:m.title}; })
-      .concat(evs.map(function(e){ return {task:false,done:false,label:(e.time?e.time+" ":"")+e.title}; }));
+      .concat(evs.map(function(e){
+        var end=e.until||e.key;
+        if(end===e.key) return {task:false,done:false,label:(e.time?e.time+" ":"")+e.title};
+        /* 여러 날짜리는 한 줄로 이어진 막대로 그린다.
+         * 이름은 시작한 날과 주가 바뀌는 날(일요일)에만 적는다 —
+         * 매 칸에 적으면 같은 말이 일곱 번 반복돼 지저분하다. */
+        var lEnd=(k===e.key||dow===0), rEnd=(k===end||dow===6);
+        return {task:false,done:false,span:true,lEnd:lEnd,rEnd:rEnd,
+                label:lEnd?e.title:""};
+      }));
     var chips=chipItems.slice(0,CAL_CHIPS).map(function(c){
-      return '<div class="cal-ev'+(c.task?" mfds":"")+(c.done?" done":"")+'">'+esc(c.label)+'</div>'; }).join("");
+      return '<div class="cal-ev'+(c.task?" mfds":"")+(c.done?" done":"")
+        +(c.span?" span"+(c.lEnd?" sp-l":"")+(c.rEnd?" sp-r":""):"")
+        +'">'+esc(c.label)+'</div>'; }).join("");
     if(chipItems.length>CAL_CHIPS) chips+='<div class="cal-more">+'+(chipItems.length-CAL_CHIPS)+'</div>';
     cells+='<div class="cal-cell'+(k===todayKey?" today":"")+(k===calSel?" sel":"")+'" data-act="cal-day" data-id="'+k+'"><span class="cal-num">'+d+'</span>'+chips+'</div>'; }
   var wdHtml=WD.map(function(w,i){ return '<div class="cal-wd'+(i===0?" sun":"")+'">'+w+'</div>'; }).join("");
-  var selEvs=S.events.filter(function(e){return e.key===calSel;}).sort(evSort), selD=new Date(calSel);
+  var selEvs=S.events.filter(function(e){ return e.key<=calSel && calSel<=(e.until||e.key); }).sort(evSort);
+  var selD=new Date(calSel+"T00:00:00");
   var selTasks=S.mfds.filter(function(m){ return m.due===calSel; });
   var taskRows=selTasks.map(function(t){
     var done=(t.status==="완료");
@@ -632,14 +659,21 @@ function renderCalendar(){
     + '<div class="card form composer day-form">'
     +   '<input class="input composer-title" id="day-ev" placeholder="무엇을 하나요? (예: GMP 실사 사전회의)" />'
     +   '<div class="field-row">'
-    +     '<label class="field"><span class="field-lbl">시간</span>'
-    +       '<input class="input" id="day-time" inputmode="numeric" placeholder="14:00" /></label>'
+    +     (dayKind==="출장"
+            ? '<label class="field wide"><span class="field-lbl">마지막 날</span>'
+              + '<input class="input" type="date" id="day-until" value="'+esc(calSel)+'" /></label>'
+            : '<label class="field"><span class="field-lbl">시간</span>'
+              + '<input class="input" id="day-time" inputmode="numeric" placeholder="14:00" /></label>')
     +     '<label class="field grow ac-wrap"><span class="field-lbl">장소</span>'
     +       '<input class="input" id="day-place" autocomplete="off" placeholder="두 글자 이상 치면 장소를 찾아요" />'
     +       placeACBox("day-place-ac")+'</label>'
     +   '</div>'
+    +   (dayKind==="출장"
+        ? '<label class="field grow"><span class="field-lbl">메모 — 비행·숙소처럼 한눈에 볼 것</span>'
+          + '<textarea class="input day-memo" id="day-memo" rows="2">'+esc(TRIP_MEMO)+'</textarea></label>'
+        : '')
     +   '<div class="composer-foot">'
-    +     segC("day-kind",["일정","식약처 업무"],"일정")
+    +     segC("day-kind",["일정","식약처 업무","출장"],dayKind)
     +     '<div class="composer-btns"><button class="btn" data-act="day-add">+ 추가</button></div>'
     +   '</div>'
     + '</div>'
@@ -649,6 +683,11 @@ function renderCalendar(){
       + '<div class="ev-body">'
       +   '<span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span>'
       +   whereHtml(e,"events")
+      +   (e.until&&e.until!==e.key
+            ? '<span class="ev-span" data-act="edit" data-table="events" data-field="until" data-type="date" data-id="'+e.id+'" title="눌러서 마지막 날 수정">'
+              + esc(spanLabel(e.key,e.until))+'</span>' : '')
+      +   '<span class="ev-memo" data-act="edit" data-table="events" data-field="memo" data-type="textarea" data-id="'+e.id+'" title="눌러서 수정">'
+      +     (e.memo?esc(e.memo):'<span class="none">＋ 메모</span>')+'</span>'
       + '</div>'
       + '<span class="row-acts"><button class="del" data-act="ev-del" data-id="'+e.id+'" title="삭제">✕</button></span></li>'; }).join("")+'</ul>' : '<p class="empty">이 날은 아직 일정이 없어요.</p>')+'</div>';
   var mk=calYear+"-"+pad(calMonth+1);
@@ -658,7 +697,7 @@ function renderCalendar(){
   view().innerHTML='<div class="page">'+pageHead2("캘린더","",calPills)
     + '<div class="cal-nav"><button class="cal-arrow" data-act="cal-prev">‹</button><span class="cal-month">'+calYear+'년 '+(calMonth+1)+'월</span><button class="cal-arrow" data-act="cal-next">›</button></div>'
     + '<div class="cal-grid">'+wdHtml+cells+'</div>'+panel+'</div>';
-  wireSeg("day-kind");
+  wireSeg("day-kind",function(v){ if(v!==dayKind){ dayKind=v; render(); } });
   wirePlaceAC("day-place","day-place-ac");
   /* Enter 는 다음 칸으로 넘어간다. 추가는 버튼으로만 —
    * 시간·장소를 적기도 전에 등록돼 버리는 일이 없다. */
@@ -1252,6 +1291,43 @@ function del(name,id,quiet){
   });
 }
 
+/* 「출장 11~20일」처럼 적으면 기간을 알아챈다. 버튼을 늘리지 않으려고
+ * 이미 쓰는 제목 칸에서 읽어낸다.
+ *   출장 11~20일   → 11일 시작 · 20일까지
+ *   회의 ~15일     → 고른 날 시작 · 15일까지
+ *   준비 20일까지  → 고른 날 시작 · 20일까지
+ * 날짜만 떼어내고 제목은 남긴다. 못 알아보면 아무것도 안 건드린다. */
+function parseRange(text,baseKey){
+  var t=" "+String(text||"")+" ", m, from=null, to=null, cut=null;
+  if((m=/\s(\d{1,2})\s*일?\s*[~\-–]\s*(\d{1,2})\s*일(?:까지)?(?=\s)/.exec(t))){
+    from=+m[1]; to=+m[2]; cut=m[0];
+  } else if((m=/\s[~\-–]\s*(\d{1,2})\s*일(?:까지)?(?=\s)/.exec(t))){
+    to=+m[1]; cut=m[0];
+  } else if((m=/\s(\d{1,2})\s*일\s*까지(?=\s)/.exec(t))){
+    to=+m[1]; cut=m[0];
+  }
+  if(to===null) return null;
+  var b=new Date(baseKey+"T00:00:00");
+  if(isNaN(b)) return null;
+  var y=b.getFullYear(), mo=b.getMonth();
+  function mk(yy,mm,dd){
+    var d=new Date(yy,mm,dd);
+    if(d.getMonth()!==mm) return null;          /* 2월 31일 같은 건 없다 */
+    return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+  }
+  var startKey = (from!==null) ? mk(y,mo,from) : baseKey;
+  if(!startKey) return null;
+  var endKey = mk(y,mo,to);
+  if(!endKey) return null;
+  if(endKey<startKey){                           /* 달을 넘어가는 기간 */
+    endKey=mk(y,mo+1,to);
+    if(!endKey||endKey<startKey) return null;
+  }
+  var title=String(text).replace(cut.slice(1),"").replace(/\s+/g," ").trim();
+  if(!title) return null;                        /* 날짜만 적었으면 제목이 없다 */
+  return {title:title,key:startKey,until:endKey};
+}
+
 /* 시간 표기 정리 — 손으로 「13」 「7」 「930」만 쳐도 되게.
  *   13 → 13:00   7 → 07:00   930 → 09:30   1330 → 13:30
  *   9시 → 09:00  9시30 → 09:30  2시반 → 02:30  오후 2시반 → 14:30
@@ -1371,13 +1447,29 @@ function dayAdd(){
   var place=(val("day-place")||"").trim();
   var r=parseNL(raw), title=raw;
   if(r.ok){ if(!time) time=r.time; title=r.title; }   /* 칸을 비웠으면 말로 적은 시간을 쓴다 */
-  if(segValue("day-kind")==="식약처 업무"){
+  var rng=parseRange(title,calSel);                   /* 「출장 11~20일」 같은 기간 */
+  if(rng) title=rng.title;
+  var kind=segValue("day-kind")||dayKind;
+  if(kind==="출장"){
+    var until=(val("day-until")||calSel);
+    if(until<calSel) until=calSel;
+    var memo=(val("day-memo")||"").trim();
+    var trip={key:rng?rng.key:calSel,time:null,title:title,place:place||null,
+              until:rng?rng.until:until,memo:memo||null};
+    S.events.push(trip);
+    if(rng) calSel=rng.key;
+    dayKind="일정"; render(); dbInsert("events",trip); return;
+  }
+  if(kind==="식약처 업무"){
     /* 일정이 아니라 식약처 업무로 등록. 캘린더는 mfds를 직접 읽으므로 여기에도 그대로 뜬다. */
     var task={title:title,status:"대기",memo:"",due:calSel,time:time||null,place:place||null};
     S.mfds.unshift(task); render(); dbInsert("mfds",task); return;
   }
-  var item={key:calSel,time:time||null,title:title,place:place||null};
-  S.events.push(item); render(); dbInsert("events",item);
+  var item={key:rng?rng.key:calSel,time:time||null,title:title,
+            place:place||null,until:rng?rng.until:null};
+  S.events.push(item);
+  if(rng) calSel=rng.key;                             /* 시작일로 옮겨 바로 보이게 */
+  render(); dbInsert("events",item);
 }
 function evDel(id){ del("events",id); }
 

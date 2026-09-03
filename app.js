@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v37";
+var APP_VER="v38";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1254,7 +1254,7 @@ function del(name,id,quiet){
 
 /* 시간 표기 정리 — 손으로 「13」 「7」 「930」만 쳐도 되게.
  *   13 → 13:00   7 → 07:00   930 → 09:30   1330 → 13:30
- *   9시 → 09:00  9시30 → 09:30  오후 2시 → 14:00
+ *   9시 → 09:00  9시30 → 09:30  2시반 → 02:30  오후 2시반 → 14:30
  * 못 알아보는 글자는 그대로 둔다 — 지워버리면 적은 게 사라져 더 나쁘다. */
 function fitTime(h,mi){
   if(isNaN(h)||isNaN(mi)||h>23||mi>59) return null;
@@ -1271,7 +1271,9 @@ function normTime(v){
     if(m){ ap=m[1].toLowerCase(); v=v.slice(0,m.index).trim(); }
   }
   var h=null, mi=0;
-  if((m=/^(\d{1,2})\s*[:시]\s*(\d{1,2})?\s*분?$/.exec(v))){ h=+m[1]; mi=m[2]?+m[2]:0; }
+  if((m=/^(\d{1,2})\s*[:시]\s*(반|\d{1,2})?\s*분?$/.exec(v))){
+    h=+m[1]; mi=(m[2]==="반")?30:(m[2]?+m[2]:0);
+  }
   else if((m=/^(\d{1,2})$/.exec(v))){ h=+m[1]; }
   else if((m=/^(\d{3,4})$/.exec(v))){ h=+m[1].slice(0,m[1].length-2); mi=+m[1].slice(-2); }
   if(h===null) return String(v||"").trim();

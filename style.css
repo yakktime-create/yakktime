@@ -917,3 +917,26 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
   max-height:96px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 .ev-memo:hover{background:var(--paper);}
 .ev-memo .none{opacity:.55;font-weight:500;}
+
+/* ===== 출장 기간 고르기 =====
+ * 아이패드 기본 날짜 선택기는 화면 아무 데나 뜨는데다, 바로 위에 달력이
+ * 있는데 또 달력을 띄우는 꼴이었다. 그래서 달력 칸을 직접 누르게 하고
+ * 고른 구간에 색을 깐다 (네이버 항공권 「가는 날 / 오는 날」과 같은 방식).
+ * 아래 규칙은 화면 크기별 .cal-cell 규칙보다 뒤에 와야 이긴다. */
+.cal-cell.rng{background:var(--accent-soft);border-color:var(--accent-soft);}
+.cal-cell.rng-s,.cal-cell.rng-e{background:var(--accent);border-color:var(--accent);}
+.cal-cell.rng-s .cal-num,.cal-cell.rng-e .cal-num{color:#fff;font-weight:700;}
+.cal-cell.rng-s .cal-num::after{content:" 시작";font-size:var(--fs-2xs);font-weight:600;}
+.cal-cell.rng-e .cal-num::after{content:" 마지막";font-size:var(--fs-2xs);font-weight:600;}
+.cal-cell.rng .cal-ev{background:var(--blue-deep);}
+
+/* 고른 기간을 한 줄로. 누르면 마지막 날만 지우고 다시 고른다. */
+.trip-range{display:flex;align-items:center;gap:var(--sp-2);min-height:var(--tap);
+  border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface);
+  padding:0 var(--sp-3);font-size:var(--fs-lg);color:var(--ink);cursor:pointer;
+  -webkit-tap-highlight-color:transparent;}
+.trip-range.set{border-color:var(--accent);}
+.trip-range .tr-ar{color:var(--muted);}
+.trip-range .tr-b.none{color:var(--muted);font-size:var(--fs-md);}
+.trip-range .tr-n{margin-left:auto;flex:none;font-size:var(--fs-sm);font-weight:700;
+  color:var(--accent);background:var(--accent-soft);border-radius:var(--r-full);padding:2px 10px;}

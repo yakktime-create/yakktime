@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v40";
+var APP_VER="v41";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -611,6 +611,34 @@ function renderToday(){
 var dayKind="일정";
 var TRIP_MEMO="가는 편  09:20 인천 → 07:30 도착\n오는 편  11:00 출발 → 16:40 인천";
 
+/* 출장의 마지막 날. 아이패드 기본 날짜 선택기는 화면 아무 데나 뜨는데다
+ * 달력이 바로 위에 있는데 또 달력을 띄우는 셈이라, 네이버 항공권처럼
+ * 「달력에서 시작일 → 마지막 날」을 그냥 눌러서 고른다. */
+var tripUntil=null;
+
+/* 입력창에 치던 글자. 마지막 날을 고르면 화면을 다시 그리므로,
+ * 그 사이에 적어둔 제목·장소·메모가 날아가지 않게 잠깐 들고 있는다. */
+var dayDraft={title:"",time:"",place:"",memo:null};
+function saveDayDraft(){
+  if(!document.getElementById("day-ev")) return;
+  dayDraft.title=val("day-ev"); dayDraft.time=val("day-time"); dayDraft.place=val("day-place");
+  if(document.getElementById("day-memo")) dayDraft.memo=val("day-memo");
+}
+function clearDayDraft(){ dayDraft={title:"",time:"",place:"",memo:null}; }
+function mdLabel(k){ var d=new Date(k+"T00:00:00");
+  return isNaN(d)?k:(d.getMonth()+1)+"월 "+d.getDate()+"일"; }
+function tripDays(){ if(!tripUntil) return 0;
+  return Math.round((new Date(tripUntil+"T00:00:00")-new Date(calSel+"T00:00:00"))/86400000)+1; }
+/* 고른 기간을 한 줄로 보여준다. 누르면 마지막 날만 지우고 다시 고를 수 있다. */
+function tripRangeHtml(){
+  return '<div class="trip-range'+(tripUntil?" set":"")+'" data-act="trip-reset" title="눌러서 다시 고르기">'
+    + '<span class="tr-a">'+esc(mdLabel(calSel))+'</span><span class="tr-ar">→</span>'
+    + (tripUntil
+        ? '<span class="tr-b">'+esc(mdLabel(tripUntil))+'</span><span class="tr-n">'+tripDays()+'일</span>'
+        : '<span class="tr-b none">달력에서 마지막 날을 누르세요</span>')
+    + '</div>';
+}
+
 var CAL_CHIPS=3;   /* 한 칸에 보여줄 일정 수. 아이패드 가로에선 3개까지 들어간다 */
 function renderCalendar(){
   var first=new Date(calYear,calMonth,1), startDay=first.getDay();
@@ -638,7 +666,11 @@ function renderCalendar(){
         +(c.span?" span"+(c.lEnd?" sp-l":"")+(c.rEnd?" sp-r":""):"")
         +'">'+esc(c.label)+'</div>'; }).join("");
     if(chipItems.length>CAL_CHIPS) chips+='<div class="cal-more">+'+(chipItems.length-CAL_CHIPS)+'</div>';
-    cells+='<div class="cal-cell'+(k===todayKey?" today":"")+(k===calSel?" sel":"")+'" data-act="cal-day" data-id="'+k+'"><span class="cal-num">'+d+'</span>'+chips+'</div>'; }
+    /* 출장 기간을 고르는 중이면 시작~끝 칸에 색을 깔아 한눈에 보이게 한다 */
+    var rng="";
+    if(dayKind==="출장"&&tripUntil&&k>=calSel&&k<=tripUntil)
+      rng=" rng"+(k===calSel?" rng-s":"")+(k===tripUntil?" rng-e":"");
+    cells+='<div class="cal-cell'+(k===todayKey?" today":"")+(k===calSel?" sel":"")+rng+'" data-act="cal-day" data-id="'+k+'"><span class="cal-num">'+d+'</span>'+chips+'</div>'; }
   var wdHtml=WD.map(function(w,i){ return '<div class="cal-wd'+(i===0?" sun":"")+'">'+w+'</div>'; }).join("");
   var selEvs=S.events.filter(function(e){ return e.key<=calSel && calSel<=(e.until||e.key); }).sort(evSort);
   var selD=new Date(calSel+"T00:00:00");
@@ -657,20 +689,19 @@ function renderCalendar(){
       + '<span class="row-acts"><button class="del" data-act="mfds-del" data-id="'+t.id+'" title="삭제">✕</button></span></li>'; }).join("");
   var panel='<div class="day-panel"><div class="day-title">'+(selD.getMonth()+1)+'월 '+selD.getDate()+'일 ('+WD[selD.getDay()]+')'+(calSel===todayKey?' <span class="day-today">오늘</span>':'')+'</div>'
     + '<div class="card form composer day-form">'
-    +   '<input class="input composer-title" id="day-ev" placeholder="무엇을 하나요? (예: GMP 실사 사전회의)" />'
+    +   '<input class="input composer-title" id="day-ev" value="'+esc(dayDraft.title)+'" placeholder="무엇을 하나요? (예: GMP 실사 사전회의)" />'
     +   '<div class="field-row">'
     +     (dayKind==="출장"
-            ? '<label class="field wide"><span class="field-lbl">마지막 날</span>'
-              + '<input class="input" type="date" id="day-until" value="'+esc(calSel)+'" /></label>'
+            ? '<label class="field wide"><span class="field-lbl">기간</span>'+tripRangeHtml()+'</label>'
             : '<label class="field"><span class="field-lbl">시간</span>'
-              + '<input class="input" id="day-time" inputmode="numeric" placeholder="14:00" /></label>')
+              + '<input class="input" id="day-time" inputmode="numeric" value="'+esc(dayDraft.time)+'" placeholder="14:00" /></label>')
     +     '<label class="field grow ac-wrap"><span class="field-lbl">장소</span>'
-    +       '<input class="input" id="day-place" autocomplete="off" placeholder="두 글자 이상 치면 장소를 찾아요" />'
+    +       '<input class="input" id="day-place" autocomplete="off" value="'+esc(dayDraft.place)+'" placeholder="두 글자 이상 치면 장소를 찾아요" />'
     +       placeACBox("day-place-ac")+'</label>'
     +   '</div>'
     +   (dayKind==="출장"
         ? '<label class="field memo"><span class="field-lbl">메모 — 비행·숙소처럼 한눈에 볼 것</span>'
-          + '<textarea class="input day-memo" id="day-memo" rows="2">'+esc(TRIP_MEMO)+'</textarea></label>'
+          + '<textarea class="input day-memo" id="day-memo" rows="2">'+esc(dayDraft.memo===null?TRIP_MEMO:dayDraft.memo)+'</textarea></label>'
         : '')
     +   '<div class="composer-foot">'
     +     segC("day-kind",["일정","식약처 업무","출장"],dayKind)
@@ -697,7 +728,8 @@ function renderCalendar(){
   view().innerHTML='<div class="page">'+pageHead2("캘린더","",calPills)
     + '<div class="cal-nav"><button class="cal-arrow" data-act="cal-prev">‹</button><span class="cal-month">'+calYear+'년 '+(calMonth+1)+'월</span><button class="cal-arrow" data-act="cal-next">›</button></div>'
     + '<div class="cal-grid">'+wdHtml+cells+'</div>'+panel+'</div>';
-  wireSeg("day-kind",function(v){ if(v!==dayKind){ dayKind=v; render(); } });
+  wireSeg("day-kind",function(v){ if(v===dayKind) return;
+    saveDayDraft(); dayKind=v; if(v!=="출장") tripUntil=null; render(); });
   wirePlaceAC("day-place","day-place-ac");
   /* Enter 는 다음 칸으로 넘어간다. 추가는 버튼으로만 —
    * 시간·장소를 적기도 전에 등록돼 버리는 일이 없다. */
@@ -1360,6 +1392,7 @@ function normTime(v){
 
 /* 그 달에 오늘이 있으면 오늘, 없으면 1일을 고른다 */
 function calSyncSel(){
+  if(dayKind==="출장") return;   /* 기간 고르는 중엔 시작일을 그대로 둔다 (달 넘겨 마지막 날 고르기) */
   var n=new Date();
   var d=(n.getFullYear()===calYear&&n.getMonth()===calMonth)?n.getDate():1;
   calSel=calYear+"-"+pad(calMonth+1)+"-"+pad(d);
@@ -1451,23 +1484,24 @@ function dayAdd(){
   if(rng) title=rng.title;
   var kind=segValue("day-kind")||dayKind;
   if(kind==="출장"){
-    var until=(val("day-until")||calSel);
+    var until=tripUntil||calSel;
     if(until<calSel) until=calSel;
     var memo=(val("day-memo")||"").trim();
     var trip={key:rng?rng.key:calSel,time:null,title:title,place:place||null,
               until:rng?rng.until:until,memo:memo||null};
     S.events.push(trip);
     if(rng) calSel=rng.key;
-    dayKind="일정"; render(); dbInsert("events",trip); return;
+    tripUntil=null; clearDayDraft(); dayKind="일정"; render(); dbInsert("events",trip); return;
   }
   if(kind==="식약처 업무"){
     /* 일정이 아니라 식약처 업무로 등록. 캘린더는 mfds를 직접 읽으므로 여기에도 그대로 뜬다. */
     var task={title:title,status:"대기",memo:"",due:calSel,time:time||null,place:place||null};
-    S.mfds.unshift(task); render(); dbInsert("mfds",task); return;
+    clearDayDraft(); S.mfds.unshift(task); render(); dbInsert("mfds",task); return;
   }
   var item={key:rng?rng.key:calSel,time:time||null,title:title,
             place:place||null,until:rng?rng.until:null};
   S.events.push(item);
+  clearDayDraft();
   if(rng) calSel=rng.key;                             /* 시작일로 옮겨 바로 보이게 */
   render(); dbInsert("events",item);
 }
@@ -2819,7 +2853,14 @@ document.getElementById("app").addEventListener("click",function(e){
      * 안 옮기면 달력엔 없는 날짜의 일정을 보고 있게 된다. */
     case "cal-prev": calMonth--; if(calMonth<0){calMonth=11;calYear--;} calSyncSel(); render(); break;
     case "cal-next": calMonth++; if(calMonth>11){calMonth=0;calYear++;} calSyncSel(); render(); break;
-    case "cal-day": calSel=id; render(); focusDayPanel(); break;
+    case "cal-day":
+      /* 출장을 고른 상태면 두 번째 누른 날이 마지막 날이 된다.
+       * 다 고른 뒤 또 누르면 그 날을 시작으로 삼고 처음부터 다시 —
+       * 항공권 예매 달력과 같은 방식이라 따로 배울 게 없다. */
+      saveDayDraft();
+      if(dayKind==="출장"&&!tripUntil&&id>calSel){ tripUntil=id; render(); focusDayPanel(); break; }
+      tripUntil=null; calSel=id; render(); focusDayPanel(); break;
+    case "trip-reset": saveDayDraft(); tripUntil=null; render(); break;
     case "map": openMap(el.getAttribute("data-q")); break;
     case "ac-pick": {
       var it=placeAC.items[parseInt(el.getAttribute("data-i"),10)];

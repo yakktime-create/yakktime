@@ -174,6 +174,7 @@ function toLocal(table,row){
     /* events */
     if(k==="event_date") lk="key";
     else if(k==="event_time") lk="time";
+    else if(k==="due_time") lk="time";        /* mfds 업무 시간 */
     /* schedule */
     else if(k==="due_date") lk="due";
     /* archive */
@@ -197,6 +198,7 @@ function toRemote(table,item){
     /* events */
     if(k==="key"&&table==="events") rk="event_date";
     else if(k==="time"&&table==="events") rk="event_time";
+    else if(k==="time"&&table==="mfds") rk="due_time";
     /* schedule 할 일 날짜 · mfds 업무 기한 */
     else if(k==="due"&&(table==="schedule"||table==="mfds")) rk="due_date";
     /* archive */
@@ -312,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v29";
+var APP_VER="v30";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -485,6 +487,13 @@ function focusDayPanel(){
   if(inp) inp.focus();
 }
 
+/* 2026-09-05 → 9월 5일(금) */
+function shortDate(key){
+  var d=new Date(key+"T00:00:00");
+  if(isNaN(d)) return key;
+  return (d.getMonth()+1)+"월 "+d.getDate()+"일("+WD[d.getDay()]+")";
+}
+
 function statTile(tab,tone,num,label){
   return '<button class="stat t-'+tone+'" data-act="tab" data-id="'+tab+'">'
     + '<span class="stat-num">'+num+'</span>'
@@ -510,18 +519,30 @@ function renderToday(){
   var todayEv=S.events.filter(function(e){return e.key===todayKey;}).sort(evSort);
   var upcoming=S.events.filter(function(e){return e.key>todayKey;}).sort(evSort).slice(0,4);
   var evHtml="";
-  if(todayEv.length){ evHtml+='<div class="card"><div class="card-head"><h2>오늘 일정</h2></div>'+todayEv.map(function(e){ return '<div class="ev-row"><span class="ev-time">'+(e.time||"종일")+'</span><span class="ev-title">'+esc(e.title)+'</span></div>'; }).join("")+'</div>'; }
-  if(upcoming.length){ evHtml+='<div class="card"><div class="card-head"><h2>다가오는 일정</h2><span class="muted" data-act="tab" data-id="calendar" style="cursor:pointer">캘린더 열기 →</span></div>'+upcoming.map(function(e){ var d=new Date(e.key); return '<div class="up-row"><span class="up-date">'+(d.getMonth()+1)+'월 '+d.getDate()+'일('+WD[d.getDay()]+')</span><span class="up-title">'+esc(e.title)+'</span><span class="up-time">'+(e.time||"")+'</span></div>'; }).join("")+'</div>'; }
+  if(todayEv.length){ evHtml+='<div class="card"><div class="card-head"><h2>오늘 일정</h2></div>'+todayEv.map(function(e){ return '<div class="ev-row">'
+      + '<span class="ev-time">'+esc(e.time||"종일")+'</span>'
+      + '<div class="ev-body"><div class="ev-line"><span class="ev-title">'+esc(e.title)+'</span></div>'
+      +   (e.place? '<div class="ev-line sub"><span class="ev-place">📍 '+esc(e.place)+'</span>'
+                    +'<button class="link-btn map-btn" data-act="map" data-q="'+esc(e.place)+'">지도 ↗</button></div>' : '')
+      + '</div></div>'; }).join("")+'</div>'; }
+  if(upcoming.length){ evHtml+='<div class="card"><div class="card-head"><h2>다가오는 일정</h2><span class="muted" data-act="tab" data-id="calendar" style="cursor:pointer">캘린더 열기 →</span></div>'+upcoming.map(function(e){ return '<div class="up-row">'
+      + '<span class="up-date">'+esc(shortDate(e.key))+'</span>'
+      + '<span class="up-title">'+esc(e.title)
+      +   (e.place? ' <span class="up-place">📍 '+esc(e.place)+'</span>'
+                    +'<button class="link-btn map-btn" data-act="map" data-q="'+esc(e.place)+'">지도 ↗</button>' : '')
+      + '</span>'
+      + '<span class="up-time">'+esc(e.time||"")+'</span></div>'; }).join("")+'</div>'; }
   /* 할 일 목록 HTML (오늘/내일 두 곳에서 재사용) */
-  function schedRows(items,emptyMsg){
+  function schedRows(items,emptyMsg,showDate){
     var o=items.filter(function(i){return !i.done;}).sort(function(a,b){return (b.star?1:0)-(a.star?1:0);});
     var d=items.filter(function(i){return i.done;});
     if(!o.length&&!d.length) return '<div class="empty-box sm"><p>'+emptyMsg+'</p></div>';
     return '<ul class="list">'
       + o.map(function(i){
           var late=dueOf(i)<todayKey ? '<span class="row-late">지난</span>' : '';
+          var when=(showDate&&i.due)? '<span class="row-when">'+esc(shortDate(i.due))+'</span>' : '';
           return '<li class="row'+(i.star?" star-on":"")+'"><button class="check" data-act="s-toggle" data-id="'+i.id+'">✓</button>'
-            + '<span class="row-text" data-act="edit" data-table="schedule" data-field="text" data-id="'+i.id+'" title="눌러서 수정">'+esc(i.text)+'</span>'+late
+            + '<span class="row-text" data-act="edit" data-table="schedule" data-field="text" data-id="'+i.id+'" title="눌러서 수정">'+esc(i.text)+'</span>'+when+late
             + '<span class="row-acts">'
             +   '<button class="star '+(i.star?"on":"")+'" data-act="s-star" data-id="'+i.id+'" title="별표">'+(i.star?"★":"☆")+'</button>'
             +   '<button class="del" data-act="s-del" data-id="'+i.id+'" title="삭제">✕</button></span></li>'; }).join("")
@@ -532,7 +553,7 @@ function renderToday(){
       + '</ul>';
   }
   var rows    = schedRows(todayItems,"아직 할 일이 없어요. 첫 항목을 추가해 하루를 시작해 보세요.");
-  var tmrRows = schedRows(tmrItems,"내일 할 일은 아직 없어요.");
+  var tmrRows = schedRows(tmrItems,"앞으로 할 일은 아직 없어요.",true);
   var tmrD=tomorrow();
   var tmrLabel=(tmrD.getMonth()+1)+"월 "+tmrD.getDate()+"일("+WD[tmrD.getDay()]+")";
   view().innerHTML='<div class="page">'
@@ -546,13 +567,14 @@ function renderToday(){
     + '<section class="card"><div class="card-head"><h2>오늘 할 일</h2><span class="muted">별표는 위로 · 항목을 누르면 수정</span></div>'
     +   '<div class="add-row quick"><input class="input" id="new-s" placeholder="할 일을 적고 Enter" /><button class="btn" data-act="s-add" data-id="'+todayKey+'" data-input="new-s">+ 추가</button></div>'+rows
     + '</section>'
-    + '<section class="card"><div class="card-head"><h2>내일 할 일</h2><span class="muted">'+tmrLabel+'</span></div>'
-    +   '<div class="add-row quick"><input class="input" id="new-s2" placeholder="내일 할 일을 적고 Enter" /><button class="btn" data-act="s-add" data-id="'+tmrKey+'" data-input="new-s2">+ 추가</button></div>'+tmrRows
+    + '<section class="card"><div class="card-head"><h2>앞으로 할 일</h2><span class="muted">'+tmrLabel+' 부터</span></div>'
+    +   '<div class="add-row quick"><input class="input" id="new-s2" placeholder="앞으로 할 일을 적고 Enter (내일 날짜로 들어가요)" /><button class="btn" data-act="s-add" data-id="'+tmrKey+'" data-input="new-s2">+ 추가</button></div>'+tmrRows
     + '</section></div>';
   document.getElementById("new-s").addEventListener("keydown",function(e){ if(e.key==="Enter") addSchedule(todayKey,"new-s"); });
   document.getElementById("new-s2").addEventListener("keydown",function(e){ if(e.key==="Enter") addSchedule(tmrKey,"new-s2"); });
 }
 
+var CAL_CHIPS=3;   /* 한 칸에 보여줄 일정 수. 아이패드 가로에선 3개까지 들어간다 */
 function renderCalendar(){
   var first=new Date(calYear,calMonth,1), startDay=first.getDay();
   var dim=new Date(calYear,calMonth+1,0).getDate(), todayKey=keyOf(new Date()), cells="";
@@ -563,9 +585,9 @@ function renderCalendar(){
     var tasks=S.mfds.filter(function(m){ return m.due===k; });
     var chipItems=tasks.map(function(m){ return {task:true,done:m.status==="완료",label:m.title}; })
       .concat(evs.map(function(e){ return {task:false,done:false,label:(e.time?e.time+" ":"")+e.title}; }));
-    var chips=chipItems.slice(0,2).map(function(c){
+    var chips=chipItems.slice(0,CAL_CHIPS).map(function(c){
       return '<div class="cal-ev'+(c.task?" mfds":"")+(c.done?" done":"")+'">'+esc(c.label)+'</div>'; }).join("");
-    if(chipItems.length>2) chips+='<div class="cal-more">+'+(chipItems.length-2)+'</div>';
+    if(chipItems.length>CAL_CHIPS) chips+='<div class="cal-more">+'+(chipItems.length-CAL_CHIPS)+'</div>';
     cells+='<div class="cal-cell'+(k===todayKey?" today":"")+(k===calSel?" sel":"")+'" data-act="cal-day" data-id="'+k+'"><span class="cal-num">'+d+'</span>'+chips+'</div>'; }
   var wdHtml=WD.map(function(w,i){ return '<div class="cal-wd'+(i===0?" sun":"")+'">'+w+'</div>'; }).join("");
   var selEvs=S.events.filter(function(e){return e.key===calSel;}).sort(evSort), selD=new Date(calSel);
@@ -574,15 +596,27 @@ function renderCalendar(){
     var done=(t.status==="완료");
     return '<li class="ev-row task'+(done?" done":"")+'">'
       + '<input class="day-check" type="checkbox" data-act="mfds-done" data-id="'+t.id+'"'+(done?' checked':'')+' />'
-      + '<span class="mfds-badge">식약처</span>'
-      + '<span class="ev-title" data-act="edit" data-table="mfds" data-field="title" data-id="'+t.id+'" title="눌러서 수정">'+esc(t.title)+'</span>'
-      + '<span class="mfds-status">'+esc(t.status)+'</span>'
+      + '<span class="ev-time" data-act="edit" data-table="mfds" data-field="time" data-id="'+t.id+'" title="눌러서 시간 수정">'+(t.time?esc(t.time):'<span class="none">시간</span>')+'</span>'
+      + '<div class="ev-body">'
+      +   '<div class="ev-line"><span class="mfds-badge">식약처</span>'
+      +     '<span class="ev-title" data-act="edit" data-table="mfds" data-field="title" data-id="'+t.id+'" title="눌러서 수정">'+esc(t.title)+'</span>'
+      +     '<span class="mfds-status">'+esc(t.status)+'</span></div>'
+      +   '<div class="ev-line sub">'+whereHtml(t,"mfds")+'</div>'
+      + '</div>'
       + '<span class="row-acts"><button class="del" data-act="mfds-del" data-id="'+t.id+'" title="삭제">✕</button></span></li>'; }).join("");
   var panel='<div class="day-panel"><div class="day-title">'+(selD.getMonth()+1)+'월 '+selD.getDate()+'일 ('+WD[selD.getDay()]+')'+(calSel===todayKey?' <span class="day-today">오늘</span>':'')+'</div>'
-    + '<div class="add-row quick"><input class="input" id="day-ev" placeholder="할 일 / 일정 (예: 오후 2시 GMP 실사)" />'
+    + '<div class="add-row quick day-add"><input class="input day-what" id="day-ev" placeholder="할 일 / 일정 (예: 오후 2시 GMP 실사)" />'
+    +   '<input class="input day-when" id="day-time" placeholder="시간 (예: 14:00)" />'
+    +   '<input class="input day-where" id="day-place" placeholder="장소 (예: 오송 본관 3층)" />'
     +   '<label class="chk"><input type="checkbox" id="day-mfds" /> 식약처 업무</label>'
     +   '<button class="btn" data-act="day-add">+ 추가</button></div>'
-    + ((selEvs.length||selTasks.length)? '<ul class="list">'+taskRows+selEvs.map(function(e){ return '<li class="ev-row"><span class="ev-time" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'+(e.time||"종일")+'</span><span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span><span class="row-acts"><button class="del" data-act="ev-del" data-id="'+e.id+'" title="삭제">✕</button></span></li>'; }).join("")+'</ul>' : '<p class="empty">이 날은 아직 일정이 없어요.</p>')+'</div>';
+    + ((selEvs.length||selTasks.length)? '<ul class="list">'+taskRows+selEvs.map(function(e){ return '<li class="ev-row">'
+      + '<span class="ev-time" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'+(e.time?esc(e.time):"종일")+'</span>'
+      + '<div class="ev-body">'
+      +   '<div class="ev-line"><span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span></div>'
+      +   '<div class="ev-line sub">'+whereHtml(e,"events")+'</div>'
+      + '</div>'
+      + '<span class="row-acts"><button class="del" data-act="ev-del" data-id="'+e.id+'" title="삭제">✕</button></span></li>'; }).join("")+'</ul>' : '<p class="empty">이 날은 아직 일정이 없어요.</p>')+'</div>';
   var mk=calYear+"-"+pad(calMonth+1);
   var mEv=S.events.filter(function(e){ return e.key.indexOf(mk)===0; }).length;
   var mTask=S.mfds.filter(function(m){ return m.due&&m.due.indexOf(mk)===0; }).length;
@@ -750,6 +784,8 @@ function mfdsComposer(){
     + '<div class="composer-foot">'
     +   segC("m-status",MFDS_STATUS,"대기")
     +   '<div class="due-field"><label for="m-due">기한</label><input class="input" type="date" id="m-due" /></div>'
+    +   '<div class="due-field"><label for="m-time">시간</label><input class="input" id="m-time" placeholder="14:00" /></div>'
+    +   '<div class="due-field wide"><label for="m-place">장소</label><input class="input" id="m-place" placeholder="오송 본관 3층" /></div>'
     +   composerBtns("mfds","m-add")
     + '</div></div>';
 }
@@ -1139,7 +1175,8 @@ function addSchedule(dueKey,inputId){
 }
 function addArticle(){ var t=(val("a-title")||"").trim(); if(!t) return; var item={title:t,status:segValue("a-status")||"기획",memo:(val("a-memo")||"").trim()}; S.articles.unshift(item); formOpen.articles=false; render(); dbInsert("articles",item); }
 function addMfds(){ var t=(val("m-title")||"").trim(); if(!t) return;
-  var item={title:t,status:segValue("m-status")||"대기",memo:(val("m-memo")||"").trim(),due:(val("m-due")||"")||null};
+  var item={title:t,status:segValue("m-status")||"대기",memo:(val("m-memo")||"").trim(),
+            due:(val("m-due")||"")||null,time:(val("m-time")||"").trim()||null,place:(val("m-place")||"").trim()||null};
   S.mfds.unshift(item); formOpen.mfds=false; render(); dbInsert("mfds",item); }
 /* 보관 — 지우는 게 아니라 목록에서 접어 둔다.
  * 민원 자료는 나중에 「그때 뭐라고 했지」를 찾는 기록이라 지우면 안 된다. */
@@ -1163,22 +1200,47 @@ function del(name,id,quiet){
   });
 }
 
+/* 그 달에 오늘이 있으면 오늘, 없으면 1일을 고른다 */
+function calSyncSel(){
+  var n=new Date();
+  var d=(n.getFullYear()===calYear&&n.getMonth()===calMonth)?n.getDate():1;
+  calSel=calYear+"-"+pad(calMonth+1)+"-"+pad(d);
+}
+
 function dayAdd(){
   var raw=(val("day-ev")||"").trim(); if(!raw) return;
+  var time=(val("day-time")||"").trim();
+  var place=(val("day-place")||"").trim();
+  var r=parseNL(raw), title=raw;
+  if(r.ok){ if(!time) time=r.time; title=r.title; }   /* 칸을 비웠으면 말로 적은 시간을 쓴다 */
   var chk=document.getElementById("day-mfds");
   if(chk&&chk.checked){
     /* 일정이 아니라 식약처 업무로 등록. 캘린더는 mfds를 직접 읽으므로 여기에도 그대로 뜬다. */
-    var task={title:raw,status:"대기",memo:"",due:calSel};
+    var task={title:title,status:"대기",memo:"",due:calSel,time:time||null,place:place||null};
     S.mfds.unshift(task); render(); dbInsert("mfds",task); return;
   }
-  var r=parseNL(raw); var time=null,title=raw;
-  if(r.ok){ time=r.time; title=r.title; }
-  var item={key:calSel,time:time,title:title};
+  var item={key:calSel,time:time||null,title:title,place:place||null};
   S.events.push(item); render(); dbInsert("events",item);
 }
 function evDel(id){ del("events",id); }
 
 /* ========== 파일 업로드 (Supabase Storage — private bucket) ========== */
+
+/* 장소를 네이버 지도에서 연다. 검색어로 여는 방식이라 API 키가 필요 없고,
+ * 아이패드에선 지도 앱이 바로 뜬다. */
+function openMap(q){
+  q=(q||"").trim(); if(!q) return;
+  window.open("https://map.naver.com/p/search/"+encodeURIComponent(q),"_blank","noopener");
+}
+
+/* 시간·장소 한 줄 — 일정과 식약처 업무가 같은 모양을 쓴다 */
+function whereHtml(it,table){
+  var at=function(f,ph){ return ' data-act="edit" data-table="'+table+'" data-field="'+f+'" data-id="'+it.id+'" title="'+ph+'"'; };
+  var out='<span class="ev-place"'+at("place","눌러서 장소 수정")+'>'
+    + (it.place? '📍 '+esc(it.place) : '<span class="none">＋ 장소</span>')+'</span>';
+  if(it.place) out+='<button class="link-btn map-btn" data-act="map" data-q="'+esc(it.place)+'">지도 ↗</button>';
+  return out;
+}
 
 /* 비공개 버킷: signed URL로 파일 열기 */
 function openStorageFile(path){
@@ -2504,9 +2566,12 @@ document.getElementById("app").addEventListener("click",function(e){
     case "s-toggle": { var it=S.schedule.find(function(x){return x.id===id;}); if(it){it.done=!it.done;render();dbUpdate("schedule",id,{done:it.done});} break; }
     case "s-star": { var i2=S.schedule.find(function(x){return x.id===id;}); if(i2){i2.star=!i2.star;render();dbUpdate("schedule",id,{star:i2.star});} break; }
     case "s-del": del("schedule",id); break;
-    case "cal-prev": calMonth--; if(calMonth<0){calMonth=11;calYear--;} render(); break;
-    case "cal-next": calMonth++; if(calMonth>11){calMonth=0;calYear++;} render(); break;
+    /* 달을 넘기면 아래 날짜 패널도 그 달로 옮긴다.
+     * 안 옮기면 달력엔 없는 날짜의 일정을 보고 있게 된다. */
+    case "cal-prev": calMonth--; if(calMonth<0){calMonth=11;calYear--;} calSyncSel(); render(); break;
+    case "cal-next": calMonth++; if(calMonth>11){calMonth=0;calYear++;} calSyncSel(); render(); break;
     case "cal-day": calSel=id; render(); focusDayPanel(); break;
+    case "map": openMap(el.getAttribute("data-q")); break;
     case "day-add": dayAdd(); break;
     case "ev-del": evDel(id); break;
     case "a-add": addArticle(); break;

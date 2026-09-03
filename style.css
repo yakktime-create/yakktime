@@ -803,3 +803,31 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 .law-art.lv0{background:var(--accent-soft);color:var(--accent);}
 .law-art.lv1{background:var(--blue-soft);color:var(--blue-deep);}
 .law-art.lv2{background:var(--paper);color:var(--muted);}
+
+/* --- 일정 행: 시간 · 제목 · 장소 --- */
+.ev-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.ev-line{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap;min-width:0;}
+.ev-line.sub{font-size:var(--fs-sm);color:var(--muted);}
+.ev-place{cursor:pointer;border-radius:var(--r-xs);padding:1px 3px;}
+.ev-place:hover{background:var(--paper);}
+/* 아직 안 적은 자리 — 너무 흐리면 누를 수 있다는 걸 모른다 */
+.ev-place .none,.ev-time .none{color:var(--muted);opacity:.55;font-weight:500;}
+.map-btn{font-size:var(--fs-xs);padding:2px 6px;border-radius:var(--r-xs);
+  background:var(--accent-soft);flex-shrink:0;}
+
+/* 오늘 화면 --- 앞으로 할 일 날짜 · 다가오는 일정 장소 */
+.row-when{font-size:var(--fs-xs);color:var(--muted);background:var(--paper);
+  padding:2px 8px;border-radius:var(--r-full);flex-shrink:0;white-space:nowrap;}
+.up-place{font-size:var(--fs-sm);color:var(--muted);}
+
+/* 캘린더 입력줄 — 「무엇」은 한 줄 통째로, 그 아래 「언제 / 어디 / 식약처 / 추가」.
+   flex-basis 만 100%로 두면 줄어들어 한 줄에 끼어드므로 shrink 를 막는다. */
+/* .add-row.quick 이 flex-wrap:nowrap 이라 선택자를 같은 무게로 맞춰야 이긴다 */
+.add-row.quick.day-add{flex-wrap:wrap;row-gap:var(--sp-1);}
+.add-row.quick.day-add .day-what{flex:0 0 100%;}
+.add-row.quick.day-add .day-when{flex:0 1 110px;min-width:80px;}
+.add-row.quick.day-add .day-where{flex:1 1 150px;min-width:0;}
+.due-field.wide{flex:1 1 200px;}
+@media (max-width:640px){
+  .add-row.quick.day-add .day-when,.add-row.quick.day-add .day-where{flex:0 0 100%;}
+}

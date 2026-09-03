@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v44";
+var APP_VER="v45";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -624,8 +624,10 @@ var TRIP_MEMO="가는 편  09:20 인천 → 07:30 도착\n오는 편  11:00 출�
  * 「달력에서 시작일 → 마지막 날」을 그냥 눌러서 고른다. */
 var tripUntil=null;
 
-/* 이미 등록된 일정의 기간을 고치는 중일 때, 그 일정의 id.
- * 기간 칩을 누르면 여기서도 달력으로 고른다 — 새로 넣을 때와 같은 방식. */
+/* 이미 등록된 일정의 기간을 고치는 중일 때 {id, key}.
+ * key 는 새로 고른 시작일 — 아직 안 골랐으면 null.
+ * 처음 누른 날이 시작, 그 다음 누른 날이 마지막이 된다.
+ * 새로 넣을 때와 완전히 같은 방식이라, 시작일을 뒤로 미는 것도 그냥 된다. */
 var tripEdit=null;
 
 /* 입력창에 치던 글자. 마지막 날을 고르면 화면을 다시 그리므로,
@@ -654,7 +656,7 @@ function tripRangeHtml(){
 var CAL_CHIPS=3;   /* 한 칸에 보여줄 일정 수. 아이패드 가로에선 3개까지 들어간다 */
 function renderCalendar(){
   /* 기간을 고치는 중인 일정 (지워졌으면 그만둔다) */
-  var te=tripEdit?S.events.find(function(x){ return x.id===tripEdit; }):null;
+  var te=tripEdit?S.events.find(function(x){ return x.id===tripEdit.id; }):null;
   if(tripEdit&&!te) tripEdit=null;
   var first=new Date(calYear,calMonth,1), startDay=first.getDay();
   var dim=new Date(calYear,calMonth+1,0).getDate(), todayKey=keyOf(new Date()), cells="";
@@ -688,9 +690,10 @@ function renderCalendar(){
     /* 기간을 고르는 중이면 시작~끝 칸에 색을 깔아 한눈에 보이게 한다.
      * 새로 넣을 때(출장)와 이미 있는 걸 고칠 때(기간 칩) 모두 같은 표시를 쓴다. */
     var rng="", rs=null, re=null;
-    if(te){ rs=te.key; re=te.until||te.key; }
+    if(te) rs=tripEdit.key;                 /* 고치는 중 — 지금까지 고른 만큼만 보여준다 */
     else if(dayKind===KIND_TRIP&&tripUntil){ rs=calSel; re=tripUntil; }
-    if(rs&&k>=rs&&k<=re) rng=" rng"+(k===rs?" rng-s":"")+(k===re?" rng-e":"");
+    if(rs&&k>=rs&&k<=(re||rs))
+      rng=" rng"+(k===rs?" rng-s":"")+(re&&k===re?" rng-e":"");
     cells+='<div class="cal-cell'+(k===todayKey?" today":"")+(k===calSel?" sel":"")+inTrip+rng+'" data-act="cal-day" data-id="'+k+'"><span class="cal-num">'+d+'</span>'+chips+'</div>'; }
   var wdHtml=WD.map(function(w,i){ return '<div class="cal-wd'+(i===0?" sun":"")+'">'+w+'</div>'; }).join("");
   var selEvs=S.events.filter(function(e){ return e.key<=calSel && calSel<=(e.until||e.key); }).sort(evSort);
@@ -736,7 +739,7 @@ function renderCalendar(){
       +   '<span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span>'
       +   whereHtml(e,"events")
       +   (e.until&&e.until!==e.key
-            ? '<span class="ev-span'+(tripEdit===e.id?" on":"")+'" data-act="trip-edit" data-id="'+e.id+'" title="눌러서 달력에서 기간 고치기">'
+            ? '<span class="ev-span'+(tripEdit&&tripEdit.id===e.id?" on":"")+'" data-act="trip-edit" data-id="'+e.id+'" title="눌러서 달력에서 기간 고치기">'
               + esc(spanLabel(e.key,e.until))+'</span>' : '')
       +   '<span class="ev-memo" data-act="edit" data-table="events" data-field="memo" data-type="textarea" data-id="'+e.id+'" title="눌러서 수정">'
       +     (e.memo?esc(e.memo):'<span class="none">＋ 메모</span>')+'</span>'
@@ -747,8 +750,8 @@ function renderCalendar(){
   var mTask=S.mfds.filter(function(m){ return m.due&&m.due.indexOf(mk)===0; }).length;
   var calPills=[]; if(mEv) calPills.push(pill("이번 달 일정 "+mEv+"건")); if(mTask) calPills.push(pill("기한 있는 업무 "+mTask+"건"));
   view().innerHTML='<div class="page">'+pageHead2("캘린더","",calPills)
-    + (te?'<div class="trip-bar"><span class="tb-t">「'+esc(te.title)+'」 기간</span>'
-          + '<span class="tb-h">달력에서 마지막 날을 누르세요</span>'
+    + (te?'<div class="trip-bar"><span class="tb-t">「'+esc(te.title)+'」 기간 다시 고르기</span>'
+          + '<span class="tb-h">달력에서 '+(tripEdit.key?"마지막 날":"시작하는 날")+'을 누르세요</span>'
           + '<button class="link-btn" data-act="trip-edit-off">그만두기</button></div>':'')
     + '<div class="cal-nav"><button class="cal-arrow" data-act="cal-prev">‹</button><span class="cal-month">'+calYear+'년 '+(calMonth+1)+'월</span><button class="cal-arrow" data-act="cal-next">›</button></div>'
     + '<div class="cal-grid">'+wdHtml+cells+'</div>'+panel+'</div>';
@@ -2878,17 +2881,17 @@ document.getElementById("app").addEventListener("click",function(e){
     case "cal-prev": calMonth--; if(calMonth<0){calMonth=11;calYear--;} calSyncSel(); render(); break;
     case "cal-next": calMonth++; if(calMonth>11){calMonth=0;calYear++;} calSyncSel(); render(); break;
     case "cal-day":
-      /* 기간을 고치는 중이면 누른 날이 마지막 날이 된다.
-       * 시작일보다 앞을 누르면 시작일이 그 날로 당겨지고(출장이 앞당겨진 경우),
-       * 시작일을 그대로 누르면 하루짜리로 돌아간다. */
+      /* 기간을 고치는 중이면 처음 누른 날이 시작, 그 다음 누른 날이 마지막이다.
+       * 시작보다 앞을 누르면 그 날이 새 시작이 된다 (항공권 예매와 같은 방식).
+       * 시작을 한 번 더 누르면 하루짜리로 돌아간다. */
       if(tripEdit){
-        var te2=S.events.find(function(x){ return x.id===tripEdit; });
+        var te2=S.events.find(function(x){ return x.id===tripEdit.id; });
+        if(!te2){ tripEdit=null; render(); break; }
+        if(!tripEdit.key||id<tripEdit.key){ tripEdit.key=id; render(); break; }
+        var tp={key:tripEdit.key,until:(id===tripEdit.key)?null:id};
         tripEdit=null;
-        if(te2){
-          var tp=(id>te2.key)?{until:id}:(id<te2.key)?{key:id}:{until:null};
-          Object.keys(tp).forEach(function(f){ te2[f]=tp[f]; });
-          calSel=te2.key; render(); dbUpdate("events",te2.id,tp); focusDayPanel();
-        } else render();
+        te2.key=tp.key; te2.until=tp.until;
+        calSel=tp.key; render(); dbUpdate("events",te2.id,tp); focusDayPanel();
         break;
       }
       /* 출장을 고른 상태면 두 번째 누른 날이 마지막 날이 된다.
@@ -2898,7 +2901,9 @@ document.getElementById("app").addEventListener("click",function(e){
       if(dayKind===KIND_TRIP&&!tripUntil&&id>calSel){ tripUntil=id; render(); focusDayPanel(); break; }
       tripUntil=null; calSel=id; render(); focusDayPanel(); break;
     case "trip-reset": saveDayDraft(); tripUntil=null; render(); break;
-    case "trip-edit": tripEdit=(tripEdit===id)?null:id; render(); focusCal(); break;
+    case "trip-edit":
+      tripEdit=(tripEdit&&tripEdit.id===id)?null:{id:id,key:null};
+      render(); focusCal(); break;
     case "trip-edit-off": tripEdit=null; render(); break;
     case "map": openMap(el.getAttribute("data-q")); break;
     case "ac-pick": {

@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v47";
+var APP_VER="v48";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -765,7 +765,7 @@ function renderCalendar(){
   view().innerHTML='<div class="page">'+pageHead2("캘린더","",calPills)
     + (te?'<div class="trip-bar"><span class="tb-t">「'+esc(te.title)+'」 기간 고치기</span>'
           + '<span class="tb-h">날짜를 누르면 가까운 쪽 끝이 그리로 옮겨가요</span>'
-          + '<button class="link-btn" data-act="trip-edit-off">다 됐어요</button></div>':'')
+          + '<button class="link-btn" data-act="trip-edit-off">완료</button></div>':'')
     + '<div class="cal-nav"><button class="cal-arrow" data-act="cal-prev">‹</button><span class="cal-month">'+calYear+'년 '+(calMonth+1)+'월</span><button class="cal-arrow" data-act="cal-next">›</button></div>'
     + '<div class="cal-grid">'+wdHtml+cells+'</div>'+panel+'</div>';
   wireSeg("day-kind",function(v){ if(v===dayKind) return;
@@ -2867,7 +2867,19 @@ document.addEventListener("keydown",function(e){
 
 /* ========== 이벤트 위임 ========== */
 document.getElementById("app").addEventListener("click",function(e){
-  var el=e.target.closest("[data-act]"); if(!el) return;
+  var el=e.target.closest("[data-act]");
+  /* 기간을 고치는 중에 달력 밖 아무 데나 누르면 끝낸다.
+   * 고칠 때마다 이미 저장되므로 따로 확인받을 게 없다 —
+   * 「완료」는 끝내는 버튼이지 저장 버튼이 아니다. */
+  if(tripEdit&&!e.target.closest(".cal-grid")&&!e.target.closest(".trip-bar")){
+    tripEdit=null;
+    /* 빈 데를 눌렀으면 여기서 다시 그리고 끝낸다.
+     * 다른 걸 눌렀을 땐 여기서 그리면 안 된다 — 지금 누른 그 요소가
+     * 화면에서 사라져 버려서, 이어서 할 동작(인라인 수정 등)이 깨진다.
+     * 그 동작들이 알아서 다시 그린다. */
+    if(!el){ render(); return; }
+  }
+  if(!el) return;
   var act=el.getAttribute("data-act"), id=el.getAttribute("data-id");
   switch(act){
     case "tab": active=id; closeForms(); render(); break;

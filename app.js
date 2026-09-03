@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v48";
+var APP_VER="v49";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -724,6 +724,23 @@ function renderCalendar(){
       +     '<span class="mfds-status">'+esc(t.status)+'</span></span>'
       + '</div>'
       + '<span class="row-acts"><button class="del" data-act="mfds-del" data-id="'+t.id+'" title="삭제">✕</button></span></li>'; }).join("");
+  function evRowHtml(e){ return '<li class="ev-row">'
+      + '<span class="check-gap"></span>'
+      + '<span class="ev-time" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'+(e.time?esc(e.time):"종일")+'</span>'
+      + '<div class="ev-body">'
+      +   '<span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span>'
+      +   whereHtml(e,"events")
+      +   (e.until&&e.until!==e.key
+            ? '<span class="ev-span'+(tripEdit&&tripEdit.id===e.id?" on":"")+'" data-act="trip-edit" data-id="'+e.id+'" title="눌러서 달력에서 기간 고치기">'
+              + esc(spanLabel(e.key,e.until))+'</span>' : '')
+      +   '<span class="ev-memo" data-act="edit" data-table="events" data-field="memo" data-type="textarea" data-id="'+e.id+'" title="눌러서 수정">'
+      +     (e.memo?esc(e.memo):'<span class="none">＋ 메모</span>')+'</span>'
+      + '</div>'
+      + '<span class="row-acts"><button class="del" data-act="ev-del" data-id="'+e.id+'" title="삭제">✕</button></span></li>'; }
+  /* 출장·여행이 맨 위 — 그 날의 큰 틀이라 먼저 눈에 들어와야 한다 (달력 칸과 같은 순서) */
+  function isTrip(e){ return !!(e.until&&e.until!==e.key); }
+  var tripRows=selEvs.filter(isTrip).map(evRowHtml).join("");
+  var dayRows =selEvs.filter(function(e){ return !isTrip(e); }).map(evRowHtml).join("");
   var panel='<div class="day-panel"><div class="day-title">'+(selD.getMonth()+1)+'월 '+selD.getDate()+'일 ('+WD[selD.getDay()]+')'+(calSel===todayKey?' <span class="day-today">오늘</span>':'')+'</div>'
     + '<div class="card form composer day-form">'
     +   '<input class="input composer-title" id="day-ev" value="'+esc(dayDraft.title)+'" placeholder="무엇을 하나요? (예: GMP 실사 사전회의)" />'
@@ -745,19 +762,9 @@ function renderCalendar(){
     +     '<div class="composer-btns"><button class="btn" data-act="day-add">+ 추가</button></div>'
     +   '</div>'
     + '</div>'
-    + ((selEvs.length||selTasks.length)? '<ul class="list">'+taskRows+selEvs.map(function(e){ return '<li class="ev-row">'
-      + '<span class="check-gap"></span>'
-      + '<span class="ev-time" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'+(e.time?esc(e.time):"종일")+'</span>'
-      + '<div class="ev-body">'
-      +   '<span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span>'
-      +   whereHtml(e,"events")
-      +   (e.until&&e.until!==e.key
-            ? '<span class="ev-span'+(tripEdit&&tripEdit.id===e.id?" on":"")+'" data-act="trip-edit" data-id="'+e.id+'" title="눌러서 달력에서 기간 고치기">'
-              + esc(spanLabel(e.key,e.until))+'</span>' : '')
-      +   '<span class="ev-memo" data-act="edit" data-table="events" data-field="memo" data-type="textarea" data-id="'+e.id+'" title="눌러서 수정">'
-      +     (e.memo?esc(e.memo):'<span class="none">＋ 메모</span>')+'</span>'
-      + '</div>'
-      + '<span class="row-acts"><button class="del" data-act="ev-del" data-id="'+e.id+'" title="삭제">✕</button></span></li>'; }).join("")+'</ul>' : '<p class="empty">이 날은 아직 일정이 없어요.</p>')+'</div>';
+    + ((selEvs.length||selTasks.length)
+        ? '<ul class="list">'+tripRows+taskRows+dayRows+'</ul>'
+        : '<p class="empty">이 날은 아직 일정이 없어요.</p>')+'</div>';
   var mk=calYear+"-"+pad(calMonth+1);
   var mEv=S.events.filter(function(e){ return e.key.indexOf(mk)===0; }).length;
   var mTask=S.mfds.filter(function(m){ return m.due&&m.due.indexOf(mk)===0; }).length;

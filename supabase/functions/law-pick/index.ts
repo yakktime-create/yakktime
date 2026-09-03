@@ -84,7 +84,9 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) return json({ error: "ANTHROPIC_API_KEY 가 없어요. Edge Functions 비밀값에 넣어주세요." });
 
-    const { q } = await req.json().catch(() => ({ q: "" }));
+    const { q, lawIds } = await req.json().catch(() => ({ q: "", lawIds: null }));
+    // 화면에서 법령을 골랐으면 그 안에서만 고른다. 안 골랐으면(null) 전부 본다.
+    const only: string[] | null = Array.isArray(lawIds) && lawIds.length ? lawIds.map(String) : null;
     const question = String(q || "").trim();
     if (question.length < 5)   return json({ error: "질문을 조금 더 길게 적어주세요." });
     if (question.length > 4000) return json({ error: "질문이 너무 길어요. 4000자 안으로 줄여주세요." });
@@ -104,16 +106,21 @@ Deno.serve(async (req) => {
     }
 
     // --- 조 목록 만들기 --------------------------------------------------
-    const { data: laws, error: le } = await db.from("laws").select("id,name");
+    let lawQ = db.from("laws").select("id,name");
+    if (only) lawQ = lawQ.in("id", only);
+    const { data: laws, error: le } = await lawQ;
     if (le) return json({ error: "법령 목록을 못 읽었어요: " + le.message });
     const lawName = new Map((laws || []).map((l: any) => [l.id, l.name]));
 
-    const { data: arts, error: ae } = await db.from("law_articles")
-      .select("id,law_id,seq,label")
+    let artQ = db.from("law_articles").select("id,law_id,seq,label");
+    if (only) artQ = artQ.in("law_id", only);
+    const { data: arts, error: ae } = await artQ
       .order("law_id").order("seq").limit(MAX_ARTS);
     if (ae) return json({ error: "조문을 못 읽었어요: " + ae.message });
     if (!arts || !arts.length) {
-      return json({ error: "아직 조문으로 쪼개진 법령이 없어요. 법령 탭에서 「조문 만들기」를 먼저 해주세요." });
+      return json({ error: only
+        ? "고른 법령에 조문이 없어요. 「조문 만들기」를 먼저 하거나 범위를 넓혀주세요."
+        : "아직 조문으로 쪼개진 법령이 없어요. 법령 탭에서 「조문 만들기」를 먼저 해주세요." });
     }
 
     const index: any[] = [];

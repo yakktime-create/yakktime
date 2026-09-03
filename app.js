@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v49";
+var APP_VER="v50";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -733,8 +733,13 @@ function renderCalendar(){
       +   (e.until&&e.until!==e.key
             ? '<span class="ev-span'+(tripEdit&&tripEdit.id===e.id?" on":"")+'" data-act="trip-edit" data-id="'+e.id+'" title="눌러서 달력에서 기간 고치기">'
               + esc(spanLabel(e.key,e.until))+'</span>' : '')
-      +   '<span class="ev-memo" data-act="edit" data-table="events" data-field="memo" data-type="textarea" data-id="'+e.id+'" title="눌러서 수정">'
-      +     (e.memo?esc(e.memo):'<span class="none">＋ 메모</span>')+'</span>'
+      /* 메모는 적어둔 게 있을 때만 보여준다. 빈 「＋ 메모」가 모든 일정마다
+       * 한 줄씩 차지해서, 한 건이 두 줄로 보였다.
+       * 출장·여행은 비행·숙소를 적는 자리라 비어 있어도 남겨 둔다. */
+      +   ((e.memo||isTrip(e))
+            ? '<span class="ev-memo" data-act="edit" data-table="events" data-field="memo" data-type="textarea" data-id="'+e.id+'" title="눌러서 수정">'
+              + (e.memo?esc(e.memo):'<span class="none">＋ 메모</span>')+'</span>'
+            : '')
       + '</div>'
       + '<span class="row-acts"><button class="del" data-act="ev-del" data-id="'+e.id+'" title="삭제">✕</button></span></li>'; }
   /* 출장·여행이 맨 위 — 그 날의 큰 틀이라 먼저 눈에 들어와야 한다 (달력 칸과 같은 순서) */

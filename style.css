@@ -867,3 +867,7 @@ textarea.inline-area{min-height:52px;resize:vertical;}
   color:var(--accent);background:var(--accent-soft);border-radius:var(--r-full);
   padding:2px 8px;}
 @media (hover:none){ .ac-item{padding:13px 14px;} }
+
+/* 기존 항목의 장소를 고칠 때도 목록이 뜨게 — 자리를 잡아줄 감싸개 */
+.inline-ac{position:relative;flex:1 1 auto;min-width:0;display:inline-block;}
+.inline-ac .input.inline-edit{width:100%;}

@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v33";
+var APP_VER="v34";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -347,8 +347,23 @@ function startEdit(el,table,id,field,type){
   if(type&&!area) inp.type=type;
   inp.className="input inline-edit"+(area?" inline-area":"");
   inp.value=cur;
-  el.replaceWith(inp);
+  /* 장소 칸은 기존 항목을 고칠 때도 자동완성이 떠야 한다.
+   * 목록을 띄우려면 자리를 잡아줄 감싸개가 필요해서 한 겹 두른다. */
+  var isPlace=(field==="place"), acBox=null;
+  if(isPlace){
+    var wrap=document.createElement("span");
+    wrap.className="ac-wrap inline-ac";
+    el.replaceWith(wrap);
+    inp.id="inline-place";
+    wrap.appendChild(inp);
+    acBox=document.createElement("div");
+    acBox.className="ac-list"; acBox.id="inline-place-ac"; acBox.style.display="none";
+    wrap.appendChild(acBox);
+  } else {
+    el.replaceWith(inp);
+  }
   inp.focus();
+  if(isPlace) wirePlaceAC("inline-place","inline-place-ac");
   if(!type) { try{ inp.setSelectionRange(cur.length,cur.length); }catch(e){} }
   var settled=false;
   /* 날짜는 비워서 저장할 수 있어야 한다 (기한을 없애면 캘린더에서도 빠짐) */
@@ -1273,6 +1288,9 @@ function wirePlaceAC(inputId,boxId){
   var input=document.getElementById(inputId), box=document.getElementById(boxId);
   if(!input||!box) return;
   placeAC.input=input; placeAC.box=box; placeAC.items=[];
+  /* 목록을 누르는 순간 입력칸이 blur 되면, 고르기도 전에 저장되고 목록이 사라진다.
+   * mousedown 을 막으면 포커스가 안 옮겨가서 고르기가 먼저 끝난다. */
+  box.addEventListener("mousedown",function(e){ e.preventDefault(); });
   input.addEventListener("input",function(){
     var q=input.value.trim();
     clearTimeout(placeAC.timer);
@@ -2662,8 +2680,13 @@ document.getElementById("app").addEventListener("click",function(e){
     case "map": openMap(el.getAttribute("data-q")); break;
     case "ac-pick": {
       var it=placeAC.items[parseInt(el.getAttribute("data-i"),10)];
-      if(it&&placeAC.input){ placeAC.input.value=it.name; placeAC.input.focus(); }
-      placeACHide(); break;
+      var inp2=placeAC.input;
+      if(it&&inp2) inp2.value=it.name;
+      placeACHide();
+      /* 기존 항목을 고치던 중이면 고르는 즉시 저장(= blur)하고,
+       * 새로 만드는 중이면 계속 입력할 수 있게 커서를 남긴다. */
+      if(inp2){ if(inp2.id==="inline-place") inp2.blur(); else inp2.focus(); }
+      break;
     }
     case "day-add": dayAdd(); break;
     case "ev-del": evDel(id); break;

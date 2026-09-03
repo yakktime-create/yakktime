@@ -810,7 +810,11 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 /* .ev-title 의 flex:1 이 제목을 늘려 장소를 오른쪽 끝으로 밀어낸다.
    제목이 짧으면 멀고 길면 붙어서 위치가 들쭉날쭉하므로, 장소는 제목 바로 옆에 둔다. */
 .ev-body .ev-title{flex:0 1 auto;min-width:0;}
-.ev-body .mfds-status{margin-left:auto;}
+/* 식약처 배지·상태는 오른쪽 끝에 모아 둔다. 제목·장소가 왼쪽에서 시작해
+   일정 줄과 형식이 같아진다. */
+.ev-tail{margin-left:auto;display:flex;align-items:center;gap:var(--sp-2);flex-shrink:0;}
+/* 일정 줄에는 체크가 없다. 같은 너비를 비워 둬야 시간·제목이 나란히 선다. */
+.check-gap{width:17px;flex:none;}
 .ev-place{cursor:pointer;border-radius:var(--r-xs);padding:1px 4px;
   font-size:var(--fs-sm);color:var(--muted);min-width:0;}
 .ev-place:hover{background:var(--paper);}

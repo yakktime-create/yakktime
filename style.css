@@ -1099,10 +1099,14 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .ask-parts{display:flex;gap:var(--sp-1);margin-top:4px;flex-wrap:wrap;}
 .ask-parts span{font-size:var(--fs-2xs);font-weight:700;color:var(--muted);
   background:var(--paper);border-radius:var(--r-xs);padding:1px 7px;}
-/* 조문 본문 앞부분 — 창을 열지 않고도 맞는지 가늠하라고 붙인다 */
+/* 조문 본문 앞부분 — 창을 열지 않고도 맞는지 가늠하라고 붙인다.
+ * 원문과 대조를 통과한 **근거 문장**이면 왼쪽에 선을 긋고 글자를 진하게 한다. */
 .ask-head-txt{margin-top:6px;padding:8px 11px;background:var(--paper);
   border-radius:var(--r-sm);font-size:var(--fs-sm);color:var(--muted);
   line-height:var(--lh-snug);}
+.ask-head-txt.is-quote{color:var(--ink);border-left:3px solid var(--accent-soft);}
+.ask-quote-tag{display:inline-block;margin-right:7px;font-size:var(--fs-2xs);
+  font-weight:800;color:var(--accent);vertical-align:1px;}
 .ask-more{list-style:none;padding-left:var(--sp-3);}
 .ask-foot{margin:var(--sp-4) 0 0;padding-top:var(--sp-3);border-top:1px solid var(--line);
   font-size:var(--fs-sm);color:var(--muted);}

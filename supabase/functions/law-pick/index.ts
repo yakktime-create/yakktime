@@ -28,7 +28,7 @@ const MAX_PICKS  = 10;     // 2차에서 남길 최종 수
 // 2차에게는 조문을 통째로 읽힌다. 다만 정의 조항이나 별표가 붙은 조는
 // 수만 자에 이르므로 한 조와 전체에 각각 뚜껑을 씌운다. 없으면 한 번에
 // 몇천 원이 나갈 수 있다.
-const ART_MAX    = 4000;   // 조 하나에서 읽을 최대 글자
+const ART_MAX    = 2800;   // 조 하나에서 읽을 최대 글자 (후보를 더 많이 읽히려고 줄임)
 const TOTAL_MAX  = 60000;  // 2차에 넣을 글자 총량
 const PREVIEW    = 180;    // 화면에 보여줄 미리보기
 // 1차는 **조 제목만** 본다. 그래서 제목에 그 말이 없는 상위법이 통째로 빠진다 —
@@ -196,11 +196,17 @@ const RULES2 = `${HEAD}
 
   sure — 본문에서 근거를 찾았나?
     "근거 찾음"      준 본문 안에 근거가 실제로 보인다. 어느 대목인지 짚을 수 있다.
+                     <b>「…있을 것으로 보입니다」처럼 짐작하면 이것이 아니다.</b>
     "비슷한 대목만"  관련 있어 보이는 말은 있으나 딱 떨어지는 대목을 짚기는 어렵다.
     "못 찾음"        본문에서는 못 찾았고 제목으로 짐작한다.
 
   세 가지를 정직하게 고른다. 다 최고로 몰면 순서를 매긴 뜻이 없다.
 
+- quote 에는 <b>본문에서 그대로 옮긴 한 문장</b>을 적는다. 한 글자도 바꾸지 않는다.
+  옮길 문장이 없으면 빈 문자열("")로 둔다. <b>지어내면 그 조는 버려진다</b> —
+  이쪽에서 본문과 대조해 실제로 있는 문장인지 검사한다.
+- <b>본문을 이미 받았으면 짐작하지 않는다.</b> 읽고도 근거가 없으면 그 조는 아예 빼라.
+  「…있을 것으로 보입니다」는 본문을 안 읽었다는 뜻이다.
 - why 에는 왜 그 조인지 한 문장. <b>근거를 찾았으면 그 대목을 짚어 적는다</b>
   (예: 「1회 1개 품목 포장단위로 판매할 것」이 여기 있습니다).
   본문에서 못 찾았으면 그렇다고 적는다.
@@ -222,8 +228,9 @@ const SCHEMA2 = {
           need:   { type: "string", enum: ["인용 필수", "있으면 좋음", "없어도 됨"] },
           sure:   { type: "string", enum: ["근거 찾음", "비슷한 대목만", "못 찾음"] },
           why:    { type: "string" },
+          quote:  { type: "string" },
         },
-        required: ["n", "direct", "need", "sure", "why"],
+        required: ["n", "direct", "need", "sure", "why", "quote"],
         additionalProperties: false,
       },
     },
@@ -337,15 +344,22 @@ Deno.serve(async (req) => {
       .filter((w: string) => w.length >= 2 && w.length <= 20)
       .slice(0, WORDS_MAX);
     let boosted = 0;
+    const dbg: Record<string, unknown> = {};
     if (upperIds.length && words.length) {
-      const have = new Set(cand.map((c: any) => c.id));
+      // **id 는 숫자다**(law_articles.id = 32457). 한쪽만 String() 으로 바꿔 비교하는
+      // 바람에 낱말로 찾은 193개가 전부 「목록에 없는 조문」으로 버려졌다.
+      // 열쇠는 한 가지 꼴로 통일해서 쓴다.
+      const have = new Set(cand.map((c: any) => String(c.id)));
       const nOf = new Map<string, number>(live.map((a: any, i: number) => [String(a.id), i + 1]));
       const score = new Map<string, number>();
       for (const w of words) {
         const { data: rows } = await pg("law_articles?select=id&limit=" + BOOST_ROWS
           + "&law_id=" + encodeURIComponent(inList(upperIds))
           + "&content=" + encodeURIComponent("ilike.*" + w.replace(/[*,()]/g, "") + "*"));
-        (rows || []).forEach((r: any) => score.set(r.id, (score.get(r.id) || 0) + 1));
+        (rows || []).forEach((r: any) => {
+          const k = String(r.id);
+          score.set(k, (score.get(k) || 0) + 1);
+        });
       }
       const extra = [...score.entries()]
         // 낱말 하나만 걸린 것은 잡음이다. 둘 이상 겹칠 때만 —
@@ -358,6 +372,9 @@ Deno.serve(async (req) => {
         .slice(0, BOOST_MAX)
         .map(([id]) => { const n = nOf.get(id)!; return { n, ...index[n] }; });
       boosted = extra.length;
+      dbg.upper = upperIds.length; dbg.words = words.length;
+      dbg.hit = score.size; dbg.two = [...score.values()].filter((c) => c >= 2).length;
+      dbg.have = have.size; dbg.inIndex = [...score.keys()].filter((id) => nOf.has(id)).length;
       // 예산은 뒤에서부터 잘리므로 보탠 것을 앞쪽에 끼워 넣는다 —
       // 뒤에 붙이면 정작 보태 놓고 못 읽힌다.
       cand = cand.slice(0, 10).concat(extra, cand.slice(10));
@@ -379,12 +396,16 @@ Deno.serve(async (req) => {
     // 억지로 잘라 넣느니 「몇 개까지 읽었다」를 화면에 알리는 편이 낫다.
     let sheet = "", used = 0, readCount = 0;
     for (const c of cand) {
-      const full = flat(bodyOf.get(c.id) || "");
+      // id 는 숫자다. 열쇠를 String 으로 통일해 두었으니 찾을 때도 String 으로.
+      // 이걸 안 맞춰서 2차 AI 가 **본문을 하나도 못 받고** 제목만 보고 답했다.
+      const full = flat(bodyOf.get(String(c.id)) || "");
       const body = full.length > ART_MAX ? full.slice(0, ART_MAX) + " …(뒤가 잘림)" : full;
       if (used + body.length > TOTAL_MAX && readCount > 0) break;
       sheet += `\n[${c.n}] ${c.law}  ${c.label}\n${body}\n`;
       used += body.length; readCount++;
     }
+
+    if (!sheet.trim()) return json({ error: "조문 본문을 못 읽었어요. 잠시 뒤 다시 눌러주세요." });
 
     // --- 2차: 본문을 읽고 최종으로 추리기 ---------------------------------
     const r2: any = await claude(apiKey, {
@@ -423,14 +444,32 @@ Deno.serve(async (req) => {
         // 목록에 없는 말이 오면 가운데 값으로 본다 (등급이 튀지 않게)
         const direct = W_DIRECT[p.direct] != null ? p.direct : "조건 확인";
         const need   = W_NEED[p.need]     != null ? p.need   : "있으면 좋음";
-        const sure   = W_SURE[p.sure]     != null ? p.sure   : "비슷한 대목만";
+        let   sure   = W_SURE[p.sure]     != null ? p.sure   : "비슷한 대목만";
+        let   need2  = need;
+        // **짐작해 놓고 「근거 찾음」이라 붙이는 일이 있다.** 「있을 수 있습니다」
+        // 「가능성입니다」라고 써 놓고 근거를 찾았다고 하면 그건 거짓말이다.
+        // 말로 드러난 짐작은 등급에서 한 칸 내린다.
+        if (/있을 수 있|가능성|것으로 보|것으로 예상|추정|일 것/.test(String(p.why || ""))) {
+          if (sure === "근거 찾음") sure = "비슷한 대목만";
+          if (need2 === "인용 필수") need2 = "있으면 좋음";
+        }
         const kind   = lawKind.get(hit.law_id) || { t:"그 밖", w:0 };
         // 상위법 가산 — 같은 판단이면 법률이 지침서보다 위에 선다
-        const score  = W_DIRECT[direct] + W_NEED[need] + W_SURE[sure] + kind.w;
-        const t = flat(bodyOf.get(hit.id) || "");
+        const score  = W_DIRECT[direct] + W_NEED[need2] + W_SURE[sure] + kind.w;
+        const t = flat(bodyOf.get(String(hit.id)) || "");
+        // **옮겼다는 문장이 본문에 실제로 있는지 대조한다.** 지어낸 근거를
+        // 「근거 찾음」으로 통과시키면 민원 답변에 없는 말이 들어간다.
+        // 빈칸만 다를 수 있으므로 빈칸을 지우고 견준다.
+        const bare = (x: string) => x.replace(/\s+/g, "");
+        const qraw = String(p.quote || "").trim();
+        const qok  = qraw.length >= 10 && bare(t).indexOf(bare(qraw)) >= 0;
+        if (!qok && sure === "근거 찾음") sure = "비슷한 대목만";
         return { id: hit.id, lawId: hit.law_id, law: hit.law, label: hit.label,
-                 direct, need, sure, kind: kind.t, grade: gradeOf(score), score,
-                 head: t.length > PREVIEW ? t.slice(0, PREVIEW) + "…" : t,
+                 direct, need: need2, sure, kind: kind.t, grade: gradeOf(score), score,
+                 // 미리보기는 **근거 문장**이 낫다 — 본문 앞 180자는 대개
+                 // 「붙임 1 제출자료 요건 ※…」처럼 아무 말도 안 해 준다.
+                 quote: qok ? qraw : "",
+                 head: qok ? qraw : (t.length > PREVIEW ? t.slice(0, PREVIEW) + "…" : t),
                  why: String(p.why || "") };
       })
       .filter(Boolean);
@@ -452,6 +491,7 @@ Deno.serve(async (req) => {
       // 제목에는 안 드러나서 낱말로 찾아 보탠 상위법 조문 수
       boosted,
       words,
+      dbg,
       krw: Math.round((usdOf(r1.usage) + usdOf(r2.usage)) * KRW),
     });
   } catch (e) {

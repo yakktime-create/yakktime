@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v109";
+var APP_VER="v110";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2908,8 +2908,11 @@ function lawAskHtml(){
       +   (p.direct?'<div class="ask-parts">'
             + '<span>'+esc(p.direct)+'</span><span>'+esc(p.sure)+'</span>'
             + '</div>':'')
-      /* 본문 앞부분을 같이 보여준다 — 창을 열었다 닫지 않아도 맞는지 가늠된다 */
-      +   (p.head?'<div class="ask-head-txt">'+esc(p.head)+'</div>':'')
+      /* 근거 문장을 그대로 보여준다. AI 가 옮겼다고 한 문장을 서버가 원문과
+       * 대조해 통과한 것만 quote 로 온다 — 지어낸 근거는 여기 못 온다.
+       * 대조가 안 됐으면 본문 앞부분이라도 보여준다(맞는지 가늠은 되니까). */
+      +   (p.head?'<div class="ask-head-txt'+(p.quote?' is-quote':'')+'">'
+            + (p.quote?'<span class="ask-quote-tag">근거</span>':'')+esc(p.head)+'</div>':'')
       + '</div></li>';
   }
   var items=shown.map(askItem).join("")

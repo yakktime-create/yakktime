@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v113";
+var APP_VER="v114";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3332,6 +3332,8 @@ var ART_RE=/제\s*(\d+)\s*조(?:\s*의\s*(\d+))?\s*\(\s*([^()]{1,40}?)\s*\)/g;
 /* 제목 부분은 선택으로 둔다 — 제목 뒤에 괄호가 없는 서식이 있는데,
  * 필수로 두면 그런 쪽에서 규칙이 통째로 실패해 머리말을 아예 못 찾는다. */
 var BP_RE=/\[\s*별\s*(표|지)\s*(?:제\s*)?(\d+)(?:\s*의\s*(\d+))?\s*(?:호\s*서\s*식)?\s*\]\s*(?:<[^<>]{0,40}>\s*)?(?:([^()\[\]<>]{0,40}?)\s*(?=\(|\[|<|$))?/g;
+/* 「[별표 N]」 뒤에 이것이 오면 머리말이 아니라 인용이다 */
+var BP_CITE=/^(?:[,·、]|(?:및|또는|참조|이하)(?=\s|$)|(?:에|의|을|를|은|는|이|가|와|과|에서|에는|부터|까지)(?=\s|[,·]|$))/;
 var HANG="①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";
 /* 지침서가 쓰는 글머리표. 07 사전GMP평가는 「ㅇ」(홑자음)를, 09·10은 「○」를 쓴다.
  * **네모(□ ■ ◇ ◆)는 뺀다** — 그건 글머리표가 아니라 점검표의 **체크칸**이다.
@@ -3401,6 +3403,15 @@ function findArticles(text,max){
   }
   BP_RE.lastIndex=0;
   while((m=BP_RE.exec(text))!==null){
+    /* **「[별표 5]」가 본문에 인용될 때를 조 시작으로 오인했다.**
+     * 「「의약품 등의 안전에 관한 규칙」[별표 1], [별표 3], [별표 5] 및 관련…」에서
+     * 세 개가 다 조 시작이 되어, 「별표 5」 전문이 문장 한복판에서 시작하고
+     * 쪽 머리말이 「별표 12 (이어짐) ~ 별표 5」처럼 앞뒤가 뒤집혔다.
+     * 대괄호 **바로 뒤가 조사·쉼표**면 인용이다 — 진짜 머리말 뒤에는 제목이 온다.
+     * 낱말 경계를 반드시 본다: 「의」로만 재면 「[별표 1] 의약품 제조…」가 걸린다.
+     * 실측: 05 고시 115곳 중 63곳 · 06 고시 44곳 중 6곳 · 03 규칙 104곳 중 0곳. */
+    var br=m.index+m[0].indexOf("]")+1;
+    if(BP_CITE.test(text.slice(br,br+14).replace(/^\s+/,""))) continue;
     var t2=(m[4]||"").replace(/\s+/g," ").trim();
     if(isBadTblTitle(t2)) t2="";      /* 제목이 아니면 번호만 쓴다 (별표 14) */
     var head=(m[1]==="지")

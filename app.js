@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v116";
+var APP_VER="v117";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2378,7 +2378,9 @@ function buildLawArticles(pages,docName,docKind){
         if(cs.length<2){ parts2.push(pt); return; }
         for(var z=0;z<cs.length;z++){
           var za=cs[z].at, zb=(z+1<cs.length)?cs[z+1].at:pt.text.length;
-          parts2.push({title:pt.title+" "+(z+1)+"/"+cs.length,
+          /* **「1/4」은 붙이지 않는다.** 옆에 쪽 배지(199~202쪽)가 이미 어느
+           * 토막인지 말해 주므로 군더더기다 — 「6/14 토막」을 뺀 것과 같은 이유. */
+          parts2.push({title:pt.title,
                        text:pt.text.slice(za,zb).trim(), a:pt.a+za, b:pt.a+zb});
         }
       });

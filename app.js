@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v108";
+var APP_VER="v109";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -4112,10 +4112,10 @@ function lawHelpHtml(){
     +   '</ul>'
     +   '<p>배지 아래 작은 낱말 둘은 <b>왜 그렇게 봤는지</b>예요.</p>'
     +   '<ul>'
-    +     '<li><b>답이 이 조에 있나</b><br />'
-    +       '<span class="law-help-dim"><b>답이 여기</b> — 이 조를 펴면 답이 나와요<br />'
-    +       '<b>조건이 여기</b> — 답 자체는 아니고, 몇 년까지·누구에게 같은 <b>조건</b>이 적혀 있어요<br />'
-    +       '<b>말뜻·절차만</b> — 낱말 뜻풀이나 신청 절차·벌칙만 있고 답은 없어요</span></li>'
+    +     '<li><b>이 조에서 무엇을 얻나</b><br />'
+    +       '<span class="law-help-dim"><b>답 확인</b> — 이 조를 펴면 답이 나와요<br />'
+    +       '<b>조건 확인</b> — 답은 아니고, 몇 년까지·누구에게 같은 <b>조건</b>이 적혀 있어요<br />'
+    +       '<b>배경 확인</b> — 낱말 뜻·절차·벌칙만 있어요</span></li>'
     +     '<li><b>본문에서 근거를 찾았나</b> — 근거 찾음 &gt; 비슷한 대목만 &gt; 못 찾음<br />'
     +       '<span class="law-help-dim">「근거 찾음」은 조문 안에서 <b>그 대목을 짚을 수 있을 때만</b> 붙어요. '
     +       '그때는 왼쪽 설명에도 그 대목이 그대로 적힙니다.</span></li>'

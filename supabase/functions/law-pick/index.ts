@@ -14,10 +14,12 @@
 //  비밀값(Secrets)에 ANTHROPIC_API_KEY 를 넣어야 동작한다.
 // =====================================================================
 
-// 버전을 고정한다. 안 박아 두면 어느 날 새 판이 올라오면서 조용히 깨진다.
-// (2026-09-04 기준 최신)
-import Anthropic from "npm:@anthropic-ai/sdk@0.123.0";
-import { createClient } from "npm:@supabase/supabase-js@2.115.0";
+// **npm 꾸러미를 안 쓴다.** 처음엔 SDK 두 개를 npm: 으로 불러왔는데, 함수가
+// 깨어날 때 그걸 내려받다 시간이 넘어 WORKER_ERROR(500)만 났다. 브라우저에는
+// 「Failed to send a request to the Edge Function」으로 보인다 — 프리플라이트
+// (OPTIONS)까지 500이 되기 때문이다.
+// 하는 일이 「HTTP 두 번 부르기」뿐이라 fetch 로 직접 부른다. 받아올 것이
+// 없으니 깨어나는 데 시간이 안 걸리고, 남의 판이 바뀌어 깨질 일도 없다.
 
 const MODEL      = "claude-haiku-4-5-20251001";
 const MAX_ARTS   = 3000;   // 조 목록 상한 — 토큰이 무한정 늘지 않게
@@ -63,6 +65,40 @@ function json(body: unknown) {
     status: 200,
     headers: { ...CORS, "Content-Type": "application/json" },
   });
+}
+
+// ---- 표 읽기 (PostgREST 를 그냥 HTTP 로 부른다) ------------------------
+const SB_URL = Deno.env.get("SUPABASE_URL") || "";
+const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+async function pg(query: string) {
+  const r = await fetch(`${SB_URL}/rest/v1/${query}`, {
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
+  });
+  const t = await r.text();
+  if (!r.ok) return { data: null as any, error: { message: t.slice(0, 300) } };
+  try { return { data: JSON.parse(t), error: null }; }
+  catch (_) { return { data: null as any, error: { message: "읽은 값이 JSON 이 아니에요" } }; }
+}
+// id 목록 조건. 따옴표로 묶어야 값에 쉼표·괄호가 있어도 안 깨진다.
+const inList = (xs: any[]) =>
+  "in.(" + xs.map((x) => '"' + String(x).replace(/"/g, "") + '"').join(",") + ")";
+
+// ---- Claude 부르기 ----------------------------------------------------
+async function claude(apiKey: string, body: unknown) {
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const t = await r.text();
+  let j: any = null;
+  try { j = JSON.parse(t); } catch (_) {}
+  if (!r.ok) throw new Error(j?.error?.message || `Claude 오류 ${r.status}: ${t.slice(0, 200)}`);
+  return j;
 }
 
 const HEAD = `너는 대한민국 식품의약품안전처 GMP 담당 공무원을 돕는 도구다.
@@ -184,22 +220,18 @@ Deno.serve(async (req) => {
     // 화면에서 법령을 골랐으면 그 안에서만 고른다. 안 골랐으면(null) 전부 본다.
     const only: string[] | null = Array.isArray(lawIds) && lawIds.length ? lawIds.map(String) : null;
 
-    const db = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    if (!SB_URL || !SB_KEY) return json({ error: "표를 읽을 열쇠가 없어요. 함수를 다시 배포해 주세요." });
 
     // --- 조 목록 만들기 --------------------------------------------------
-    let lawQ = db.from("laws").select("id,name");
-    if (only) lawQ = lawQ.in("id", only);
-    const { data: laws, error: le } = await lawQ;
+    const { data: laws, error: le } = await pg(
+      "laws?select=id,name" + (only ? "&id=" + encodeURIComponent(inList(only)) : ""));
     if (le) return json({ error: "법령 목록을 못 읽었어요: " + le.message });
     const lawName = new Map((laws || []).map((l: any) => [l.id, l.name]));
     const lawKind = new Map((laws || []).map((l: any) => [l.id, kindOf(l.name)]));
 
-    let artQ = db.from("law_articles").select("id,law_id,seq,label");
-    if (only) artQ = artQ.in("law_id", only);
-    const { data: arts, error: ae } = await artQ.order("law_id").order("seq").limit(MAX_ARTS);
+    const { data: arts, error: ae } = await pg(
+      "law_articles?select=id,law_id,seq,label&order=law_id.asc,seq.asc&limit=" + MAX_ARTS
+      + (only ? "&law_id=" + encodeURIComponent(inList(only)) : ""));
     if (ae) return json({ error: "조문을 못 읽었어요: " + ae.message });
     if (!arts || !arts.length) {
       return json({ error: only
@@ -230,10 +262,8 @@ Deno.serve(async (req) => {
       index[n] = { id: a.id, law_id: a.law_id, law: nm, label: a.label };
     });
 
-    const client = new Anthropic({ apiKey });
-
     // --- 1차: 제목만 보고 후보 추리기 -------------------------------------
-    const r1: any = await client.messages.create({
+    const r1: any = await claude(apiKey, {
       model: MODEL,
       max_tokens: 700,
       system: [
@@ -244,7 +274,7 @@ Deno.serve(async (req) => {
       ],
       messages: [{ role: "user", content: `민원 질문:\n${question}` }],
       output_config: { format: { type: "json_schema", schema: SCHEMA1 } },
-    } as any);
+    });
     const p1 = readJson(r1);
     if (!p1) return json({ error: "AI 답을 읽지 못했어요. 다시 한 번 눌러주세요." });
 
@@ -259,8 +289,8 @@ Deno.serve(async (req) => {
     }
 
     // --- 후보의 본문을 읽어 온다 (2차에게 먹이고, 화면 미리보기로도 쓴다) ---
-    const { data: bodies } = await db.from("law_articles")
-      .select("id,content").in("id", cand.map((c: any) => c.id));
+    const { data: bodies } = await pg("law_articles?select=id,content&id="
+      + encodeURIComponent(inList(cand.map((c: any) => c.id))));
     const bodyOf = new Map((bodies || []).map((b: any) => [b.id, String(b.content || "")]));
     const flat = (t: string) => t.replace(/\s+/g, " ").trim();
 
@@ -276,13 +306,13 @@ Deno.serve(async (req) => {
     }
 
     // --- 2차: 본문을 읽고 최종으로 추리기 ---------------------------------
-    const r2: any = await client.messages.create({
+    const r2: any = await claude(apiKey, {
       model: MODEL,
       max_tokens: 2000,
       system: [{ type: "text", text: RULES2 }],
       messages: [{ role: "user", content: `민원 질문:\n${question}\n\n<조문>${sheet}</조문>` }],
       output_config: { format: { type: "json_schema", schema: SCHEMA2 } },
-    } as any);
+    });
     const p2 = readJson(r2);
     if (!p2) return json({ error: "AI 답을 읽지 못했어요. 다시 한 번 눌러주세요." });
 

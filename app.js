@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v103";
+var APP_VER="v104";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2210,12 +2210,16 @@ function pageTitle(t){
   /* 글꼴을 못 믿는 문서(한글에서 만들어 글꼴이 잘게 쪼개진 것)에서만 여기까지 온다.
    * 앞에 붙은 글머리표는 건너뛰고, 제목은 다음 글머리표 앞에서 끊는다 —
    * 안 그러면 「1 목 적 ○ 의약품등의 품목별 사전 GM」처럼 넘어가서 잘린다. */
-  var s=nfc(t).replace(/\s+/g," ").replace(RUNHEAD_RE,"").replace(/^[·ㆍ•▪○\s]+/,"").trim();
+  var s=nfc(t).replace(/\s+/g," ").replace(RUNHEAD_RE,"").replace(/^[·ㆍ•▪⦁‧∙◦●□■◆▶○\s]+/,"").trim();
   if(s.length<20) return "";
-  var m=/^((?:[IVX]{1,4}|[0-9]{1,2})\s*[.)]?\s*)?([가-힣A-Za-z][^.。○·ㆍ•▪]{1,20})/.exec(s);
+  var m=/^((?:[IVX]{1,4}|[0-9]{1,2})\s*[.)]?\s*)?([가-힣A-Za-z][^.。○·ㆍ•▪⦁‧∙◦●□■◆▶※]{1,20})/.exec(s);
   if(!m) return "";
   var ti=((m[1]||"")+m[2]).replace(/\s+/g," ")
     .replace(/[\[\(<「『·ᆞㆍ,\-]+$/,"").trim();   /* 끝에 매달린 여는 괄호·구분점을 턴다 */
+  /* 「실태조사 경비 - 수익자(품목 허가」처럼 줄표 글머리표가 이어지면 그 앞까지.
+   * 빈칸으로 둘러싸인 줄표만 본다 — 「1-2 세포은행 시스템관리」는 안 잘린다. */
+  ti=ti.split(/\s[-–—]\s/)[0].trim();
+  if(ti.length<2) return "";      /* 「제 ⦁ 개정 이력」에서 「제」만 남는 꼴 */
   /* 조사로 끝나면 문장 도막이다. **어절 하나가 통째로 조사일 때만** 본다 —
    * 그냥 끝 글자로 보면 「우선 GMP 평가」의 「가」까지 조사로 오인한다. */
   if(/(?:^|\s)(은|는|이|가|을|를|에|의|와|과|로|으로|및)$/.test(ti)) return "";

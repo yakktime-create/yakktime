@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v80";
+var APP_VER="v81";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2256,6 +2256,9 @@ function lawReindex(id){
  * 앞이 한글·문장부호이고 뒤에 한글이 두 자 이상 이어질 때만 바꾼다.
  * 문서 열 개로 확인 — 글머리표 30개를 모두 잡고 단위는 하나도 안 건드린다. */
 var BULLET_M=/(?<=[가-힣.)\]」』\-–—])\s+m\s+(?=[가-힣]{2})/g;
+/* 쪽 번호(- 27 -)를 지우고 나면 글머리표 m 이 줄 첫머리에 온다. 위 규칙은
+ * 「앞 글자」를 요구하므로 그때는 안 잡힌다. 문서 10개에 3곳. */
+var BULLET_M0=/(^|\n)[ \t]*m[ \t]+(?=[가-힣]{2})/g;
 
 /* 심볼 글꼴의 글머리표는 유니코드 「사용자 영역」(U+E000~U+F8FF)으로 뽑히기도 한다.
  * 글꼴이 없으면 가로줄이 쌓인 네모(▤)처럼 보이는데, 문서 열 개에 75자 들어 있었다.
@@ -2303,6 +2306,7 @@ function bullets(t){
 }
 function cleanPdfText(t,hre){
   t=nfc(t).replace(hre||runHeadRe(nfc(t))," ").replace(PAGENO_RE,"$1").replace(PUA_RE," · ");
+  t=t.replace(BULLET_M0,"$1· ");
   try{ t=t.replace(BULLET_M," · "); }catch(e){}   /* 구형 사파리는 뒤돌아보기를 못 쓴다 */
   return bullets(t);
 }

@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v62";
+var APP_VER="v63";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3201,7 +3201,7 @@ function renderLaws(){
        * 어느 게 법이고 어느 게 지침인지 알 수 없다. 칸 높이를 잡아 그 안에서
        * 굴리게 하고, 아래 내용이 저 멀리 밀려나지 않게 한다. */
       var cur=null;
-      list+='<div class="law-list">'+lawSorted().map(function(l){
+      list+='<div class="law-list grouped">'+lawSorted().map(function(l){
       var onlyOn=!!lawOnly[l.id], kd=lawKind(l.name), head="";
       if(kd.t!==cur){ cur=kd.t;
         head='<div class="law-kind"><span>'+esc(kd.t)+'</span></div>'; }
@@ -3209,10 +3209,16 @@ function renderLaws(){
         /* 하나도 안 고르면 전부 본다. 「고른 것만」은 좁힐 때만 쓰는 장치다. */
         + '<label class="law-only"><input type="checkbox" data-act="law-only" data-id="'+l.id+'"'+(onlyOn?" checked":"")+' title="이 법령에서만 찾기" /></label>'
         + '<span class="law-name" data-act="edit" data-table="laws" data-field="name" data-id="'+l.id+'" title="눌러서 이름 수정">'+esc(l.name)+'</span>'
+        + '<span class="law-kind-tag k'+kd.n+'">'+esc(kd.t)+'</span>'
         + '<span class="law-pages">'+(l.pages||0)+'쪽'+(l.arts?' · 조문 '+l.arts+'개':'')+'</span>'
-        + '<button class="link-btn'+(l.arts?'':' law-need')+'" data-act="law-reindex" data-id="'+l.id+'" title="쪽 텍스트로 조문을 다시 쪼갭니다">'+(l.arts?'조문 다시 만들기':'조문 만들기')+'</button>'
-        + '<button class="doc-act" data-act="law-pdf" data-id="'+l.id+'" data-page="1">PDF ↗</button>'
-        + '<button class="del doc-del" data-act="law-del" data-id="'+l.id+'" title="삭제">✕</button></div>';
+        /* 조문이 아직 없으면 글자로 크게 — 그게 지금 해야 할 일이다.
+         * 이미 있으면 아이콘 하나로 줄인다. 열한 줄에 「조문 다시 만들기」가
+         * 다 적혀 있으면 정작 이름이 안 읽힌다. */
+        + (l.arts
+            ? '<button class="law-ic" data-act="law-reindex" data-id="'+l.id+'" title="조문 다시 만들기">⟳</button>'
+            : '<button class="link-btn law-need" data-act="law-reindex" data-id="'+l.id+'">조문 만들기</button>')
+        + '<button class="law-ic" data-act="law-pdf" data-id="'+l.id+'" data-page="1" title="PDF 원문 열기">↗</button>'
+        + '<button class="law-ic del" data-act="law-del" data-id="'+l.id+'" title="삭제">✕</button></div>';
       }).join("")+'</div>'
       /* 쪼개는 방식이 바뀌면 한 번 돌려야 한다. 낱낱이 누르면 열한 번이다. */
       + '<div class="law-list-foot"><button class="link-btn" data-act="law-build-all" data-id="all"'

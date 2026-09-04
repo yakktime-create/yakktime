@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v101";
+var APP_VER="v102";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3755,7 +3755,15 @@ function formatLawSeg(text,q,startLv){
       +(prevSoft?" lp-soft":"")+(prevBig?" lp-big":"")+'">'
       +lawSegHtml(seg,q,prevArt)+'</div>';
   }
-  if(pts[0].at>0){ prev=0; prevLv=startLv; prevArt=0; prevSoft=false; prevBig=false; push(pts[0].at); }
+  if(pts[0].at>0){
+    /* 첫 덩어리에는 앞에 끊김이 없어 제목이어도 표시가 안 붙는다 — 쪽의 첫 줄이
+     * 큰 제목일 때 그 줄만 밋밋해 보였다(「유전자변형생물체의 보관」).
+     * 첫 덩어리도 제목인지 직접 본다. */
+    var head0=text.slice(0,pts[0].at).replace(/\s+/g," ").trim();
+    var isH=!!head0&&head0.length<=40&&!/[.?!]$/.test(head0);
+    prev=0; prevLv=isH?0:startLv; prevArt=0; prevSoft=false; prevBig=isH&&isBigHead(head0);
+    push(pts[0].at);
+  }
   pts.forEach(function(p,i){
     prev=p.at; prevLv=p.lv; prevArt=p.len; prevSoft=!!p.soft; prevBig=!!p.big;
     push(i+1<pts.length?pts[i+1].at:text.length);

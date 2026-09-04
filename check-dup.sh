@@ -21,3 +21,16 @@ echo "✓ 중복 정의 없음"
 # 없는 함수를 부르고 있지 않은지도 함께 본다.
 # 코드 뭉치를 걷어낼 때 다른 데서 쓰던 함수까지 딸려 지워지는 사고가 두 번 있었다.
 python3 "$(dirname "$0")/check-refs.py" || exit 1
+
+# ── law-pick.txt 가 원본과 같은지 ────────────────────────────────────────
+# 아이패드에서 복붙하기 좋게 저장소 뿌리에 사본을 둔다(yakktime.com/law-pick.txt).
+# 두 벌이 되면 반드시 어긋나므로 여기서 막는다.
+if [ -f law-pick.txt ] && [ -f supabase/functions/law-pick/index.ts ]; then
+  if diff -q law-pick.txt supabase/functions/law-pick/index.ts >/dev/null; then
+    echo "✓ law-pick.txt 가 원본과 같음"
+  else
+    echo "✗ law-pick.txt 가 원본과 다릅니다 — 아래를 실행하세요:"
+    echo "    cp supabase/functions/law-pick/index.ts law-pick.txt"
+    exit 1
+  fi
+fi

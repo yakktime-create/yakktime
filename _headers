@@ -3,3 +3,9 @@
 # "고쳤는데 안 고쳐진 것처럼 보이는" 일이 있었다.
 /*
   Cache-Control: public, max-age=0, must-revalidate
+
+# 서버 함수 원본 — 아이패드에서 열어 통째로 복사하라고 둔다.
+# text/plain 으로 못 박지 않으면 사파리가 내려받기로 처리해 복사가 번거로워진다.
+/law-pick.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: no-cache

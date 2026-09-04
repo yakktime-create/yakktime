@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v82";
+var APP_VER="v83";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2672,7 +2672,7 @@ function buildLawHits(rows,terms){
     if(wins.length>MAX_SNIP) wins=wins.slice(0,MAX_SNIP);
 
     var g={ key:"a"+r.id, artId:r.id, lawId:r.law_id, art:r.label,
-            page:r.page, pageEnd:r.page_end||r.page,
+            page:r.page, pageEnd:r.page_end||r.page, table:looksLikeTable(c),
             total:total, spots:wins.length, snips:[] };
     /* 복사·저장에 쓸 「항 전문」도 같이 만들어 둔다. 화면은 짧은 발췌가 편하지만
      * 복사한 글은 문장이 잘려 있으면 그대로 쓸 수 없다. */
@@ -3376,10 +3376,24 @@ function lawJump(d){
  * 줄글은 "~하여야 한다." 처럼 문장이 계속 끝나지만,
  * 표는 칸 값만 늘어서서 문장 끝이 거의 없다.
  * 실제 문서로 재본 값: 줄글 1,000자당 5~12개, 표 0~1개. */
+/* 「다.」가 드문 것만으로는 부족하다 — 약사법 벌칙 조항(「…한 자」)이나
+ * 개정 이력([종전 제29조는 …로 이동])까지 표로 오인해서, 쪽 1,223개 중
+ * 20%가 표로 잡혔고 대부분 오판이었다.
+ * 진짜 표는 **칸 값이 되풀이된다** — 「정지 1 개월 / 정지 3 개월 / 정지 6 개월」.
+ * 두 잣대를 함께 보면 갈린다(진짜 표 53~62% · 벌칙 조항 23~40%).
+ * 새 잣대로는 4%만 표로 보고, 잡힌 것은 전부 행정처분 표였다. */
+function repRate(t){
+  var w=String(t||"").split(/\s+/).filter(function(x){ return x.length>=2; });
+  if(w.length<40) return 0;
+  var c={}, dup=0;
+  w.forEach(function(x){ c[x]=(c[x]||0)+1; });
+  Object.keys(c).forEach(function(k){ if(c[k]>=3) dup+=c[k]; });
+  return dup/w.length;
+}
 function looksLikeTable(t){
   if(!t||t.length<300) return false;
   var ends=(t.match(/다\s*\./g)||[]).length;
-  return ends*1000/t.length<2;
+  return ends*1000/t.length<2 && repRate(t)>=0.5;
 }
 
 function renderLawModal(){
@@ -3869,17 +3883,27 @@ function renderLawResults(){
       +     (g.total>1?'<span class="law-n">'+g.total+'건</span>':'')
       +     '<span class="law-open" aria-hidden="true">›</span>'
       +   '</div>'
-      /* 같은 조 안에서 여러 군데가 걸리면 「7호 다목」이 줄마다 반복된다.
-       * 바뀔 때만 적는다 — 어디가 달라졌는지가 그때 보인다. */
-      +   (function(){ var prev=null;
+      /* 표는 글자만 도려내면 칸이 섞여 읽을 수가 없다. 발췌를 보여주는 대신
+       * 「어느 항목에 있는지」만 알려주고 PDF 원문으로 보내는 편이 낫다. */
+      +   (g.table
+          ? (function(){
+              var ws=[], seen={};
+              g.snips.forEach(function(h){ if(h.where&&!seen[h.where]){ seen[h.where]=1; ws.push(h.where); } });
+              return '<div class="law-tbl">'
+                + '<b>표(칸)로 된 대목이에요.</b>'
+                + (ws.length?' <span class="law-tbl-w">'+esc(ws.join(" · "))+'</span>에서 찾았어요.':'')
+                + '<br />글자만 도려내면 칸이 섞여 읽을 수가 없어서 발췌는 생략했어요. '
+                + '카드를 누르면 전문이 열리고, 거기서 PDF 원문으로 갈 수 있어요.</div>';
+            })()
+          : (function(){ var prev=null;
             return list.map(function(h){
               var w=(h.where&&h.where!==prev)?'<span class="law-where">'+esc(h.where)+'</span>':'';
               if(h.where) prev=h.where;
               return '<div class="law-snip'+(w?'':' law-snip-same')+'">'
                 + w + lawSegHtml(h.text,lawTermList,0)+'</div>';
             }).join("");
-          })()
-      +   (g.snips.length>SHOW
+          })())
+      +   (!g.table&&g.snips.length>SHOW
             ? '<button class="link-btn law-more-btn" data-act="law-expand" data-key="'+esc(g.key)+'">'
               +(open?"접기":"이 조에서 "+(g.snips.length-SHOW)+"건 더 보기")+'</button>'
             : "")

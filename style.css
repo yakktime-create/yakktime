@@ -702,6 +702,14 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
 .ver{font-size:var(--fs-xs);color:#B6C0BA;text-align:center;padding:2px 0 4px;letter-spacing:.04em;}
 @media (max-width:1024px){ .ver{padding:0 6px;align-self:center;} }
 
+/* 표로 된 대목은 발췌 대신 자리만 알려준다. 읽을 수 없는 글로 화면을
+   채우느니, 어느 항목인지 짚어 주고 PDF 원문으로 보내는 편이 낫다. */
+.law-tbl{margin-top:9px;padding:10px 12px;background:var(--warn-bg);
+  border:1px solid var(--warn-bd);border-radius:var(--r-sm);
+  font-size:var(--fs-sm);line-height:var(--lh-snug);color:var(--warn-fg);}
+.law-tbl b{font-weight:750;}
+.law-tbl-w{font-weight:750;}
+
 /* 쪽 경계에서 잘린 문장 조각. 그 쪽 내용이 아니므로 흐리게 하고,
    어디까지가 이 쪽인지 점선으로 가른다. */
 .lv-edge{font-size:var(--fs-sm);color:var(--muted);line-height:var(--lh-body);}

@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v83";
+var APP_VER="v84";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2063,10 +2063,10 @@ function buildLawArticles(pages,docName,docKind){
 
   var heads=findArticles(full,20000).filter(function(h){ return !(noTbl&&h.table); });
   var out=[];
-  function addRow(lab,num,text,a,b){
+  function addRow(lab,num,text,a,b,chunk){
     if(text.length<10) return;
     if(text.length>LAW_ART_SAVE_MAX) text=text.slice(0,LAW_ART_SAVE_MAX);
-    out.push({ seq:out.length+1, label:lab, num:num,
+    out.push({ seq:out.length+1, label:lab, num:num, chunk:!!chunk,
                page:pageAt(a), page_end:pageAt(b-1), content:text });
   }
   for(var i=0;i<heads.length;i++){
@@ -2118,10 +2118,11 @@ function buildLawArticles(pages,docName,docKind){
         for(var q=0;q<parts.length;q++){
           /* tblChunks 가 낸 토막은 제목이 숫자뿐이다. 「2/4 토막」은 기계가 센
            * 번호일 뿐이라, 그 토막 첫머리에 「7. 공급관리」 같은 소제목이 있으면
-           * 그걸 이름으로 쓴다. 못 찾으면 예전처럼 몇째 토막인지로 적는다. */
-          var t=parts[q].title;
-          if(/^\d+$/.test(t)) t=chunkTitle(parts[q].text)||(t+"/"+parts.length+" 토막");
-          addRow(lab+" · "+t,num,parts[q].text,parts[q].a,parts[q].b);
+           * 그걸 이름으로 쓴다. **못 찾으면 아무것도 안 붙인다** — 「6/14 토막」은
+           * 기계가 센 번호라 사람에게는 뜻이 없다. 어디인지는 쪽 배지가 말해준다. */
+          var t=parts[q].title, num0=/^\d+$/.test(t);
+          if(num0) t=chunkTitle(parts[q].text);
+          addRow(lab+(t?" · "+t:""),num,parts[q].text,parts[q].a,parts[q].b,num0&&!t);
         }
         continue;
       }
@@ -2137,6 +2138,7 @@ function buildLawArticles(pages,docName,docKind){
     if(!best[k]||a.content.length>best[k].content.length) best[k]=a;
   });
   out=out.filter(function(a){
+    if(a.chunk) return true;      /* 토막은 라벨이 같은 게 당연하다 — 지우면 안 된다 */
     var k=artKey(a.label);
     return best[k]===a||a.content.length>=200;
   });

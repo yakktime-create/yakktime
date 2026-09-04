@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v74";
+var APP_VER="v75";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2352,6 +2352,7 @@ function lawAskRun(){
     if(!d){ showToast("물어보지 못했어요: "+((r&&r.error&&r.error.message)||"응답이 비었어요"),true); done(); return; }
     if(d.error){ showToast(d.error,true); done(); return; }
     d.q=q; lawAsk=d; lawAskSel={}; lawAskMore=false;
+    if((d.picks||[]).length){ lawHelpOpen=false; lawListOpen=false; }
     if(d.krw!=null) lawAskLast=d.krw;
     (d.picks||[]).forEach(function(p){ if(askRank(p.grade)<=ASK_KEEP) lawAskSel[p.id]=true; });
     done();
@@ -2362,8 +2363,10 @@ function lawAskRun(){
  * AI 화면에는 조 제목과 「왜 골랐나」만 있으므로, 모을 때는 본문을 다시 읽어야 한다.
  * 이건 3단계(답변 초안)에서 Claude에게 보낼 것과 똑같은 묶음이다. */
 function lawAskExport(then){
+  /* 고른 게 없으면 보이는 것 전부가 대상이다 (낱말 검색과 같은 규칙) */
   var ids=Object.keys(lawAskSel).filter(function(k){ return lawAskSel[k]; });
-  if(!ids.length){ showToast("먼저 조문을 골라주세요."); return; }
+  if(!ids.length) ids=(lawAsk&&lawAsk.picks||[]).map(function(p){ return p.id; });
+  if(!ids.length){ showToast("담아 갈 조문이 없어요."); return; }
   showToast("조문 원문을 불러오는 중...");
   withAuthRetry(function(){
     return sb.from("law_articles").select("id,law_id,label,page,page_end,content").in("id",ids);
@@ -2385,7 +2388,7 @@ function lawAskExport(then){
 }
 function lawAskCopy(){
   lawAskExport(function(t,n){
-    var done=function(){ showToast("✓ 조문 "+n+"건 복사했어요"); };
+    var done=function(){ showToast("✓ 조문 "+n+"곳을 복사했어요"); };
     if(navigator.clipboard&&navigator.clipboard.writeText)
       navigator.clipboard.writeText(t).then(done,function(){ lawCopyFallback(t,done); });
     else lawCopyFallback(t,done);
@@ -2443,14 +2446,15 @@ function lawAskHtml(){
           + '관련도 낮은 '+maybe.length+'개 더 보기</button></li>' : '');
   var nSel=Object.keys(lawAskSel).filter(function(k){ return lawAskSel[k]; }).length;
   var nSure=sure.length;
+  var askWhat=nSel?("고른 "+nSel+"곳"):"전부";
   /* 낱말 검색 결과와 같은 부품·같은 자리 — 한쪽만 다르게 생기면 매번 다시 배워야 한다 */
   var acts='<div class="law-head"><div class="law-count">'+d.picks.length+'곳'
-    + (maybe.length?' <span class="law-and">「중간」 이상 '+nSure+'곳</span>':'')
-    + (nSel?' · <span class="law-picked">'+nSel+'곳 선택</span>':'')+'</div>'
+    + (maybe.length?' <span class="law-and">「중간」 이상 '+nSure+'곳</span>':'')+'</div>'
     + '<div class="law-actions">'
-    +   '<button class="link-btn" data-act="ask-all">모두 선택</button>'
-    +   '<button class="link-btn" data-act="ask-none">해제</button>'
-    +   '<button class="btn quiet sm" data-act="ask-copy">복사</button>'
+    +   (d.picks.length>1
+          ? (nSel?'<button class="link-btn quiet-link" data-act="ask-none">☐ 해제</button>'
+                 :'<button class="link-btn" data-act="ask-all">☑ 모두</button>'):'')
+    +   '<button class="btn quiet sm" data-act="ask-copy">'+askWhat+' 복사</button>'
     +   '<button class="btn sm" data-act="ask-save">텍스트로 저장</button>'
     + '</div></div>';
   return '<div class="ask-box">'+head
@@ -2511,6 +2515,9 @@ function lawSearch(){
       lawHits=[]; renderLawResults(); return;
     }
     lawHits=buildLawHits(res.data||[],lawTermList);
+    /* 결과가 나오면 위쪽 부속(도움말·올려둔 목록)을 접는다. 안 그러면 결과를
+     * 보려고 500px 넘게 굴려 내려가야 한다. 다시 펼치는 건 한 번 누르면 된다. */
+    if(lawHits.length){ lawHelpOpen=false; lawListOpen=false; render(); return; }
     renderLawResults();
   });
 }
@@ -3183,8 +3190,17 @@ function lawDel(id){
 }
 
 /* ---------- 내보내기 ---------- */
+/* 고른 게 없으면 전부가 대상이다.
+ * 「먼저 결과를 골라주세요」라고 되돌려 보내면, 대개는 전부를 원했던 것이라
+ * 「모두 선택」을 누르고 다시 「복사」를 누르게 된다. 두 번 누를 일이 아니다.
+ * 법령 범위에서 쓰는 규칙(안 고르면 전부)과도 같은 결이다. */
 function lawPicked(){
-  return (lawHits||[]).filter(function(g){ return lawSel[g.key]; });
+  var all=lawHits||[];
+  var sel=all.filter(function(g){ return lawSel[g.key]; });
+  return sel.length?sel:all;
+}
+function lawSelCount(){
+  return (lawHits||[]).filter(function(g){ return lawSel[g.key]; }).length;
 }
 function lawExportText(){
   var picked=lawPicked(); if(!picked.length) return null;
@@ -3206,8 +3222,8 @@ function lawExportText(){
 
 function lawCopy(){
   var t=lawExportText();
-  if(!t){ showToast("먼저 결과를 골라주세요."); return; }
-  var done=function(){ showToast("✓ "+lawPicked().length+"건 복사했어요"); };
+  if(!t){ showToast("복사할 결과가 없어요."); return; }
+  var done=function(){ showToast("✓ "+lawPicked().length+"곳을 복사했어요"); };
   if(navigator.clipboard&&navigator.clipboard.writeText){
     navigator.clipboard.writeText(t).then(done,function(){ lawCopyFallback(t,done); });
   } else lawCopyFallback(t,done);
@@ -3222,7 +3238,7 @@ function lawCopyFallback(t,done){
 }
 function lawDownload(){
   var t=lawExportText();
-  if(!t){ showToast("먼저 결과를 골라주세요."); return; }
+  if(!t){ showToast("저장할 결과가 없어요."); return; }
   var blob=new Blob([t],{type:"text/plain;charset=utf-8"});
   var a=document.createElement("a"); a.href=URL.createObjectURL(blob);
   a.download="법령검색_"+lawTermList.join("_").replace(/[^가-힣a-zA-Z0-9_]/g,"")+"_"+keyOf(new Date())+".txt";
@@ -3430,8 +3446,8 @@ function renderLaws(){
       +   (lawOnlyLabel()?'<span class="law-only-tag">'+esc(lawOnlyLabel())+'만</span>':'')
       +   '<span class="law-toggle-hint">'+(lawListOpen?"":"찾을 범위 고르기 · 삭제")+'</span></button>'
       + (lawListOpen
-          ? '<button class="link-btn" data-act="law-only-all">전체</button>'
-            + '<button class="link-btn quiet-link" data-act="law-only-none">해제</button>'
+          ? '<button class="link-btn" data-act="law-only-all">☑ 전체</button>'
+            + '<button class="link-btn quiet-link" data-act="law-only-none">☐ 해제</button>'
             + '<span class="law-head-sep">·</span>'
             + '<button class="link-btn" data-act="law-build-all" data-id="all"'+(lawBusy?" disabled":"")+'>'
             + (lawBusy?"만드는 중…":"조문 전부 다시 만들기")+'</button>'
@@ -3486,7 +3502,8 @@ function renderLaws(){
     +   '<span class="ask-bar-n">'+(lawAskLast!=null?"지난번 "+lawAskLast+"원":"한 번에 50~150원")+'</span>'
     + '</button>'
     + lawHelpHtml()
-    + '<button class="upload-bar'+(lawBusy?" busy":"")+'" data-act="law-upload"'+(lawBusy?" disabled":"")+'>'
+    /* 결과를 보는 중에는 올리기 배너를 한 줄로 줄인다 — 지금 할 일이 아니다 */
+    + '<button class="upload-bar'+(lawBusy?" busy":"")+((lawHits||lawAsk)&&!lawBusy?" slim":"")+'" data-act="law-upload"'+(lawBusy?" disabled":"")+'>'
     +   '<span class="upload-ic">⬆</span><div class="import-bar-text">'
     +   '<div class="import-bar-title">'+(lawBusy?"처리 중이에요...":"법령 PDF 올리기")+'</div>'
     +   '<div class="import-bar-sub">'+(lawBusy?"창을 닫지 마세요":"글자가 들어 있는 PDF만 (스캔본은 아직 안 돼요)")+'</div></div>'
@@ -3530,15 +3547,19 @@ function renderLawResults(){
   }
 
   var total=0; lawHits.forEach(function(g){ total+=g.snips.length; });
-  var picked=lawPicked().length;
+  var picked=lawSelCount();
+  /* 버튼 글자가 무엇을 담아 갈지 말한다 — 「복사」 옆에 「모두 선택」이 따로
+   * 있으면 어느 쪽이 대상인지 매번 헤아려야 한다. */
+  var what=picked?("고른 "+picked+"곳"):"전부";
   var head='<div class="law-head">'
     + '<div class="law-count"><b>'+lawHits.length+'</b>곳 · '+total+'건'
-    +   (lawTermList.length>1?' <span class="law-and">'+esc(lawTermList.join(" + "))+' 모두 포함</span>':'')
-    +   (picked?' · <span class="law-picked">'+picked+'곳 선택</span>':'')+'</div>'
+    +   (lawTermList.length>1?' <span class="law-and">'+esc(lawTermList.join(" + "))+' 모두 포함</span>':'')+'</div>'
     + '<div class="law-actions">'
-    +   '<button class="link-btn" data-act="law-all">모두 선택</button>'
-    +   '<button class="link-btn" data-act="law-none">해제</button>'
-    +   '<button class="btn quiet sm" data-act="law-copy">복사</button>'
+    /* 하나뿐일 때 「모두 선택」은 말이 안 된다 */
+    +   (lawHits.length>1
+          ? (picked?'<button class="link-btn quiet-link" data-act="law-none">☐ 해제</button>'
+                   :'<button class="link-btn" data-act="law-all">☑ 모두</button>'):'')
+    +   '<button class="btn quiet sm" data-act="law-copy">'+what+' 복사</button>'
     +   '<button class="btn sm" data-act="law-save">텍스트로 저장</button>'
     + '</div></div>';
 

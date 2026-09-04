@@ -973,6 +973,21 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
   width:var(--ic-sm);min-height:var(--tap);cursor:pointer;}
 .law-only input{width:16px;height:16px;accent-color:var(--accent);}
 .law-row.only{background:var(--accent-soft);border-radius:var(--r-sm);}
+/* 법령 목록 — 열 몇 개가 되면 아래 내용이 저 멀리 밀려난다. 칸 높이를 잡고
+   그 안에서 굴린다. 종류 머리말은 굴려도 위에 붙어 있게 한다. */
+.law-list{max-height:340px;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  border:1px solid var(--line);border-radius:var(--r-md);padding:var(--sp-2);gap:var(--sp-1);}
+/* 굴리는 칸 안에서는 줄을 촘촘하게 — 카드처럼 띄우면 다섯 줄이 안 들어간다 */
+.law-list .law-row{padding:7px 11px;border-color:transparent;background:none;}
+.law-list .law-row.only{background:var(--accent-soft);}
+.law-list .law-row+.law-row{border-top:1px solid var(--line);border-radius:0;}
+.law-kind{position:sticky;top:calc(-1*var(--sp-2));z-index:2;background:var(--paper);
+  margin:var(--sp-2) calc(-1*var(--sp-2)) var(--sp-1);padding:5px var(--sp-3);}
+.law-kind:first-child{margin-top:calc(-1*var(--sp-2));}
+.law-kind span{font-size:var(--fs-xs);font-weight:800;color:var(--muted);letter-spacing:.06em;}
+.law-list-foot{display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap;
+  padding:var(--sp-2) var(--sp-1) 0;}
+.law-list-hint{font-size:var(--fs-xs);color:var(--muted);}
 .law-only-tag{margin-left:var(--sp-2);font-size:var(--fs-xs);font-weight:700;
   color:var(--accent);background:var(--accent-soft);border-radius:var(--r-full);padding:2px 9px;}
 .ask-art{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap;}
@@ -1061,3 +1076,6 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 }
 .law-help-dim{color:var(--muted);font-size:var(--fs-sm);}
 .ask-dim{color:var(--muted);opacity:.8;}
+/* 조문이 어느 층의 규범인지 — 법률인지 지침서인지가 근거의 무게를 가른다 */
+.ask-kind{flex:none;font-size:var(--fs-2xs);font-weight:800;color:var(--blue-deep);
+  background:var(--blue-soft);border-radius:var(--r-full);padding:1px 8px;}

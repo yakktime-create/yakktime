@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v61";
+var APP_VER="v62";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2023,10 +2023,35 @@ function lawReindex(id){
 }
 
 /* 아직 조문이 없는 법령을 한꺼번에 처리한다 */
-function lawBuildAll(){
+/* 법 위계 — 이름만 보고 가른다. 법제처 PDF는 이름에 종류가 들어 있고
+ * (법률)(총리령)(식품의약품안전처고시), 지침서는 [공무원 지침서] 꼴이다.
+ * 목록 순서와 AI 근거 가중치에 함께 쓴다. 위가 셀수록 숫자가 작다. */
+var LAW_KINDS=[
+  {n:0,t:"법률",   re:/\(법률\)|법률\s*제\s*\d|「[^」]*법」\s*$/},
+  {n:1,t:"시행령", re:/\(대통령령\)|시행령/},
+  {n:2,t:"시행규칙",re:/\(총리령\)|\(부령\)|규칙/},
+  {n:3,t:"고시",   re:/고시|규정\s*\(/},
+  {n:4,t:"지침·안내서",re:/지침|안내서|절차|가이드|해설/}
+];
+function lawKind(name){
+  var s=String(name||"");
+  for(var i=0;i<LAW_KINDS.length;i++) if(LAW_KINDS[i].re.test(s)) return LAW_KINDS[i];
+  return {n:5,t:"그 밖"};
+}
+/* 위계 → 이름 순. 같은 종류끼리 모이고, 상위법이 위로 온다. */
+function lawSorted(){
+  return S.laws.slice().sort(function(a,b){
+    var ka=lawKind(a.name).n, kb=lawKind(b.name).n;
+    return ka-kb || String(a.name).localeCompare(String(b.name),"ko");
+  });
+}
+
+function lawBuildAll(all){
   if(lawBusy) return;
-  var todo=S.laws.filter(function(l){ return !l.arts; });
+  var todo=all?S.laws.slice():S.laws.filter(function(l){ return !l.arts; });
   if(!todo.length){ showToast("모두 조문이 만들어져 있어요."); return; }
+  if(all&&!confirm("올려둔 법령 "+todo.length+"개의 조문을 모두 다시 만듭니다.\n\n"
+    +"쪼개는 방식이 바뀌었을 때 한 번 돌리면 됩니다. 문서가 크면 몇 분 걸려요. 계속할까요?")) return;
   lawBusy=true; render();
   var k=0, ok=0;
   function fin(){
@@ -2178,6 +2203,7 @@ function lawAskHtml(){
       + '<div class="ask-item-body">'
       +   '<div class="ask-art"><span class="ask-score">'+esc(p.grade||"중간")+'</span><b>'+esc(p.label)+'</b>'
       +     '<span class="ask-law">'+esc(p.law)+'</span>'
+      +     (p.kind?'<span class="ask-kind">'+esc(p.kind)+'</span>':'')
       +     '<button class="link-btn law-go-art" data-act="law-art" data-art-id="'+esc(p.id)+'" data-id="'+esc(p.lawId)+'">전체 보기</button></div>'
       +   '<div class="ask-why">'+esc(p.why)+'</div>'
       /* 점수가 어디서 나왔는지 같이 적는다. 숫자만 있으면 「87이 무슨 뜻이냐」가 된다.
@@ -3170,9 +3196,16 @@ function renderLaws(){
       + (lawListOpen?"▾":"▸")+' 올려둔 법령 '+items.length+'개'
       + (lawOnlyLabel()?'<span class="law-only-tag">'+esc(lawOnlyLabel())+'만</span>':'')
       + '<span class="law-toggle-hint">'+(lawListOpen?"접기":"찾을 범위 고르기 · 조문 만들기 · 삭제")+'</span></button>';
-    if(lawListOpen) list+='<div class="law-list">'+items.map(function(l){
-      var onlyOn=!!lawOnly[l.id];
-      return '<div class="law-row'+(onlyOn?" only":"")+'">'
+    if(lawListOpen){
+      /* 종류별로 묶고 위계 순으로 세운다 — 열 몇 개가 되면 이름만 죽 늘어놔서는
+       * 어느 게 법이고 어느 게 지침인지 알 수 없다. 칸 높이를 잡아 그 안에서
+       * 굴리게 하고, 아래 내용이 저 멀리 밀려나지 않게 한다. */
+      var cur=null;
+      list+='<div class="law-list">'+lawSorted().map(function(l){
+      var onlyOn=!!lawOnly[l.id], kd=lawKind(l.name), head="";
+      if(kd.t!==cur){ cur=kd.t;
+        head='<div class="law-kind"><span>'+esc(kd.t)+'</span></div>'; }
+      return head+'<div class="law-row'+(onlyOn?" only":"")+'">'
         /* 하나도 안 고르면 전부 본다. 「고른 것만」은 좁힐 때만 쓰는 장치다. */
         + '<label class="law-only"><input type="checkbox" data-act="law-only" data-id="'+l.id+'"'+(onlyOn?" checked":"")+' title="이 법령에서만 찾기" /></label>'
         + '<span class="law-name" data-act="edit" data-table="laws" data-field="name" data-id="'+l.id+'" title="눌러서 이름 수정">'+esc(l.name)+'</span>'
@@ -3180,7 +3213,12 @@ function renderLaws(){
         + '<button class="link-btn'+(l.arts?'':' law-need')+'" data-act="law-reindex" data-id="'+l.id+'" title="쪽 텍스트로 조문을 다시 쪼갭니다">'+(l.arts?'조문 다시 만들기':'조문 만들기')+'</button>'
         + '<button class="doc-act" data-act="law-pdf" data-id="'+l.id+'" data-page="1">PDF ↗</button>'
         + '<button class="del doc-del" data-act="law-del" data-id="'+l.id+'" title="삭제">✕</button></div>';
-    }).join("")+'</div>';
+      }).join("")+'</div>'
+      /* 쪼개는 방식이 바뀌면 한 번 돌려야 한다. 낱낱이 누르면 열한 번이다. */
+      + '<div class="law-list-foot"><button class="link-btn" data-act="law-build-all" data-id="all"'
+      +   (lawBusy?" disabled":"")+'>'+(lawBusy?"만드는 중…":"전부 다시 만들기")+'</button>'
+      + '<span class="law-list-hint">쪼개는 방식이 바뀌었을 때 한 번만</span></div>';
+    }
   }
 
   view().innerHTML='<div class="page">'
@@ -3404,7 +3442,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "law-pdf": openLawPdf(id,parseInt(el.getAttribute("data-page"),10)||1); break;
     case "lv-close": closeLawView(); break;
     case "law-art": openLawArticle(parseInt(el.getAttribute("data-art-id"),10)||0,id); break;
-    case "law-build-all": lawBuildAll(); break;
+    case "law-build-all": lawBuildAll(id==="all"); break;
     case "law-help": lawHelpToggle(); break;
     case "ref-search": refSearch(); break;
     case "ref-list": refListOpen=!refListOpen; render(); break;

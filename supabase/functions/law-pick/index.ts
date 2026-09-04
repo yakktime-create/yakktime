@@ -31,6 +31,21 @@ const TOTAL_MAX  = 60000;  // 2차에 넣을 글자 총량
 const PREVIEW    = 180;    // 화면에 보여줄 미리보기
 const KRW        = 1400;   // 원/달러
 
+// 법 위계 — 이름만 보고 가른다. 같은 내용이면 상위법이 더 센 근거다.
+// 다만 실제 답은 고시·규칙에 적힌 경우가 많으므로 가중치는 작게 준다.
+// 「답이 여기 있나」(45점)를 뒤집을 만큼 주면 엉뚱한 조를 위로 올리게 된다.
+const KINDS: {n:number; t:string; re:RegExp; w:number}[] = [
+  { n:0, t:"법률",       re:/\(법률\)|법률\s*제\s*\d/,        w:8 },
+  { n:1, t:"시행령",     re:/\(대통령령\)|시행령/,               w:6 },
+  { n:2, t:"시행규칙",   re:/\(총리령\)|\(부령\)|규칙/,          w:5 },
+  { n:3, t:"고시",       re:/고시|규정\s*\(/,                   w:3 },
+  { n:4, t:"지침·안내서", re:/지침|안내서|절차|가이드|해설/,        w:0 },
+];
+function kindOf(name: string) {
+  for (const k of KINDS) if (k.re.test(String(name || ""))) return k;
+  return { n:5, t:"그 밖", re:/$^/, w:0 };
+}
+
 // Haiku 4.5 값 ($/100만 토큰). 캐시 읽기 0.1배, 캐시 쓰기 1.25배.
 const IN_USD = 1.0, OUT_USD = 5.0;
 
@@ -110,7 +125,10 @@ const RULES2 = `${HEAD}
 - why 에는 왜 그 조인지 한 문장. <b>근거를 찾았으면 그 대목을 짚어 적는다</b>
   (예: 「1회 1개 품목 포장단위로 판매할 것」이 여기 있습니다).
   본문에서 못 찾았으면 그렇다고 적는다.
-- note 는 한두 문장. 무엇을 보고 골랐는지, 빠진 게 있어 보이면 무엇인지.`;
+- note 는 한두 문장. 무엇을 보고 골랐는지, 빠진 게 있어 보이면 무엇인지.
+- 같은 내용이 법률과 지침서에 다 있으면 <b>법률 쪽을 고른다</b>. 지침서는 법령이
+  아니라 운영 방침이라, 민원 답변의 근거로는 법률·규칙·고시가 먼저다.
+  지침서만 답을 담고 있으면 그건 그대로 낸다.`;
 
 const SCHEMA2 = {
   type: "object",
@@ -177,6 +195,7 @@ Deno.serve(async (req) => {
     const { data: laws, error: le } = await lawQ;
     if (le) return json({ error: "법령 목록을 못 읽었어요: " + le.message });
     const lawName = new Map((laws || []).map((l: any) => [l.id, l.name]));
+    const lawKind = new Map((laws || []).map((l: any) => [l.id, kindOf(l.name)]));
 
     let artQ = db.from("law_articles").select("id,law_id,seq,label");
     if (only) artQ = artQ.in("law_id", only);
@@ -262,8 +281,9 @@ Deno.serve(async (req) => {
     const W_DIRECT: Record<string, number> = { "답이 여기": 45, "조건이 여기": 30, "곁가지": 12 };
     const W_NEED:   Record<string, number> = { "인용 필수": 30, "있으면 좋음": 18, "없어도 됨": 6 };
     const W_SURE:   Record<string, number> = { "근거 찾음": 25, "비슷한 대목만": 15, "못 찾음": 5 };
+    // 위계 가산(최대 8점)만큼 눈금도 올려 잡는다 — 안 그러면 법률이 죄다 「매우 높음」이 된다
     const gradeOf = (v: number) =>
-      v >= 85 ? "매우 높음" : v >= 70 ? "높음" : v >= 55 ? "중간" : v >= 40 ? "낮음" : "매우 낮음";
+      v >= 89 ? "매우 높음" : v >= 74 ? "높음" : v >= 58 ? "중간" : v >= 43 ? "낮음" : "매우 낮음";
 
     let picks = (p2.picks || []).slice(0, MAX_PICKS)
       .map((p: any) => {
@@ -273,10 +293,12 @@ Deno.serve(async (req) => {
         const direct = W_DIRECT[p.direct] != null ? p.direct : "조건이 여기";
         const need   = W_NEED[p.need]     != null ? p.need   : "있으면 좋음";
         const sure   = W_SURE[p.sure]     != null ? p.sure   : "비슷한 대목만";
-        const score  = W_DIRECT[direct] + W_NEED[need] + W_SURE[sure];
+        const kind   = lawKind.get(hit.law_id) || { t:"그 밖", w:0 };
+        // 상위법 가산 — 같은 판단이면 법률이 지침서보다 위에 선다
+        const score  = W_DIRECT[direct] + W_NEED[need] + W_SURE[sure] + kind.w;
         const t = flat(bodyOf.get(hit.id) || "");
         return { id: hit.id, lawId: hit.law_id, law: hit.law, label: hit.label,
-                 direct, need, sure, grade: gradeOf(score), score,
+                 direct, need, sure, kind: kind.t, grade: gradeOf(score), score,
                  head: t.length > PREVIEW ? t.slice(0, PREVIEW) + "…" : t,
                  why: String(p.why || "") };
       })

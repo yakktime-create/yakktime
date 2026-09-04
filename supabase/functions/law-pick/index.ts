@@ -211,6 +211,9 @@ const RULES2 = `${HEAD}
   (예: 「1회 1개 품목 포장단위로 판매할 것」이 여기 있습니다).
   본문에서 못 찾았으면 그렇다고 적는다.
 - note 는 한두 문장. 무엇을 보고 골랐는지, 빠진 게 있어 보이면 무엇인지.
+- <b>번호를 글에 적지 않는다.</b> 목록의 번호(509, 835 …)는 이쪽에서 붙인 것이라
+  읽는 사람에게는 아무 뜻이 없다. why·note 에는 <b>조 이름</b>으로 적는다
+  (「바이오의약품 사전 GMP 평가 지침 8쪽」처럼).
 - <b>지침서가 근거로 든 상위법 조항이 후보에 있으면 함께 고른다.</b> 지침서는
   「…할 수 있다」는 재량을 언제 쓸지 정할 뿐이고, 그 재량의 근거는 법률·규칙에 있다.
   민원 답변에는 둘 다 적어야 한다 (예: 생략 기준은 지침, 실태조사 권한은
@@ -441,6 +444,15 @@ Deno.serve(async (req) => {
     const gradeOf = (v: number) =>
       v >= 89 ? "매우 높음" : v >= 74 ? "높음" : v >= 58 ? "중간" : v >= 43 ? "낮음" : "매우 낮음";
 
+    // AI 가 그래도 번호를 흘리면 이쪽에서 조 이름으로 바꿔 준다. 못 바꾸면 지운다.
+    // 「[509]」 뿐 아니라 「제509조」 「509-511조」로도 샌다. 목록 번호는 세 자리를
+    // 넘고 이 문서들의 진짜 조 번호는 백 번대를 넘지 않으므로 그것으로 가른다.
+    const nameOf = (t: string) => String(t || "")
+      .replace(/\[(\d{1,4})\]/g, (_m, d) => index[+d] ? "「" + index[+d].label + "」" : "")
+      .replace(/(?:제\s*)?(\d{3,4})(?:\s*[-~–]\s*\d{3,4})?\s*조/g,
+        (m, d) => (+d >= 100 && index[+d]) ? "「" + index[+d].label + "」" : m)
+      .replace(/\s{2,}/g, " ").trim();
+
     let picks = (p2.picks || []).slice(0, MAX_PICKS)
       .map((p: any) => {
         const hit = index[p.n];
@@ -474,7 +486,7 @@ Deno.serve(async (req) => {
                  // 「붙임 1 제출자료 요건 ※…」처럼 아무 말도 안 해 준다.
                  quote: qok ? qraw : "",
                  head: qok ? qraw : (t.length > PREVIEW ? t.slice(0, PREVIEW) + "…" : t),
-                 why: String(p.why || "") };
+                 why: nameOf(p.why) };
       })
       .filter(Boolean);
     // AI가 순서를 흐트러뜨려도 화면에서는 늘 관련 높은 것부터 선다.
@@ -485,7 +497,7 @@ Deno.serve(async (req) => {
 
     return json({
       picks,
-      note: String(p2.note || p1.note || ""),
+      note: nameOf(p2.note || p1.note || ""),
       arts: live.length,
       // 아직 시행 전이라 빼고 본 조문 수 — 화면에서 알려 준다
       skipped,

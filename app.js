@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v112";
+var APP_VER="v113";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1764,7 +1764,13 @@ function linesToText(lines,bodySet,bodyH,headSet){
   lines.forEach(function(l){
     if(!l.text) return;
     /* 글꼴 무리를 못 믿는 문서는 **크기만** 본다 — 제목 크기인 줄만 떼어 낸다. */
-    var isHead=bodySet?!bodySet[l.font]:!!headSet[+(String(l.font).split("|")[1]||0)];
+    /* **줄 첫 글자가 심볼 글꼴이면 제목이다.** 「⑧ 기타」의 번호가 심볼이라
+     * `·` 로 바뀌면서 앞 문장 꼬리에 붙어 「… 배정하여 처리 · 기타」가 됐다.
+     * 크기로만 재면 이런 중간 제목을 놓친다 — 줄이 어디서 시작하는지를 함께 본다.
+     * 실측(문서 10개): 07 45줄(그중 40줄이 새로 잡힘) · 09 4줄(이미 잡혀 있음) ·
+     * 06·08·10·01 0줄. 글 속의 심볼(「▣의 실태조사팀」)은 줄 첫머리가 아니라 안 걸린다. */
+    var isHead=bodySet?!bodySet[l.font]
+      :(!!headSet[+(String(l.font).split("|")[1]||0)]||/^[\uE000-\uF8FF]/.test(l.text));
     if(!isHead){ out.push(l.text); return; }
     /* 제목 중에서도 **본문보다 큰 것**이 큰 제목이다(큰 제목 h14 · 소제목 h12).
      * 원문의 「③ 유전자변형생물체의 보관」처럼 번호가 심볼 글꼴이면 글자로는
@@ -2964,7 +2970,7 @@ function lawAskHtml(){
   return '<div class="ask-box">'+head
     + (d.note?'<p class="ask-note">'+esc(d.note)+'</p>':'')
     + (d.truncated?'<p class="ask-warn">올려둔 조문이 너무 많아 <b>앞쪽 '+d.arts+'개만</b> 봤어요. 위에서 법령을 골라 범위를 좁혀주세요.</p>':'')
-    + (d.boosted?'<p class="ask-note">조 제목에는 안 드러나서 <b>본문을 낱말로 뒤져</b> 상위법 '+d.boosted+'개를 후보에 더 넣었어요'
+    + (d.boosted?'<p class="ask-note">조 제목에는 안 드러나서 <b>본문을 낱말로 뒤져</b> 조문 '+d.boosted+'개를 후보에 더 넣었어요'
         + (d.words&&d.words.length?' (찾은 낱말 — '+esc(d.words.join(' · '))+')':'')+'.</p>':'')
     + (d.skipped?'<p class="ask-note">아직 시행 전인 개정 조문 '+d.skipped+'개는 빼고 봤어요 — 답변 근거는 <b>지금 적용되는 조문</b>이어야 하니까요. 그 조문들은 낱말 검색에서는 그대로 보입니다.</p>':'')
     /* 등급이 무슨 뜻인지 결과 바로 옆에 적어 둔다. 사용법 안에만 있으면

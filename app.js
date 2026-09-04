@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v81";
+var APP_VER="v82";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1998,6 +1998,17 @@ var SOON_RE=/\[\s*시행일\s*:\s*([^\]]{1,24})\]/;
 /* 지침서 한 쪽의 첫머리에서 제목을 뽑는다. 「20쪽」만 있으면 검색 결과에서
  * 어느 대목인지 알 수 없다. 「20쪽 · IV. 세포은행 시스템」이면 바로 보인다.
  * 문장(마침표로 끝나는 글)은 제목이 아니므로 버린다. */
+/* 지침서에는 쪽 제목이 따로 없어서, 첫머리 스무 자를 잘라 제목이라고 우기게 된다.
+ * 「위탁제조 판매가 가능함 다만 의약품 제」처럼 잘린 말은 제목이 아니라 방해다.
+ * **없는 것이 틀린 것보다 낫다** — 문장 도막임이 확실한 것만 버린다. */
+function isCutTitle(t){
+  if(/^(및|또는|그리고|다만|이때|따라|관한|대한|위하여|에서|에|의|를|을|이|가|은|는|와|과|로|으로)(\s|[가-힣])/.test(t)) return true;
+  if(/^(이|본|해당|위)\s*(지침서|안내서|규정|고시|기준|법|조|항)/.test(t)) return true;
+  var last=(t.split(/\s+/).pop()||"");
+  if(/^[가-힣]$/.test(last)) return true;      /* 어절 한복판에서 잘렸다 */
+  return false;
+}
+
 function pageTitle(t){
   var s=nfc(t).replace(/\s+/g," ").replace(RUNHEAD_RE,"").trim();
   if(s.length<20) return "";
@@ -2007,6 +2018,7 @@ function pageTitle(t){
     .replace(/[\[\(<「『·ᆞㆍ,\-]+$/,"").trim();   /* 끝에 매달린 여는 괄호·구분점을 턴다 */
   /* 조사로 끝나면 문장 도막이다 */
   if(/(은|는|이|가|을|를|에|의|와|과|로|으로|및)$/.test(ti)) return "";
+  if(isCutTitle(ti)) return "";
   return ti.length>24?ti.slice(0,24):ti;
 }
 
@@ -2104,9 +2116,11 @@ function buildLawArticles(pages,docName,docKind){
       parts=parts2;
       if(parts.length>=2){
         for(var q=0;q<parts.length;q++){
-          /* tblChunks 가 낸 토막은 제목이 숫자뿐이다 — 몇째 토막인지로 적는다 */
+          /* tblChunks 가 낸 토막은 제목이 숫자뿐이다. 「2/4 토막」은 기계가 센
+           * 번호일 뿐이라, 그 토막 첫머리에 「7. 공급관리」 같은 소제목이 있으면
+           * 그걸 이름으로 쓴다. 못 찾으면 예전처럼 몇째 토막인지로 적는다. */
           var t=parts[q].title;
-          if(/^\d+$/.test(t)) t=t+"/"+parts.length+" 토막";
+          if(/^\d+$/.test(t)) t=chunkTitle(parts[q].text)||(t+"/"+parts.length+" 토막");
           addRow(lab+" · "+t,num,parts[q].text,parts[q].a,parts[q].b);
         }
         continue;
@@ -2304,11 +2318,27 @@ var PAGENO_RE=/(^|\n)[ \t]*[-–—][ \t]*\d{1,4}[ \t]*[-–—][ \t]*/g;
 function bullets(t){
   return t.replace(/([.?!])\s*·\s*(?=[가-힣])/g,"$1\n· ");
 }
+/* PDF에서 뽑으면 문장부호 앞뒤에 빈칸이 낀다 — 「한다 .」 「미생물 , 균주」
+ * 「( level )」 「제 5 조 )」. 문서 10개에 31,114곳이라 글을 읽기가 힘들다.
+ * **글자는 하나도 안 지우고 빈칸만 없앤다.** 낱말을 붙이는 것(「보 관」→「보관」)과
+ * 달리 뜻이 바뀔 여지가 없고, 검색어에 문장부호가 들어갈 일도 없다.
+ * 숫자 사이 빈칸(제 6 조 · 2 년)은 건드리지 않는다 — 그건 낱말 붙이기와 같아 위험하다.
+ * 줄바꿈은 건드리지 않으므로(`[ \t]`만 본다) 글머리표 줄이 도로 붙지 않는다. */
+function tidyPunct(t){
+  return t.replace(/[ \t]+([,.?!;:])/g,"$1")
+          .replace(/([(\[{「『‘“])[ \t]+/g,"$1")
+          .replace(/[ \t]+([)\]}」』’”])/g,"$1")
+          /* 아래아점(ㆍ)·나카구로(・)는 「세포 ㆍ 미생물」처럼 벌어져 나온다.
+           * 글머리표로 쓰는 가운뎃점(·, U+00B7)은 건드리지 않는다 — 그건 줄을
+           * 여는 표시라 뒤에 빈칸이 있어야 한다. */
+          .replace(/[ \t]*([ㆍ・])[ \t]*/g,"$1");
+}
+
 function cleanPdfText(t,hre){
   t=nfc(t).replace(hre||runHeadRe(nfc(t))," ").replace(PAGENO_RE,"$1").replace(PUA_RE," · ");
   t=t.replace(BULLET_M0,"$1· ");
   try{ t=t.replace(BULLET_M," · "); }catch(e){}   /* 구형 사파리는 뒤돌아보기를 못 쓴다 */
-  return bullets(t);
+  return tidyPunct(bullets(t));
 }
 
 function nfc(t){
@@ -2989,6 +3019,18 @@ function secHeadLen(text,at){
     pos=(sp<0?text.length:sp+1);
   }
   return len;
+}
+
+/* 토막 첫머리의 소제목 — 「7. 공급관리 가 . 공급관리업무 …」에서 「7. 공급관리」.
+ * 「5.2 제조관리」 꼴(SEC_RE)과 달리 점이 하나뿐이라 소제목으로 안 잡히던 것이다.
+ * 뒤에 목(가 .)이나 호(1))가 바로 오는 짧은 말만 제목으로 본다 —
+ * 「1) 문서는 기록일부터 …」 같은 본문 첫 줄을 제목으로 삼지 않기 위해서다. */
+function chunkTitle(text){
+  var m=/^\s*(\d{1,2})\s*\.\s*([가-힣][가-힣A-Za-z0-9()ㆍ·\s]{1,14}?)\s+(?=[가-힣]\s*\.\s|\d{1,2}\s*[).]\s)/.exec(String(text||""));
+  if(!m) return "";
+  var ti=m[2].replace(/\s+/g," ").trim();
+  if(ti.length<2||isBadSecTitle(ti)) return "";
+  return m[1]+". "+ti;
 }
 
 /* 소제목이 없는 표 별표를 토막낸다. 호(1. 2. 3.)가 있으면 그 자리에서,

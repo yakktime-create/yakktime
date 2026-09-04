@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v96";
+var APP_VER="v97";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1737,15 +1737,22 @@ function pickBody(tally){
 
 /* 본문 무리에 없는 글꼴로 쓰인 줄은 제목이다. 앞뒤로 줄을 바꿔 둔다 —
  * 화면과 복사가 그 줄바꿈을 그대로 절 경계로 읽는다. */
-function linesToText(lines,bodySet){
+function linesToText(lines,bodySet,bodyH){
   if(!bodySet) return lines.map(function(l){ return l.text; }).join(" ").replace(/\s+/g," ").trim();
   var out=[];
   lines.forEach(function(l){
     if(!l.text) return;
-    out.push(bodySet[l.font]?l.text:("\n"+l.text+"\n"));
+    if(bodySet[l.font]){ out.push(l.text); return; }
+    /* 제목 중에서도 **본문보다 큰 것**이 큰 제목이다. 원문의 「③ 유전자변형생물체의
+     * 보관」처럼 번호가 심볼 글꼴이면 글자로는 소제목과 구분이 안 되는데,
+     * 크기로는 갈린다(큰 제목 h14 · 소제목 h12). 빈 줄 하나를 더 두어 표시한다. */
+    var h=+(String(l.font).split("|")[1]||0);
+    out.push((bodyH&&h>bodyH?"\n\n":"\n")+l.text+"\n");
   });
+  /* 맨 앞의 빈 줄은 「첫 줄이 큰 제목」이라는 표시다 — trim 으로 지우면
+   * 그 표시가 사라져 다음 제목이 큰 제목으로 뒤바뀐다. 뒤쪽만 다듬는다. */
   return out.join(" ").replace(/[ \t]+/g," ").replace(/[ \t]*\n[ \t]*/g,"\n")
-            .replace(/\n{2,}/g,"\n").trim();
+            .replace(/\n{3,}/g,"\n\n").replace(/^[ \t]+/,"").replace(/[ \t\n]+$/,"");
 }
 
 /* 표는 선으로 그린다. 가로줄·세로줄이 여럿이면 그 쪽에 표가 있다.
@@ -1834,9 +1841,15 @@ function extractPdfPages(buf,onProgress){
     }
     return step(1).then(function(){
       var bodySet=pickBody(tally);
+      /* 본문 글자 높이 — 이보다 큰 제목이 큰 제목이다 */
+      var bodyH=0;
+      if(bodySet){
+        var bk=Object.keys(bodySet).sort(function(a,b){ return tally[b]-tally[a]; })[0];
+        bodyH=+(String(bk).split("|")[1]||0);
+      }
       var pages=[];
       raw.forEach(function(r){
-        var txt=linesToText(r.lines,bodySet);
+        var txt=linesToText(r.lines,bodySet,bodyH);
         if(txt) pages.push({page:r.page,content:txt,tbl:r.tbl});
       });
       return pages;
@@ -2145,6 +2158,38 @@ function isCutTitle(t){
 /* 글꼴로 알아낸 제목 줄에서 쪽 이름을 고른다. 제목은 짧은 줄로 따로 서 있다.
  * 큰 제목(숫자로 시작)을 먼저 쓰고, 없으면 소제목(글머리표)을 쓴다.
  * 쪽 첫머리만 보면 앞 쪽에서 이어진 본문이라 이름을 못 얻는다(22쪽). */
+/* 큰 제목만 — 쪽마다 물려주려면 소제목은 빼야 한다.
+ * 「· 교차오염방지」는 그 쪽 안의 한 대목일 뿐이고, 그 쪽이 어느 대목에
+ * 속하는지는 앞에서 이어진 큰 제목이 말해 준다. */
+function headLineBig(t){
+  var ls=String(t||"").split("\n");
+  for(var i=0;i<ls.length;i++){
+    var L=ls[i].replace(/\s+/g," ").trim();
+    if(!L||L.length>30||/[.?!]$/.test(L)) continue;
+    if(/^[-–—]?\s*\d{1,4}\s*[-–—]?$/.test(L)) continue;
+    /* 숫자로 시작하거나, 앞에 빈 줄이 있어 「큰 제목」으로 표시된 것 */
+    var marked=i>0&&!ls[i-1].trim();
+    var bare=L.replace(/^[·ㆍ•▪○\s]+/,"").trim();
+    if(!(marked||/^\d/.test(L))||bare.length<2||isCutTitle(bare)) continue;
+    return bare.length>24?bare.slice(0,24):bare;
+  }
+  return "";
+}
+
+/* 그 쪽 첫 줄이 새 큰 제목이면 그것이 이 쪽의 이름이다 —
+ * 앞 쪽에서 이어진 제목보다 이쪽이 앞선다. */
+function firstLineBig(t){
+  var ls=String(t||"").split("\n"), k=0;
+  while(k<ls.length&&!ls[k].trim()) k++;      /* 맨 앞 빈 줄 = 큰 제목 표시 */
+  if(k>=ls.length) return "";
+  var marked=k>0;
+  var L=ls[k].replace(/\s+/g," ").trim();
+  if(L.length>30||/[.?!]$/.test(L)) return "";
+  var bare=L.replace(/^[·ㆍ•▪○\s]+/,"").trim();
+  if(!(marked||/^\d/.test(L))||bare.length<2||isCutTitle(bare)) return "";
+  return bare.length>24?bare.slice(0,24):bare;
+}
+
 function headLineTitle(t){
   var ls=String(t||"").split("\n"), big="", small="";
   for(var i=0;i<ls.length;i++){
@@ -2323,11 +2368,17 @@ function buildLawArticles(pages,docName,docKind){
   var mid=body.length?body[Math.floor(body.length/2)]:0;
   if(body.length<ART_DOC_MIN||mid<200){
     out=[];
+    /* 쪽 이름은 **그 쪽이 시작될 때 유효한 큰 제목**이다. 그 쪽 안의 아무 제목이나
+     * 쓰면 틀린다 — 22쪽 첫머리는 21쪽의 「1-2 세포은행 시스템관리」에 속하고,
+     * 「2 보관시설」은 그 쪽 끝에서 새로 시작하는 절이다. */
+    var carryBig="";
     pages.forEach(function(p){
       var t=(p.content||"").trim();
       if(!t) return;
       t=cleanPdfText(t,hre);        /* 조문 쪽과 같은 손질을 여기에도 */
-      var ti=pageTitle(t);
+      var big=headLineBig(t);
+      var ti=firstLineBig(t)||carryBig||big||pageTitle(t);
+      if(big) carryBig=big;
       out.push({ seq:out.length+1, label:p.page+"쪽"+(ti?" · "+ti:""), num:p.page+"쪽",
                  page:p.page, page_end:p.page, content:t });
     });
@@ -2968,8 +3019,15 @@ function buildLawHits(rows,terms){
         full=seen[bk]?"":(seen[bk]=1,lawPlain(c.slice(rg.st,rg.en)));
       }
       /* 덩어리 첫 글자부터 시작했으면 앞에 「…」을 붙이지 않는다 */
-      g.snips.push({ where:(a&&a.detail)||"", full:full,
-        text:(w.st>(w.bs==null?0:w.bs)?"…":"")+c.slice(w.st,w.en)+(w.en<c.length?"…":"") });
+      var where=(a&&a.detail)||"";
+      var body=c.slice(w.st,w.en);
+      /* 배지가 「가목」인데 글도 「가.」로 시작하면 같은 말이 두 번이다 — 글에서 뗀다 */
+      if(w.st===w.bs){
+        var mk=/^\s*([가-힣]|\d{1,2})\s*[.)]\s+/.exec(body);
+        if(mk&&where.indexOf(mk[1])>=0) body=body.slice(mk[0].length);
+      }
+      g.snips.push({ where:where, full:full,
+        text:(w.st>(w.bs==null?0:w.bs)?"…":"")+body+(w.en<c.length?"…":"") });
     });
     out.push(g);
   });
@@ -3468,7 +3526,8 @@ function lawBreaks(text){
       function isHead(t){ return !!t&&t.length<=40&&!/[.?!]$/.test(t); }
       /* 숫자로 시작하면 큰 제목이다 — 「2 보관시설」 「1-2 세포은행 시스템관리」.
        * 글머리표로 여는 소제목(「· 교차오염방지」)과 크기로 가른다. */
-      if(isHead(next)) pts.push({at:i+1,lv:0,len:0,big:/^\d/.test(next)});
+      if(isHead(next)) pts.push({at:i+1,lv:0,len:0,
+        big:(!prev&&i>0&&text.charAt(i-1)==="\n")||/^\d/.test(next)});
       else if(isHead(prev)) pts.push({at:i+1,lv:1,len:0});   /* 앞 줄이 제목 → 본문 시작 */
       continue;
     }

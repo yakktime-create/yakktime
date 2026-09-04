@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v115";
+var APP_VER="v116";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2635,14 +2635,21 @@ function runHeadRe(t){
   if(ms.length>=2){
     /* 머리글 뒤 법령 이름은 문서마다 다르다. 미리 알 필요 없이 「머리글 다음에
      * 오는 글의 공통 앞부분」으로 알아낸다 — 쪽마다 똑같이 찍히기 때문이다. */
-    var tail=ms.map(function(i){ return t.slice(i,i+80); }), n=0, same=true;
+    /* **마지막 꼬리말 뒤에는 아무것도 없다.** 그 빈 조각까지 견주면 공통 앞부분이
+     * 첫 글자에서 끊겨 이름을 못 얻는다 — 약사법 87쪽이 이것 때문에 안 지워졌다. */
+    var tail=ms.map(function(i){ return t.slice(i,i+80); })
+               .filter(function(s){ return s.trim().length>=2; });
+    var n=0, same=tail.length>=2;
     while(same&&n<80){
       var c=tail[0].charAt(n); if(!c) break;
       for(var k=1;k<tail.length;k++){ if(tail[k].charAt(n)!==c){ same=false; break; } }
       if(same) n++;
     }
     var nm=tail[0].slice(0,n).replace(/\S*$/,"").trim();   /* 낱말 한복판에서 끊지 않는다 */
-    if(nm.length>=4){
+    /* **네 글자 이상을 요구했더니 「약사법」(세 글자)이 걸러졌다.** 그래서 약사법
+     * 87쪽 전부에서 머리글이 안 지워지고 조문 끝에 「약사법」이 붙었다.
+     * 두 글자부터 받되 글자로 시작하는 것만 — 숫자·기호로 시작하면 이름이 아니다. */
+    if(nm.length>=2&&/^[가-힣A-Za-z]/.test(nm)){
       var e=reEsc(nm).replace(/\s+/g,"\\s+");
       /* **꼬리말과 머리글은 서로 다른 쪽에 있다.** 「법제처 N 국가법령정보센터」는
        * 앞 쪽 **끝**에 찍히고, 법령 이름은 다음 쪽 **첫머리**에 찍힌다. 둘을 한

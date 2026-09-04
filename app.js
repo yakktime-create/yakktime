@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v100";
+var APP_VER="v101";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2153,8 +2153,10 @@ var SOON_RE=/\[\s*시행일\s*:\s*([^\]]{1,24})\]/;
 function isCutTitle(t){
   if(/^(및|또는|그리고|다만|이때|따라|관한|대한|위하여|에서|에|의|를|을|이|가|은|는|와|과|로|으로)(\s|[가-힣])/.test(t)) return true;
   if(/^(이|본|해당|위)\s*(지침서|안내서|규정|고시|기준|법|조|항)/.test(t)) return true;
-  var last=(t.split(/\s+/).pop()||"");
-  if(/^[가-힣]$/.test(last)) return true;      /* 어절 한복판에서 잘렸다 */
+  var ws=t.split(/\s+/), last=ws[ws.length-1]||"";
+  /* 어절 한복판에서 잘린 것. 다만 「1 목 적」처럼 자간이 벌어져 한 글자로 뽑히는
+   * 짧은 제목까지 버리면 안 되므로, 어절이 넷 이상일 때만 잘린 것으로 본다. */
+  if(/^[가-힣]$/.test(last)&&(ws.length>=4||t.length>10)) return true;
   return false;
 }
 
@@ -2205,14 +2207,18 @@ function headLineTitle(t){
 function pageTitle(t){
   var byLine=headLineTitle(t);
   if(byLine) return byLine;
-  var s=nfc(t).replace(/\s+/g," ").replace(RUNHEAD_RE,"").trim();
+  /* 글꼴을 못 믿는 문서(한글에서 만들어 글꼴이 잘게 쪼개진 것)에서만 여기까지 온다.
+   * 앞에 붙은 글머리표는 건너뛰고, 제목은 다음 글머리표 앞에서 끊는다 —
+   * 안 그러면 「1 목 적 ○ 의약품등의 품목별 사전 GM」처럼 넘어가서 잘린다. */
+  var s=nfc(t).replace(/\s+/g," ").replace(RUNHEAD_RE,"").replace(/^[·ㆍ•▪○\s]+/,"").trim();
   if(s.length<20) return "";
-  var m=/^((?:[IVX]{1,4}|[0-9]{1,2})\s*[.)]?\s*)?([가-힣A-Za-z][^.。]{1,20})/.exec(s);
+  var m=/^((?:[IVX]{1,4}|[0-9]{1,2})\s*[.)]?\s*)?([가-힣A-Za-z][^.。○·ㆍ•▪]{1,20})/.exec(s);
   if(!m) return "";
   var ti=((m[1]||"")+m[2]).replace(/\s+/g," ")
     .replace(/[\[\(<「『·ᆞㆍ,\-]+$/,"").trim();   /* 끝에 매달린 여는 괄호·구분점을 턴다 */
-  /* 조사로 끝나면 문장 도막이다 */
-  if(/(은|는|이|가|을|를|에|의|와|과|로|으로|및)$/.test(ti)) return "";
+  /* 조사로 끝나면 문장 도막이다. **어절 하나가 통째로 조사일 때만** 본다 —
+   * 그냥 끝 글자로 보면 「우선 GMP 평가」의 「가」까지 조사로 오인한다. */
+  if(/(?:^|\s)(은|는|이|가|을|를|에|의|와|과|로|으로|및)$/.test(ti)) return "";
   if(isCutTitle(ti)) return "";
   return ti.length>24?ti.slice(0,24):ti;
 }

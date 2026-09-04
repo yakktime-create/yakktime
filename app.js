@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v105";
+var APP_VER="v106";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2645,6 +2645,10 @@ function runHeadRe(t){
 /* 쪽 가운데 아래에 찍히는 쪽 번호(- 15 -). 쪽을 이어 붙이면 문장에 낀다.
  * 문서 6개에 304개. 줄 첫머리에 있는 것만 지워 본문의 뺄셈과 섞이지 않게 한다. */
 var PAGENO_RE=/(^|\n)[ \t]*[-–—][ \t]*\d{1,4}[ \t]*[-–—][ \t]*/g;
+/* 쪽 번호가 **쪽 맨 아래**에 찍힌 문서는 위 규칙에 안 걸린다 — 이어 붙이면
+ * 줄 첫머리가 아니라 글 끝에 오기 때문이다. 「… 동영상 촬영본 제출 - 12 -」가
+ * 그대로 민원 답변에 복사됐다. 손질은 쪽마다 하므로 **글 끝의 것 하나**만 턴다. */
+var PAGENO_END_RE=/[ \t]*[-–—][ \t]*\d{1,4}[ \t]*[-–—][ \t]*$/;
 
 /* 글머리표는 두 가지로 쓰인다. 지침서에서는 「○ 세포·미생물의 저장시설」처럼
  * 소제목을 열고(문서 10개에 22개), 서식에서는 「총 명 ⬛ 교육 명」처럼 표 칸을
@@ -2670,7 +2674,8 @@ function tidyPunct(t){
 }
 
 function cleanPdfText(t,hre){
-  t=nfc(t).replace(hre||runHeadRe(nfc(t))," ").replace(PAGENO_RE,"$1").replace(PUA_RE," · ");
+  t=nfc(t).replace(hre||runHeadRe(nfc(t))," ").replace(PAGENO_RE,"$1")
+          .replace(PAGENO_END_RE,"").replace(PUA_RE," · ");
   t=t.replace(BULLET_M0,"$1· ");
   try{ t=t.replace(BULLET_M," · "); }catch(e){}   /* 구형 사파리는 뒤돌아보기를 못 쓴다 */
   return tidyPunct(bullets(t));

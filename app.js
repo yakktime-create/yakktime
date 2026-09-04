@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v70";
+var APP_VER="v71";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -525,6 +525,20 @@ function scrollIntoViewIfHidden(el){
 /* 기간을 고르라고 해놓고 달력이 화면 밖에 있으면 안 된다 */
 function focusCal(){ scrollIntoViewIfHidden(document.querySelector(".cal-grid")); }
 function focusDayPanel(){ scrollIntoViewIfHidden(document.querySelector(".day-panel")); }
+
+/* 라벨에 붙은 「· 시행 2026. 10. 8.」을 읽어, 오늘 기준으로 아직 안 온 것인지 본다.
+ * 법제처 PDF는 곧 시행될 개정 조문을 현행 조문 바로 뒤에 한 번 더 싣는다.
+ * 지우면 안 된다 — 「10월 8일부터 이렇게 바뀝니다」를 안내해야 할 때가 있다.
+ * 대신 어느 쪽이 지금 것이고 어느 쪽이 앞으로 올 것인지 눈에 보이게 한다. */
+function lawSoonDate(label){
+  var m=/·\s*시행\s*(\d{4})\s*\.\s*(\d{1,2})\s*\.\s*(\d{1,2})/.exec(String(label||""));
+  if(!m) return null;
+  return m[1]+("0"+m[2]).slice(-2)+("0"+m[3]).slice(-2);
+}
+function lawIsFuture(label){
+  var d=lawSoonDate(label);
+  return !!d && d>keyOf(new Date()).replace(/-/g,"");
+}
 
 /* 9/11~9/20 (10일) */
 function spanLabel(a,b){
@@ -1990,7 +2004,10 @@ function buildLawArticles(pages,docName,docKind){
     buf.push(t); pos+=t.length+1;
   });
   if(!marks.length) return [];
-  var full=buf.join("\n");
+  /* PDF에서 뽑은 글자에 「자모가 분리된」 한글이 섞여 있는 문서가 있다
+   * (의약품안전규칙 673자). 화면엔 똑같이 보이지만 검색으로는 안 걸리고,
+   * AI에게 보낼 때도 토큰이 더 든다. 저장 전에 한 번 맞춘다. */
+  var full=nfc(buf.join("\n"));
   /* 쪽 경계 표시가 없으므로, 잘린 위치가 몇 쪽인지는 marks로 되짚는다 */
   function pageAt(at){
     var lo=0, hi=marks.length-1, ans=marks[0].page;
@@ -2000,6 +2017,14 @@ function buildLawArticles(pages,docName,docKind){
     }
     return ans;
   }
+  /* 부칙에도 제1조·제2조가 있다. 「제1조(시행일)」이 본문 제1조로 보이면
+   * 검색 결과에서 엉뚱한 걸 근거로 삼게 된다. 라벨에 「부칙」을 붙여 가른다.
+   * 「부칙 <제21109호,2025. 11. 11.>」 꼴의 머리말만 잡는다 — 본문 속
+   * "부칙 제2조에 따라" 같은 인용에는 < > 가 없다. */
+  var buAt=[], bm, bre=/부\s*칙\s*<[^<>]{0,60}>/g;
+  while((bm=bre.exec(full))!==null) buAt.push(bm.index);
+  function inBuchik(at){ for(var i=0;i<buAt.length;i++) if(buAt[i]<at) return true; return false; }
+
   var heads=findArticles(full,20000).filter(function(h){ return !(noTbl&&h.table); });
   var out=[];
   function addRow(lab,num,text,a,b){
@@ -2018,6 +2043,7 @@ function buildLawArticles(pages,docName,docKind){
      * 지우면 안 되는 정보이므로, 라벨에 시행일을 붙여 구분되게 한다. */
     var lab=heads[i].label, sh=SOON_RE.exec(text);
     if(sh) lab+=" · 시행 "+sh[1].replace(/\s+/g," ").trim();
+    if(inBuchik(a)&&!heads[i].table) lab="부칙 "+lab;
     var num=artShort(heads[i].label);
 
     /* 긴 별표는 소제목 단위로 더 쪼갠다 (SUB_MIN 설명 참고) */
@@ -2419,6 +2445,7 @@ function lawAskHtml(){
   return '<div class="ask-box">'+head
     + (d.note?'<p class="ask-note">'+esc(d.note)+'</p>':'')
     + (d.truncated?'<p class="ask-warn">올려둔 조문이 너무 많아 <b>앞쪽 '+d.arts+'개만</b> 봤어요. 위에서 법령을 골라 범위를 좁혀주세요.</p>':'')
+    + (d.skipped?'<p class="ask-note">아직 시행 전인 개정 조문 '+d.skipped+'개는 빼고 봤어요 — 답변 근거는 <b>지금 적용되는 조문</b>이어야 하니까요. 그 조문들은 낱말 검색에서는 그대로 보입니다.</p>':'')
     /* 등급이 무슨 뜻인지 결과 바로 옆에 적어 둔다. 사용법 안에만 있으면
      * 펼쳐 보지 않는 한 「매우 높음이 뭐 기준인데」로 남는다. */
     + '<div class="ask-legend"><b>등급</b>은 셋을 합쳐서 매겨요 —'
@@ -3507,6 +3534,7 @@ function renderLawResults(){
       + '<div class="law-hit-body">'
       +   '<div class="law-meta">'
       +     '<span class="law-art">'+esc(g.art)+'</span>'
+      +     (lawIsFuture(g.art)?'<span class="law-soon">아직 시행 전</span>':'')
       /* 지침서는 조가 없어 라벨이 「22쪽」이다. 그 옆에 또 「22쪽」을 붙이면
        * 같은 말이 두 번이다. 라벨이 이미 그 쪽을 말하고 있으면 생략한다. */
       +     (function(){

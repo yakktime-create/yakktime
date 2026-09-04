@@ -1110,3 +1110,6 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
   background:var(--brick-soft);border-radius:var(--r-full);padding:1px 8px;}
 /* 앞줄과 같은 자리에서 나온 것 — 「7호 다목」을 되풀이하지 않는 대신 살짝 들여 쓴다 */
 .law-snip.law-snip-same{padding-left:var(--sp-4);}
+/* 곧 시행될 개정 조문 — 지금 것과 헷갈리면 안 된다 */
+.law-soon{flex:none;font-size:var(--fs-2xs);font-weight:800;color:var(--brick);
+  background:var(--brick-soft);border-radius:var(--r-full);padding:1px 8px;white-space:nowrap;}

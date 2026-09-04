@@ -207,9 +207,22 @@ Deno.serve(async (req) => {
         : "아직 조문으로 쪼개진 법령이 없어요. 법령 탭에서 「조문 만들기」를 먼저 해주세요." });
     }
 
+    // 법제처 PDF는 곧 시행될 개정 조문을 현행 조문 뒤에 한 번 더 싣는다. 그 조문은
+    // 라벨에 「· 시행 2026. 10. 8.」이 붙어 있다. 답변의 근거는 지금 적용되는
+    // 조문이어야 하므로, 아직 안 온 것은 AI 에게 아예 보내지 않는다.
+    // (화면에서는 그대로 보여준다 — 「10월 8일부터 이렇게 바뀝니다」를 안내해야
+    //  할 때가 있기 때문이다.)
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const isFuture = (label: string) => {
+      const m = /·\s*시행\s*(\d{4})\s*\.\s*(\d{1,2})\s*\.\s*(\d{1,2})/.exec(String(label || ""));
+      return !!m && (m[1] + ("0" + m[2]).slice(-2) + ("0" + m[3]).slice(-2)) > today;
+    };
+    const live = arts.filter((a: any) => !isFuture(a.label));
+    const skipped = arts.length - live.length;
+
     const index: any[] = [];
     let catalog = "", curLaw = "";
-    arts.forEach((a: any, i: number) => {
+    live.forEach((a: any, i: number) => {
       const nm = lawName.get(a.law_id) || "이름 없는 법령";
       if (nm !== curLaw) { curLaw = nm; catalog += `\n### ${nm}\n`; }
       const n = i + 1;
@@ -241,7 +254,7 @@ Deno.serve(async (req) => {
 
     if (!cand.length) {
       return json({ picks: [], note: String(p1.note || "관련 조문을 찾지 못했어요."),
-                    arts: arts.length, truncated: arts.length >= MAX_ARTS,
+                    arts: live.length, skipped, truncated: arts.length >= MAX_ARTS,
                     krw: Math.round(usdOf(r1.usage) * KRW) });
     }
 
@@ -312,7 +325,9 @@ Deno.serve(async (req) => {
     return json({
       picks,
       note: String(p2.note || p1.note || ""),
-      arts: arts.length,
+      arts: live.length,
+      // 아직 시행 전이라 빼고 본 조문 수 — 화면에서 알려 준다
+      skipped,
       looked: readCount,
       // 조문이 상한에 닿으면 뒤쪽 법령을 아예 못 봤다는 뜻이라 알려준다
       truncated: arts.length >= MAX_ARTS,

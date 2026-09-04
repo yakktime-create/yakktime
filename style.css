@@ -702,6 +702,16 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
 .ver{font-size:var(--fs-xs);color:#B6C0BA;text-align:center;padding:2px 0 4px;letter-spacing:.04em;}
 @media (max-width:1024px){ .ver{padding:0 6px;align-self:center;} }
 
+/* 쪽 경계에서 잘린 문장 조각. 그 쪽 내용이 아니므로 흐리게 하고,
+   어디까지가 이 쪽인지 점선으로 가른다. */
+.lv-edge{font-size:var(--fs-sm);color:var(--muted);line-height:var(--lh-body);}
+.lv-edge::before{display:block;font-size:var(--fs-2xs);font-weight:700;letter-spacing:.02em;
+  color:var(--muted);opacity:.7;margin-bottom:4px;}
+.lv-edge-pre{border-bottom:1px dashed var(--line);padding-bottom:11px;margin-bottom:13px;}
+.lv-edge-pre::before{content:"앞 쪽에서 이어짐";}
+.lv-edge-post{border-top:1px dashed var(--line);padding-top:11px;margin-top:13px;}
+.lv-edge-post::before{content:"다음 쪽으로 이어짐";}
+
 /* 조 전체 보기 */
 .lv-text mark.on{background:#FFC845;box-shadow:0 0 0 2px #E0A21B;}
 .lv-hit-n{font-size:var(--fs-sm);font-weight:650;color:var(--muted);min-width:46px;text-align:center;}

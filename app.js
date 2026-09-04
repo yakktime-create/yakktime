@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v79";
+var APP_VER="v80";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2709,6 +2709,38 @@ function lawFetchPages(lawId,lo,hi){
   });
 }
 
+/* 쪽 경계에서 잘린 문장 조각. PDF는 문장 한복판에서 쪽을 넘기므로
+ * 「우 정지 1 개월 정지 3 개월」처럼 꼬리부터 시작하는 쪽이 나온다.
+ * 앞 쪽의 마지막 문장 꼬리와 다음 쪽의 첫 문장 머리만 가져와 흐리게 붙인다. */
+/* 앞 조각은 이 쪽 첫 문장을 완성하는 몫이라 조금 길어도 되고, 뒤 조각은
+ * 「이어진다」는 것만 알면 되니 짧게. 표는 문장 끝이 드물어 그냥 두면
+ * 둘 다 최대치까지 늘어나 정작 이 쪽 내용을 밀어낸다. */
+var EDGE_PRE=180, EDGE_POST=110;
+function sentTail(t){          /* 문장 끝 뒤에 남은 꼬리 */
+  t=String(t||"").replace(/\s+$/,"");
+  if(!t||/[.?!]$/.test(t)) return "";
+  var m=/[.?!]\s/g, at=-1, x;
+  while((x=m.exec(t))!==null) at=x.index+x[0].length;
+  var tail=(at>=0?t.slice(at):t).replace(/^\s+/,"");
+  return tail.length>EDGE_PRE?"…"+tail.slice(-EDGE_PRE):tail;
+}
+function sentHead(t){          /* 첫 문장 끝까지의 머리 */
+  t=String(t||"").replace(/^\s+/,"");
+  if(!t) return "";
+  var m=/[.?!](\s|$)/.exec(t);
+  var head=m?t.slice(0,m.index+1):t;
+  return head.length>EDGE_POST?head.slice(0,EDGE_POST)+"…":head;
+}
+function edgeBits(before,here,after){
+  here=String(here||"");
+  if(!here.trim()) return {pre:"",post:""};
+  /* 이 쪽이 문장 중간에서 시작하면 앞 쪽의 꼬리를 가져온다 */
+  var pre=/^\s*[a-z가-힣0-9),·]/.test(here)?sentTail(before):"";
+  /* 이 쪽이 문장 중간에서 끝나면 다음 쪽의 머리를 가져온다 */
+  var post=/[.?!]\s*$/.test(here)?"":sentHead(after);
+  return {pre:pre,post:post};
+}
+
 /* ---------- 쪽 보기 (앱 안에서 바로) ----------
  * PDF를 여는 건 파일 전체를 내려받는 일이라 501쪽짜리는 12MB를 다 받아야
  * 한 쪽이 보인다. 쪽 텍스트는 이미 law_pages에 있으므로 그걸 바로 띄운다. */
@@ -2721,10 +2753,12 @@ function openLawView(id,page){
   if(page<1) page=1; if(page>max) page=max;
   lawView={lawId:id,page:page,loading:true,content:"",err:""};
   renderLawModal();
+  /* 앞뒤 쪽도 같이 읽는다 — 쪽 경계가 문장을 자르기 때문이다.
+   * 잘린 조각만 이어 붙여 흐리게 보여주면 문장이 온전히 읽힌다. */
   function runPage(){
     return withAuthRetry(function(){
-      return sb.from("law_pages").select(lawArtCol?"content,article":"content")
-        .eq("law_id",id).eq("page",page).limit(1);
+      return sb.from("law_pages").select(lawArtCol?"page,content,article":"page,content")
+        .eq("law_id",id).gte("page",page-1).lte("page",page+1).order("page");
     });
   }
   runPage().then(function(res){
@@ -2734,8 +2768,16 @@ function openLawView(id,page){
     if(!lawView||lawView.lawId!==id||lawView.page!==page) return;   /* 그새 다른 쪽으로 옮겼으면 버린다 */
     lawView.loading=false;
     if(res.error) lawView.err="쪽을 불러오지 못했어요: "+res.error.message;
-    else if(!res.data||!res.data.length) lawView.content="";
-    else { lawView.content=res.data[0].content; lawView.article=res.data[0].article||""; }
+    else {
+      var rows=res.data||[], here=null, before=null, after=null;
+      rows.forEach(function(r){
+        if(r.page===page) here=r; else if(r.page===page-1) before=r; else if(r.page===page+1) after=r;
+      });
+      lawView.content=here?(here.content||""):"";
+      lawView.article=here?(here.article||""):"";
+      var e=edgeBits(before&&before.content,lawView.content,after&&after.content);
+      lawView.pre=e.pre; lawView.post=e.post;
+    }
     renderLawModal();
   });
 }
@@ -3310,7 +3352,11 @@ function renderLawModal(){
   else if(lawView.err) body='<p class="empty">'+esc(lawView.err)+'</p>';
   else if(art) body=lawArtBodyHtml();
   else if(!lawView.content) body='<p class="empty">이 쪽에는 글자가 없어요.<br />표나 그림만 있는 쪽일 수 있어요 — 아래 PDF 원문에서 확인해 주세요.</p>';
-  else body='<div class="lv-text">'+formatLawText(lawView.content,lawTermList)+'</div>';
+  else body='<div class="lv-text">'
+    + (lawView.pre?'<div class="lv-edge lv-edge-pre">'+lawSegHtml(lawView.pre,lawTermList,0)+'</div>':"")
+    + formatLawText(lawView.content,lawTermList)
+    + (lawView.post?'<div class="lv-edge lv-edge-post">'+lawSegHtml(lawView.post,lawTermList,0)+'</div>':"")
+    + '</div>';
   if(art&&!lawView.loading&&!lawView.err) body='<div class="lv-text">'+body+'</div>';
 
   if(art){

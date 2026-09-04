@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v87";
+var APP_VER="v88";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3409,12 +3409,13 @@ function looksLikeTable(t){
   return ends*1000/t.length<2 && repRate(t)>=0.5;
 }
 
-/* 표로 된 대목은 글자만으로는 읽을 수 없다. 뒤죽박죽인 글로 화면을 채우느니
- * PDF로 보내는 편이 낫다 — 「그래도 글자로 보기」는 접어 둔다. */
+/* 재는 것은 「표인가」가 아니라 **「읽을 수 있는가」**다. 별지 제80호서식처럼
+ * 오른쪽 칸이 비어 있는 표(체크 서식)는 글자만 뽑아도 안 섞여서 그냥 보여준다.
+ * 별표 8처럼 칸마다 값이 차 있는 표만 뒤엉킨다 — 그때만 PDF로 보낸다. */
 function lvTableHtml(){
   return '<div class="lv-tblmsg">'
     + '<div class="lv-tblmsg-i">▤</div>'
-    + '<p><b>표(칸)로 된 대목이에요.</b><br />글자만 도려내면 칸 경계가 사라져 읽을 수가 없어요.<br />'
+    + '<p><b>칸이 뒤섞여 읽기 어려운 대목이에요.</b><br />표의 칸마다 값이 차 있어서, 글자만 도려내면 뒤엉켜 버려요.<br />'
     + '아래 <b>「PDF 원문 열기」</b>로 확인해 주세요.</p>'
     + '<button class="link-btn" data-act="lv-raw">그래도 글자로 보기</button>'
     + '</div>';
@@ -3915,7 +3916,7 @@ function renderLawResults(){
               var ws=[], seen={};
               g.snips.forEach(function(h){ if(h.where&&!seen[h.where]){ seen[h.where]=1; ws.push(h.where); } });
               return '<div class="law-tbl">'
-                + '<b>표(칸)로 된 대목이에요.</b>'
+                + '<b>칸이 뒤섞여 읽기 어려운 대목이에요.</b>'
                 + (ws.length?' <span class="law-tbl-w">'+esc(ws.join(" · "))+'</span>에서 찾았어요.':'')
                 + ' PDF 원문에서 확인하세요.</div>';
             })()

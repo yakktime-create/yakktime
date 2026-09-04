@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v60";
+var APP_VER="v61";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1802,6 +1802,24 @@ var LAW_ART_SAVE_MAX=60000;   /* 조 하나가 이보다 길면 잘라 저장한
 var SUB_MIN=1500;        /* 별표가 이만큼 길 때만 쪼갠다 */
 var SUB_HEAD_MIN=150;    /* 첫 소제목 앞에 이만큼 있으면 「머리말」로 따로 둔다 */
 var SUB_PART_MIN=80;     /* 이보다 짧은 토막은 앞 토막에 붙인다 */
+/* 지침서·안내서는 본문에서 남의 법 조문을 자주 인용한다.
+ *   "… 「약사법」 제31조(제조업 허가 등)에 따라 …"
+ * 이걸 자기 조문으로 잡으면 20~60자짜리 껍데기가 잔뜩 생기고, 정작 지침서
+ * 본문은 그 사이에 끼어 사라진다.
+ * 「짧으면 인용」으로 재면 안 된다 — 약사법 제95조의2(벌칙)는 65자짜리 진짜
+ * 조문이다. 대신 「앞이 문장 끝인가」로 가른다. 진짜 조문은 앞 조가 "…한다 ."
+ * 로 끝난 자리에서 시작하고, 인용은 문장 한복판(」 뒤, 「에 따라」 앞)에 있다.
+ * 그래도 남는 것을 위해 아주 낮은 바닥만 둔다. */
+var ART_BODY_MIN=40;
+/* 쓸 만한 조가 이보다 적으면 조문 문서가 아니라고 보고 쪽 단위로 돌아간다 */
+var ART_DOC_MIN=5;
+/* 소제목이 없는 표 별표(행정처분 기준 4만6천자, 임상시험 관리기준 3만8천자)는
+ * 위 방법으로 못 쪼갠다. 표라서 「2.1」 같은 머리말이 아예 없기 때문이다.
+ * 이런 것은 호(1. 2. 3.) 자리에서, 그것도 없으면 길이로 나눈다.
+ * 나누는 목적은 「검색이 어디를 가리키는지」와 「AI에게 통째로 안 잘려 들어가기」
+ * 둘뿐이므로, 자리가 조금 어긋나도 통짜보다는 낫다. */
+var TBL_CHUNK=3000;      /* 이 길이를 목표로 나눈다 */
+var TBL_SPLIT_MIN=8000;  /* 이보다 길고 소제목이 없으면 나눈다 */
 var SOON_RE=/\[\s*시행일\s*:\s*([^\]]{1,24})\]/;
 
 function buildLawArticles(pages){
@@ -1843,7 +1861,10 @@ function buildLawArticles(pages){
     var num=artShort(heads[i].label);
 
     /* 긴 별표는 소제목 단위로 더 쪼갠다 (SUB_MIN 설명 참고) */
-    var subs=(/^별표/.test(heads[i].label)&&raw.length>=SUB_MIN)?subHeads(raw):[];
+    var isTbl=/^별표/.test(heads[i].label);
+    var subs=(isTbl&&raw.length>=SUB_MIN)?subHeads(raw):[];
+    /* 소제목이 없는 표 별표는 호 자리·길이로 나눈다 (TBL_CHUNK 설명 참고) */
+    if(isTbl&&subs.length<2&&raw.length>=TBL_SPLIT_MIN) subs=tblChunks(raw);
     if(subs.length>=2){
       if(subs[0].at>=SUB_HEAD_MIN) subs.unshift({at:0,title:"머리말"});
       var parts=[];
@@ -1857,9 +1878,27 @@ function buildLawArticles(pages){
         }
         parts.push({title:subs[k].title,text:st,a:a+sa,b:a+sb});
       }
+      /* 소제목이 한쪽에 몰려 있으면 쪼갠 뒤에도 5만 자짜리 토막이 남는다.
+       * 남은 큰 토막은 길이로 한 번 더 나눈다. */
+      var parts2=[];
+      parts.forEach(function(pt){
+        if(pt.text.length<TBL_SPLIT_MIN){ parts2.push(pt); return; }
+        var cs=tblChunks(pt.text);
+        if(cs.length<2){ parts2.push(pt); return; }
+        for(var z=0;z<cs.length;z++){
+          var za=cs[z].at, zb=(z+1<cs.length)?cs[z+1].at:pt.text.length;
+          parts2.push({title:pt.title+" "+(z+1)+"/"+cs.length,
+                       text:pt.text.slice(za,zb).trim(), a:pt.a+za, b:pt.a+zb});
+        }
+      });
+      parts=parts2;
       if(parts.length>=2){
-        for(var q=0;q<parts.length;q++)
-          addRow(lab+" · "+parts[q].title,num,parts[q].text,parts[q].a,parts[q].b);
+        for(var q=0;q<parts.length;q++){
+          /* tblChunks 가 낸 토막은 제목이 숫자뿐이다 — 몇째 토막인지로 적는다 */
+          var t=parts[q].title;
+          if(/^\d+$/.test(t)) t=t+"/"+parts.length+" 토막";
+          addRow(lab+" · "+t,num,parts[q].text,parts[q].a,parts[q].b);
+        }
         continue;
       }
     }
@@ -1879,8 +1918,21 @@ function buildLawArticles(pages){
   });
   out.forEach(function(a,i){ a.seq=i+1; });
 
-  /* 조가 없는 문서(지침서·안내서)는 쪽을 그대로 한 단위로 쓴다 */
-  if(out.length<2){
+  /* 인용 껍데기 걷어내기 — 별표는 표만 있고 글이 짧을 수 있으므로 조문만 본다 */
+  out=out.filter(function(a){
+    /* 별표는 표만 있고 글이 짧을 수 있으므로 바닥을 더 낮게 둔다 */
+    return a.content.length>=(/^별표|^별지/.test(a.label)?60:ART_BODY_MIN);
+  });
+  out.forEach(function(a,i){ a.seq=i+1; });
+
+  /* 조가 없거나, 있어도 알맹이가 없는 문서(지침서·안내서)는 쪽을 한 단위로 쓴다.
+   * 개수로만 재면 안 된다 — 지침서는 남의 조문을 스무 번씩 인용하므로 개수는
+   * 채워진다. 그 조각들이 하나같이 짧다는 것이 진짜 표시다.
+   * 약사법은 가운뎃값 470자, 지침서는 100자 안팎이다. */
+  var body=out.filter(function(a){ return !/^별표|^별지/.test(a.label); })
+              .map(function(a){ return a.content.length; }).sort(function(x,y){ return x-y; });
+  var mid=body.length?body[Math.floor(body.length/2)]:0;
+  if(body.length<ART_DOC_MIN||mid<200){
     out=[];
     pages.forEach(function(p){
       var t=(p.content||"").trim();
@@ -2375,6 +2427,40 @@ var ART_RE=/제\s*(\d+)\s*조(?:\s*의\s*(\d+))?\s*\(\s*([^()]{1,40}?)\s*\)/g;
 var BP_RE=/\[\s*별\s*(표|지)\s*(?:제\s*)?(\d+)(?:\s*의\s*(\d+))?\s*(?:호\s*서\s*식)?\s*\]\s*(?:<[^<>]{0,40}>\s*)?(?:([^()\[\]<>]{0,40}?)\s*(?=\(|\[|<|$))?/g;
 var HANG="①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";
 
+/* 이 자리의 「제N조(…)」가 문서 자신의 조문인지, 본문에 낀 인용인지 가른다.
+ *
+ * 「앞이 문장 끝인가」로 재봤더니 약사법이 235조 → 126조로 줄었다. 조 앞에는
+ * <개정 …> 도 오고 "제3장 의약품등의 제조" 도 와서, 끝나는 모양이 너무 여러
+ * 가지였다. 그래서 반대쪽 — 「뒤에 무엇이 오는가」 — 를 본다.
+ *   진짜 조문   제3조(약국 개설등록) ① 약국을 개설하려는 자는 …
+ *   인용        「약사법」 제31조(제조업 허가 등)에 따라 …
+ * 인용은 뒤에 조사가 붙고, 진짜 조문은 본문이 시작된다. 조사는 종류가 정해져
+ * 있어 셀 수 있다. 여기에 「법령명」 바로 뒤인지만 더 본다. */
+var JOSA_RE=/^(에서|에도|에는|에게|부터|까지|이하|에|의|를|을|은|는|와|과|로|으로|나|랑)(?![가-힣])/;
+function isCitedHere(text,at,end){
+  var post=text.slice(end,end+8).replace(/^\s+/,"");
+  if(JOSA_RE.test(post)) return true;                 /* "…) 에 따라" */
+  var pre=text.slice(Math.max(0,at-24),at).replace(/\s+/g,"");
+  if(/[」』】]$/.test(pre)) return true;                /* "「약사법」 제31조" */
+  if(/(법|규칙|영|고시|기준|규정)$/.test(pre)) return true; /* "약사법 제31조" */
+  return false;
+}
+
+/* 별표 제목으로 인정할 수 없는 말.
+ * 고시의 별표는 제목이 괄호 안에 없고 그냥 뒤에 이어진다. 그래서 「[별표 N]
+ * 뒤의 아무 괄호나」 잡으면 본문이 통째로 제목이 된다 —
+ *   별표 1(무균의약품 제조 1. 범위 무균의약품의 제조는 다양한…)
+ *   별표 14(에 기재되어 있다 . 8.6 습열 멸균 가 . 습열 멸균은 증기)
+ * 제목이라면 문장이 아니다. 마침표·숫자 목록·조사로 시작하는 말은 버린다. */
+function isBadTblTitle(t){
+  var c=String(t||"").trim();
+  if(!c) return true;
+  if(/[.]\s|\d\s*\./.test(c)) return true;            /* 문장·번호 목록이 섞였다 */
+  if(/^(을|를|이|가|은|는|에|의|와|과|로|으로)\s/.test(c)) return true;   /* 조사로 시작 = 문장 도막 */
+  if(/[가-힣]\s+[가-힣]{1,2}\s*\./.test(c)) return true;  /* "… 가 ." 처럼 목 표시가 들어옴 */
+  return false;
+}
+
 /* 괄호 안이 제목이 아니라 다른 조문을 가리키는 참조인 경우를 걸러낸다.
  * 행정처분 기준 같은 표에서 "법 제47조(이 규칙 제62조)" 처럼
  * 근거법령 칸이 통째로 머리말처럼 보이는 일이 있다. */
@@ -2395,6 +2481,7 @@ function findArticles(text,max){
   while((m=ART_RE.exec(text))!==null){
     var title=m[3].replace(/\s+/g," ").trim();
     if(isRefTitle(title)) continue;
+    if(isCitedHere(text,m.index,m.index+m[0].length)) continue;   /* 뒤에 조사가 붙으면 인용이다 */
     out.push({ at:m.index, end:m.index+m[0].length,
       label:"제"+m[1]+"조"+(m[2]?"의"+m[2]:"")+"("+title+")" });
     if(out.length>lim) break;
@@ -2402,6 +2489,7 @@ function findArticles(text,max){
   BP_RE.lastIndex=0;
   while((m=BP_RE.exec(text))!==null){
     var t2=(m[4]||"").replace(/\s+/g," ").trim();
+    if(isBadTblTitle(t2)) t2="";      /* 제목이 아니면 번호만 쓴다 (별표 14) */
     var head=(m[1]==="지")
       ? "별지 제"+m[2]+(m[3]?"의"+m[3]:"")+"호서식"
       : "별표 "+m[2]+(m[3]?"의"+m[3]:"");
@@ -2474,6 +2562,14 @@ var RUNHEAD_RE=/^(?:법제처\s*\d+\s*국가법령정보센터|■[^\[]{0,60}(?=
  * 괄호마다 빈칸이 끼어서, 글자 수로 세면 정작 제목의 끝말이 잘려 나간다
  * ("2.2 품질(보증) 부서 책임자" 에서 "책임자" 가 본문으로 밀려났었다). */
 var SEC_RE=/^(\d{1,2}(?:\.\d{1,2}){1,2})\s+(?=[가-힣])/;
+/* 소제목으로 볼 수 없는 말 — 본문 속 참조를 잡은 것이다.
+ *   "별표 3 · 2.7.3 또는" · "별표 3 · 3.65 혈장" 처럼 문장 한복판이 걸린다. */
+function isBadSecTitle(t){
+  var c=String(t||"").replace(/^[\d.]+\s*/,"").trim();
+  if(c.length<3) return true;                       /* 번호만 있거나 한두 글자 */
+  if(/^(또는|및|그리고|다만|이때|경우|항과|호와)/.test(c)) return true;
+  return false;
+}
 function secHeadLen(text,at){
   var m=SEC_RE.exec(text.slice(at,at+14));
   if(!m) return 0;
@@ -2492,6 +2588,42 @@ function secHeadLen(text,at){
   return len;
 }
 
+/* 소제목이 없는 표 별표를 토막낸다. 호(1. 2. 3.)가 있으면 그 자리에서,
+ * 없으면 문장 끝에서 끊는다. 라벨은 「1~3쪽」처럼 몇 번째 토막인지로 붙인다. */
+function tblChunks(text){
+  var pts=[0], i;
+  /* 호 자리 — 앞이 공백, "12. " 꼴. 날짜와 헷갈리지 않게 두 자리까지만. */
+  for(i=1;i<text.length;i++){
+    if(!/\s/.test(text.charAt(i-1))) continue;
+    if(/^\d{1,2}\s*\.\s/.test(text.slice(i,i+5))) pts.push(i);
+  }
+  /* 호가 너무 드물면(표가 아니라 줄글) 문장 끝에서 끊는다 */
+  if(pts.length<3){
+    pts=[0];
+    for(i=1;i<text.length;i++) if(/다\s*\.\s/.test(text.slice(i,i+4))) pts.push(i+2);
+  }
+  /* 목표 길이에 닿을 때까지 모았다가 끊는다 — 토막이 잘게 부서지지 않게 */
+  var out=[], last=0;
+  for(i=1;i<pts.length;i++){
+    if(pts[i]-last < TBL_CHUNK) continue;
+    out.push(pts[i]); last=pts[i];
+  }
+  /* 끊을 자리가 드문 문서(표가 통째로 붙어 있는 별표)는 위 방법으로 거의
+   * 안 잘린다. 그럴 땐 글자 수로 그냥 자른다 — 자리가 어긋나도 통짜보다 낫다. */
+  if(out.length*TBL_CHUNK < text.length*0.5){
+    out=[];
+    for(var c=TBL_CHUNK;c<text.length;c+=TBL_CHUNK){
+      /* 가까운 공백에서 끊어 낱말이 반 토막 나지 않게 */
+      var sp=text.indexOf(" ",c);
+      out.push(sp>=0&&sp-c<200?sp+1:c);
+    }
+  }
+  if(!out.length) return [];
+  var res=[{at:0,title:"1"}];
+  out.forEach(function(at,k){ res.push({at:at,title:String(k+2)}); });
+  return res;
+}
+
 /* 별표 안의 소제목 자리만 뽑는다 (쪼개기용). 화면 표시용 lawBreaks 와
  * 같은 판별(secHeadLen)을 쓰므로 굵게 보이는 줄과 쪼개지는 줄이 늘 일치한다. */
 function subHeads(text){
@@ -2505,12 +2637,19 @@ function subHeads(text){
     if(inSkip(i)) continue;
     /* "별표 1 제 7.1 호다목" 처럼 조문 참조 안의 숫자는 제목이 아니다 */
     if(text.slice(Math.max(0,i-3),i).replace(/\s+/g,"").slice(-1)==="제") continue;
+    /* 소제목은 앞 문장이 끝난 자리에서 시작한다. 문장 한복판의 "2.7.3 또는"
+     * 같은 참조를 걸러내는 가장 확실한 표시다. */
+    var pre=text.slice(Math.max(0,i-40),i).replace(/\s+/g," ");
+    if(pre.trim()&&!/[.。:]\s*$|다\s*\.\s*$/.test(pre)) continue;
     var len=secHeadLen(text,i);
     if(!len) continue;
     /* PDF에서 뽑으면 "품질 ( 보증 ) 부서" 처럼 괄호마다 빈칸이 낀다. 라벨에 쓸
      * 것이므로 여기서 붙여 준다 → "품질(보증) 부서" */
     var ti=text.slice(i,i+len).replace(/\s+/g," ")
       .replace(/\s*\(\s*/g,"(").replace(/\s*\)/g,")").trim();
+    /* 괄호가 열린 채 끝나면 그 앞까지만 — "9.5 무균공정모의시험(" 같은 꼴 */
+    if((ti.match(/\(/g)||[]).length>(ti.match(/\)/g)||[]).length) ti=ti.replace(/\([^)]*$/,"").trim();
+    if(isBadSecTitle(ti)) continue;
     out.push({at:i,title:ti});
     i+=len;
   }

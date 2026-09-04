@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v57";
+var APP_VER="v58";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2120,6 +2120,11 @@ function lawAskHtml(){
   return '<div class="ask-box">'+head
     + (d.note?'<p class="ask-note">'+esc(d.note)+'</p>':'')
     + (d.truncated?'<p class="ask-warn">올려둔 조문이 너무 많아 <b>앞쪽 '+d.arts+'개만</b> 봤어요. 위에서 법령을 골라 범위를 좁혀주세요.</p>':'')
+    /* 등급이 무슨 뜻인지 결과 바로 옆에 적어 둔다. 사용법 안에만 있으면
+     * 펼쳐 보지 않는 한 「매우 높음이 뭐 기준인데」로 남는다. */
+    + '<div class="ask-legend"><b>등급</b>은 셋을 합쳐서 매겨요 —'
+    +   '<span>답이 이 조에 있나</span><span>답변서에 인용해야 하나</span><span>본문에서 확인했나</span>'
+    +   '<i>조문마다 아래에 그 셋이 적혀 있어요.</i></div>'
     + acts+'<ol class="ask-list">'+items+'</ol>'
     /* 도구지 답변자가 아니다. 이 줄을 지우면 안 된다. */
     + '<p class="ask-foot">'

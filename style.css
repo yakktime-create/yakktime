@@ -950,6 +950,13 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
   background:var(--brass-soft);border-radius:var(--r-full);padding:2px 10px;}
 .ask-note{margin:0 0 var(--sp-3);font-size:var(--fs-md);color:var(--muted);line-height:var(--lh-snug);}
 .ask-none{margin:0 0 var(--sp-2);font-weight:600;}
+/* 등급이 무슨 뜻인지 결과 옆에 바로 — 사용법 안에만 두면 안 펼쳐 본다 */
+.ask-legend{display:flex;align-items:center;gap:var(--sp-1);flex-wrap:wrap;
+  margin:0 0 var(--sp-2);font-size:var(--fs-sm);color:var(--muted);line-height:var(--lh-snug);}
+.ask-legend b{color:var(--ink);font-weight:700;}
+.ask-legend span{font-weight:700;color:var(--accent);background:var(--accent-soft);
+  border-radius:var(--r-xs);padding:1px 7px;}
+.ask-legend i{font-style:normal;opacity:.8;}
 .ask-warn{margin:0 0 var(--sp-3);padding:10px 14px;font-size:var(--fs-md);
   background:var(--brass-soft);border:1px solid var(--brass-bd);border-radius:var(--r-sm);}
 .ask-warn b{color:var(--brass);}

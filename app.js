@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v86";
+var APP_VER="v87";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3134,6 +3134,10 @@ function lawBreaks(text){
   for(var i=0;i<text.length;i++){
     if(inSkip(i)) continue;
     var ch=text.charAt(i);
+    /* 줄 첫머리 글머리표(· )는 지침서의 소제목이다(원문의 ○). 손질이 줄바꿈을
+     * 넣어 뒀는데 화면을 그리는 쪽이 그걸 안 봐서, 「· 세척 및 오염제거」가
+     * 문단 한복판에 끼어 있었다. 새 절로 끊는다. */
+    if(ch==="·"&&(i===0||text.charAt(i-1)==="\n")){ pts.push({at:i,lv:0,len:0}); continue; }
     if(HANG.indexOf(ch)>=0){ pts.push({at:i,lv:1,len:0}); continue; }
     /* 호(1. 2.) · 목(가. 나.) — 앞이 공백이고 뒤가 공백인 것만.
      * PDF에서 뽑으면 "사 ." 처럼 점 앞에 공백이 끼기도 해서 허용한다.
@@ -3302,14 +3306,17 @@ function formatLawSeg(text,q,startLv){
   startLv=startLv||0;
   var pts=lawBreaks(text);
   if(!pts.length) return {html:'<div class="lp '+LP_CLASS[startLv]+'">'+lawSegHtml(text,q,0)+'</div>',lv:startLv};
-  var html="", prev=0, prevLv=startLv, prevArt=0;
+  var html="", prev=0, prevLv=startLv, prevArt=0, prevSoft=false;
   function push(to){
     var seg=text.slice(prev,to);
-    if(seg.trim()) html+='<div class="lp '+LP_CLASS[prevLv]+'">'+lawSegHtml(seg,q,prevArt)+'</div>';
+    /* 긴 글을 문장에서 나눈 자리(soft)는 새 절이 아니다 — 절 사이 가로줄을
+     * 문단마다 그으면 답답하다. 소제목이 여는 절에만 긋는다. */
+    if(seg.trim()) html+='<div class="lp '+LP_CLASS[prevLv]+(prevSoft?" lp-soft":"")+'">'
+      +lawSegHtml(seg,q,prevArt)+'</div>';
   }
-  if(pts[0].at>0){ prev=0; prevLv=startLv; prevArt=0; push(pts[0].at); }
+  if(pts[0].at>0){ prev=0; prevLv=startLv; prevArt=0; prevSoft=false; push(pts[0].at); }
   pts.forEach(function(p,i){
-    prev=p.at; prevLv=p.lv; prevArt=p.len;
+    prev=p.at; prevLv=p.lv; prevArt=p.len; prevSoft=!!p.soft;
     push(i+1<pts.length?pts[i+1].at:text.length);
   });
   return {html:html,lv:pts[pts.length-1].lv};

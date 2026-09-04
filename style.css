@@ -657,6 +657,8 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
 .lp{margin:0 0 11px;}
 .lp0{margin-top:20px;padding-top:16px;border-top:1px solid var(--line);}
 .lp0:first-child{margin-top:0;padding-top:0;border-top:none;}
+/* 긴 글을 문장에서 나눈 자리는 새 절이 아니다 — 가로줄을 긋지 않는다 */
+.lp0.lp-soft{margin-top:0;padding-top:0;border-top:none;}
 .lp1{margin-left:16px;}
 .lp2{margin-left:34px;}
 .lp3{margin-left:52px;}

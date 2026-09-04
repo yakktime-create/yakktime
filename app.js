@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v69";
+var APP_VER="v70";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1778,7 +1778,10 @@ function lawMeta(pages){
   } else if(/공무원\s*지침서|민원인\s*안내서|지침서|안내서/.test(head)) kind="지침";
   if((m=/\[\s*시행\s*(\d{4})\s*\.\s*(\d{1,2})\s*\.\s*(\d{1,2})/.exec(head)))
     eff=m[1]+("0"+m[2]).slice(-2)+("0"+m[3]).slice(-2);
-  else if((m=/(20\d{2})\s*\.\s*(\d{1,2})\s*\./.exec(head)))   /* 지침서 발행 연월 */
+  /* 지침서 발행 연월 — 표지에 적히는 꼴이 여러 가지다.
+   *   2025. 9.   ·   2026년 06월   ·   2025-11 */
+  else if((m=/(20\d{2})\s*\.\s*(\d{1,2})\s*\.|(20\d{2})\s*년\s*(\d{1,2})\s*월|(20\d{2})-(\d{1,2})(?!\d)/.exec(head))
+          &&(m=[0,m[1]||m[3]||m[5],m[2]||m[4]||m[6]]))
     eff=m[1]+("0"+m[2]).slice(-2)+"00";
   return {kind:kind,eff:eff};
 }
@@ -1823,26 +1826,7 @@ function lawIsOld(l){
 
 function lawUpload(f){
   if(lawBusy) return;
-  /* 개정본을 올릴 때 옛 판을 여기서 잡는다. 나중에 목록을 뒤지게 하면
-   * 열 몇 개 중에서 어느 게 옛것인지 일일이 봐야 한다. */
-  var old=lawOtherEditions(f.name,null), drop=[];
-  if(old.length){
-    var mine=lawParse(f.name);
-    var lines=old.map(function(l){
-      var p=lawParse(l.name);
-      return "  · "+(lawDate(p.date)?lawDate(p.date)+" 시행":"날짜 없음")+"  "+l.name;
-    }).join("\n");
-    var newer=old.every(function(l){
-      var p=lawParse(l.name);
-      return !(p.date&&mine.date)||mine.date>p.date;
-    });
-    var msg="「"+mine.base+"」이(가) 이미 올라와 있어요.\n\n"+lines
-      +"\n\n새로 올리는 것: "+(lawDate(mine.date)?lawDate(mine.date)+" 시행":"날짜 없음")
-      +(newer?"\n\n옛 판을 지우고 새것으로 대체할까요?"
-             :"\n\n⚠️ 이미 올라온 쪽이 더 새것입니다.\n그래도 이것으로 대체할까요?")
-      +"\n\n[확인] 대체 — 옛 판은 지웁니다\n[취소] 둘 다 남깁니다";
-    if(confirm(msg)) drop=old;
-  }
+  var drop=[];
   lawBusy=true; render();
   var path=Date.now()+"_"+f.name.replace(/[^a-zA-Z0-9._-]/g,"_");
   var uploaded=false;
@@ -1871,6 +1855,27 @@ function lawUpload(f){
     /* 화면에 쓸 이름은 괄호 묶음을 떼어 짧게. 종류·시행일은 따로 보여주므로
      * 이름에 숫자가 남아 있을 이유가 없다. 원본은 file_name 에 그대로 둔다. */
     var meta=lawMeta(pages);
+    /* 대체 확인은 <b>PDF를 읽은 뒤에</b> 묻는다. 파일 이름만 보고 물으면
+     * 지침서처럼 이름에 날짜가 없는 문서는 「날짜 없음 vs 날짜 없음」이 되어
+     * 어느 쪽이 새것인지 알려줄 수가 없다. 문서 안에는 발행 연월이 있다. */
+    var old=lawOtherEditions(f.name,null);
+    if(old.length){
+      var mine=lawParse(f.name), myEff=meta.eff||mine.date;
+      var show=function(d){ return d?(/00$/.test(d)?d.slice(0,4)+"."+(+d.slice(4,6)):lawDate(d)):"날짜 없음"; };
+      var lines=old.map(function(l){
+        return "  · "+show(l.eff||lawParse(lawSrc(l)).date)+"  "+l.name;
+      }).join("\n");
+      var newer=old.every(function(l){
+        var oe=l.eff||lawParse(lawSrc(l)).date;
+        return !(oe&&myEff)||myEff>oe;
+      });
+      var msg="「"+mine.base+"」이(가) 이미 올라와 있어요.\n\n"+lines
+        +"\n\n새로 올리는 것: "+show(myEff)
+        +(newer?"\n\n옛 판을 지우고 새것으로 대체할까요?"
+               :"\n\n⚠️ 이미 올라온 쪽이 더 새것입니다.\n그래도 이것으로 대체할까요?")
+        +"\n\n[확인] 대체 — 옛 판은 지웁니다\n[취소] 둘 다 남깁니다";
+      if(confirm(msg)) drop=old;
+    }
     var item={name:lawParse(f.name).base,filePath:path,fileName:nfc(f.name),pages:pages.length,
               kind:meta.kind,eff:meta.eff};
     return dbInsert("laws",item).then(function(row){

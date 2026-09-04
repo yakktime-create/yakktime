@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v65";
+var APP_VER="v66";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1734,21 +1734,25 @@ function lawDate(d){
   if(!d||d.length<8) return "";
   return d.slice(0,4)+"."+(+d.slice(4,6))+"."+(+d.slice(6,8));
 }
+/* 판을 가르는 정보(공포번호·시행일)는 <b>원본 파일 이름</b>에서 읽는다.
+ * 화면에 보이는 이름은 짧게 다듬을 것이라 거기엔 숫자가 남지 않는다. */
+function lawSrc(l){ return (l&&(l.fileName||l.name))||""; }
+
 /* 같은 법령의 다른 판을 찾는다 (자기 자신은 뺀다) */
 function lawOtherEditions(name,skipId){
   var b=lawParse(name).base;
   if(!b) return [];
   return S.laws.filter(function(l){
-    return l.id!==skipId && lawParse(l.name).base===b;
+    return l.id!==skipId && lawParse(lawSrc(l)).base===b;
   });
 }
 /* 같은 법령이 여럿이면 시행일이 가장 늦은 것만 「지금 판」이다 */
 function lawIsOld(l){
-  var mine=lawParse(l.name);
+  var mine=lawParse(lawSrc(l));
   if(!mine.base) return false;
   return S.laws.some(function(o){
     if(o.id===l.id) return false;
-    var p=lawParse(o.name);
+    var p=lawParse(lawSrc(o));
     if(p.base!==mine.base) return false;
     /* 날짜가 있으면 날짜로, 없으면 공포번호로 견준다 */
     if(p.date&&mine.date) return p.date>mine.date;
@@ -1774,9 +1778,9 @@ function lawUpload(f){
     });
     var msg="「"+mine.base+"」이(가) 이미 올라와 있어요.\n\n"+lines
       +"\n\n새로 올리는 것: "+(lawDate(mine.date)?lawDate(mine.date)+" 시행":"날짜 없음")
-      +(newer?"\n\n옛 판을 지우고 새것으로 바꿀까요?"
-             :"\n\n⚠️ 이미 올라온 쪽이 더 새것입니다.\n그래도 옛 판을 지우고 이걸로 바꿀까요?")
-      +"\n\n[취소]를 누르면 둘 다 남습니다.";
+      +(newer?"\n\n옛 판을 지우고 새것으로 대체할까요?"
+             :"\n\n⚠️ 이미 올라온 쪽이 더 새것입니다.\n그래도 이것으로 대체할까요?")
+      +"\n\n[확인] 대체 — 옛 판은 지웁니다\n[취소] 둘 다 남깁니다";
     if(confirm(msg)) drop=old;
   }
   lawBusy=true; render();
@@ -1804,7 +1808,9 @@ function lawUpload(f){
       return pages;
     });
   }).then(function(pages){
-    var item={name:nfc(f.name).replace(/\.pdf$/i,""),filePath:path,fileName:f.name,pages:pages.length};
+    /* 화면에 쓸 이름은 괄호 묶음을 떼어 짧게. 종류·시행일은 따로 보여주므로
+     * 이름에 숫자가 남아 있을 이유가 없다. 원본은 file_name 에 그대로 둔다. */
+    var item={name:lawParse(f.name).base,filePath:path,fileName:nfc(f.name),pages:pages.length};
     return dbInsert("laws",item).then(function(row){
       if(!row) throw new Error("법령 정보를 저장하지 못했어요.");
       S.laws.unshift(item);
@@ -2157,9 +2163,14 @@ function lawBuildAll(all){
   function next(){
     if(k>=todo.length){ fin(); return; }
     var l=todo[k++];
-    /* 아이패드에서 올린 이름은 NFD 라 분류가 안 된다. 이 참에 고쳐 둔다. */
-    if(l.name&&nfc(l.name)!==l.name){
-      l.name=nfc(l.name); dbUpdate("laws",l.id,{name:l.name});
+    /* 이 참에 이름도 손본다 — NFD(자모 분리)를 붙이고, 괄호 묶음을 떼어 짧게.
+     * 다만 직접 고쳐 둔 이름은 건드리지 않는다. 원본 파일 이름에서 확장자만
+     * 뗀 것과 같을 때만 = 아직 손대지 않았을 때만 다듬는다. */
+    var raw=nfc(lawSrc(l)).replace(/\.pdf$/i,""), tidy=lawParse(lawSrc(l)).base;
+    var untouched=(nfc(l.name)===raw||nfc(l.name)===nfc(l.name&&l.name));
+    if(l.name&&(nfc(l.name)!==l.name||nfc(l.name)===raw)){
+      var nn=(nfc(l.name)===raw&&tidy)?tidy:nfc(l.name);
+      if(nn!==l.name){ l.name=nn; dbUpdate("laws",l.id,{name:nn}); }
     }
     showToast("("+k+"/"+todo.length+") "+l.name);
     lawReindexOne(l).then(function(){ ok++; next(); },function(err){
@@ -3299,10 +3310,19 @@ function renderLaws(){
     if(need) list+='<div class="notice"><span class="notice-ic">!</span>'
       + '<div>조문으로 안 쪼개진 법령이 <b>'+need+'개</b> 있어요. 이걸 해야 검색이 조 단위로 나와요.</div>'
       + '<button class="btn sm" data-act="law-build-all"'+(lawBusy?" disabled":"")+'>'+(lawBusy?"만드는 중...":"전부 만들기")+'</button></div>';
-    list+='<button class="law-toggle" data-act="law-list">'
-      + (lawListOpen?"▾":"▸")+' 올려둔 법령 '+items.length+'개'
-      + (lawOnlyLabel()?'<span class="law-only-tag">'+esc(lawOnlyLabel())+'만</span>':'')
-      + '<span class="law-toggle-hint">'+(lawListOpen?"접기":"찾을 범위 고르기 · 조문 만들기 · 삭제")+'</span></button>';
+    /* 「전부 다시 만들기」는 목록 아래에 있으면 안 보인다. 목록을 펼치는
+     * 줄 오른쪽 — 목록을 다루는 것들이 모여 있는 자리에 둔다. */
+    list+='<div class="law-head-row">'
+      + '<button class="law-toggle" data-act="law-list">'
+      +   (lawListOpen?"▾":"▸")+' 올려둔 법령 '+items.length+'개'
+      +   (lawOnlyLabel()?'<span class="law-only-tag">'+esc(lawOnlyLabel())+'만</span>':'')
+      +   '<span class="law-toggle-hint">'+(lawListOpen?"":"찾을 범위 고르기 · 삭제")+'</span></button>'
+      + (lawListOpen
+          ? '<button class="link-btn" data-act="law-build-all" data-id="all"'+(lawBusy?" disabled":"")+'>'
+            + (lawBusy?"만드는 중…":"조문 전부 다시 만들기")+'</button>'
+            + '<button class="link-btn quiet-link" data-act="law-list">접기</button>'
+          : '')
+      + '</div>';
     if(lawListOpen){
       /* 종류별로 묶고 위계 순으로 세운다 — 열 몇 개가 되면 이름만 죽 늘어놔서는
        * 어느 게 법이고 어느 게 지침인지 알 수 없다. 칸 높이를 잡아 그 안에서
@@ -3311,28 +3331,21 @@ function renderLaws(){
       list+='<div class="law-list grouped">'+lawSorted().map(function(l){
       var onlyOn=!!lawOnly[l.id], kd=lawKind(l.name), head="";
       if(kd.t!==cur){ cur=kd.t;
-        head='<div class="law-kind"><span>'+esc(kd.t)+'</span></div>'; }
+        head='<div class="law-kind g'+kd.n+'"><span>'+esc(kd.t)+'</span></div>'; }
       return head+'<div class="law-row'+(onlyOn?" only":"")+'">'
         /* 하나도 안 고르면 전부 본다. 「고른 것만」은 좁힐 때만 쓰는 장치다. */
         + '<label class="law-only"><input type="checkbox" data-act="law-only" data-id="'+l.id+'"'+(onlyOn?" checked":"")+' title="이 법령에서만 찾기" /></label>'
         + '<span class="law-name" data-act="edit" data-table="laws" data-field="name" data-id="'+l.id+'" title="눌러서 이름 수정">'+esc(l.name)+'</span>'
-        + '<span class="law-kind-tag k'+kd.n+'">'+esc(kd.t)+'</span>'
         + (lawIsOld(l)?'<span class="law-old-tag">옛 판</span>':'')
-        + '<span class="law-pages">'+(lawDate(lawParse(l.name).date)?lawDate(lawParse(l.name).date)+' 시행 · ':'')
-        +   (l.pages||0)+'쪽'+(l.arts?' · 조문 '+l.arts+'개':'')+'</span>'
-        /* 조문이 아직 없으면 글자로 크게 — 그게 지금 해야 할 일이다.
-         * 이미 있으면 아이콘 하나로 줄인다. 열한 줄에 「조문 다시 만들기」가
-         * 다 적혀 있으면 정작 이름이 안 읽힌다. */
-        + (l.arts
-            ? '<button class="law-ic" data-act="law-reindex" data-id="'+l.id+'" title="조문 다시 만들기">⟳</button>'
-            : '<button class="link-btn law-need" data-act="law-reindex" data-id="'+l.id+'">조문 만들기</button>')
+        /* 종류 배지는 뺐다 — 바로 위 묶음 머리말과 같은 말이다.
+         * 시행일·쪽수는 폭을 고정해 세로로 줄을 맞춘다. */
+        + '<span class="law-eff">'+(lawDate(lawParse(lawSrc(l)).date)||'')+'</span>'
+        + '<span class="law-pages">'+(l.pages||0)+'쪽'
+        +   (l.arts?' · 조문 '+l.arts+'개':'')+'</span>'
+        + (l.arts?'':'<button class="link-btn law-need" data-act="law-reindex" data-id="'+l.id+'">조문 만들기</button>')
         + '<button class="law-ic" data-act="law-pdf" data-id="'+l.id+'" data-page="1" title="PDF 원문 열기">↗</button>'
         + '<button class="law-ic del" data-act="law-del" data-id="'+l.id+'" title="삭제">✕</button></div>';
-      }).join("")+'</div>'
-      /* 쪼개는 방식이 바뀌면 한 번 돌려야 한다. 낱낱이 누르면 열한 번이다. */
-      + '<div class="law-list-foot"><button class="link-btn" data-act="law-build-all" data-id="all"'
-      +   (lawBusy?" disabled":"")+'>'+(lawBusy?"만드는 중…":"전부 다시 만들기")+'</button>'
-      + '<span class="law-list-hint">쪼개는 방식이 바뀌었을 때 한 번만</span></div>';
+      }).join("")+'</div>';
     }
   }
 

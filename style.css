@@ -1010,8 +1010,11 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .law-kind:active{background:var(--accent-soft);}
 .law-kind.on{background:var(--accent-soft);}
 .law-kind.on span:first-of-type{color:var(--accent);}
-.law-kind-n{margin-left:auto;font-size:var(--fs-2xs);font-weight:700;color:var(--muted);}
-.law-kind.on .law-kind-n{color:var(--accent);}
+/* 개수는 이름 바로 옆에. 오른쪽 끝에 두면 굴릴 때 이름과 900px 떨어진 숫자가
+   따로 떠 있어 무엇의 개수인지 안 읽힌다. */
+.law-kind-n{font-size:var(--fs-2xs);font-weight:700;color:var(--muted);
+  background:var(--surface);border-radius:var(--r-full);padding:1px 7px;}
+.law-kind.on .law-kind-n{color:var(--accent);background:#fff;}
 .law-head-sep{color:var(--line);}
 .law-kind span{display:inline-flex;align-items:center;gap:var(--sp-2);
   font-size:var(--fs-xs);font-weight:800;color:var(--ink);letter-spacing:.04em;}

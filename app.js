@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v78";
+var APP_VER="v79";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1928,8 +1928,18 @@ function lawUpload(f){
   });
 }
 
+/* 쪽 글자도 저장 전에 손질한다. 예전에는 조문만 손질해서, 「쪽 그대로 보기」에는
+ * 「법제처 2 국가법령정보센터」와 쪽 번호가 그대로 남아 있었다.
+ * 머리글 패턴은 문서 전체를 봐야 알 수 있으므로 한 번 구해 쪽마다 쓴다. */
+function cleanPages(rows){
+  var hre=runHeadRe(nfc(rows.map(function(r){ return r.content||""; }).join("\n")));
+  rows.forEach(function(r){ r.content=cleanPdfText(r.content||"",hre); });
+  return rows;
+}
+
 /* 한 번에 다 넣으면 요청이 너무 커진다 — 50쪽씩 나눠 보낸다 */
 function saveLawPages(lawId,pages){
+  cleanPages(pages);
   var rows=pages.map(function(p){ return {law_id:lawId,page:p.page,content:p.content,article:p.article||null}; });
   var i=0;
   function chunk(){
@@ -2009,17 +2019,19 @@ function buildLawArticles(pages,docName,docKind){
    * 실제로 342쪽 고시가 조문 240개 → 10개로 무너졌었다. */
   var noTbl=(docKind?docKind==="지침":lawKind(docName).n>=4);
   var buf=[], marks=[], pos=0;
+  /* 손질은 쪽마다 먼저 한다. 이어 붙인 뒤에 손질하면 머리글·쪽 번호를 지운
+   * 만큼 글자 수가 줄어드는데 marks는 옛 위치라, 「몇 쪽인지」가 통째로
+   * 어긋난다(별지 제80호서식이 475쪽에서 469쪽으로 밀렸다).
+   * 머리글 패턴만은 문서 전체를 봐야 알 수 있으므로 한 번 구해 두고 쓴다. */
+  var hre=runHeadRe(nfc(pages.map(function(p){ return p.content||""; }).join("\n")));
   pages.forEach(function(p){
-    var t=(p.content||"").trim();
+    var t=cleanPdfText(p.content||"",hre).trim();
     if(!t) return;
     marks.push({at:pos,page:p.page});
     buf.push(t); pos+=t.length+1;
   });
   if(!marks.length) return [];
-  /* PDF에서 뽑은 글자에 「자모가 분리된」 한글이 섞여 있는 문서가 있다
-   * (의약품안전규칙 673자). 화면엔 똑같이 보이지만 검색으로는 안 걸리고,
-   * AI에게 보낼 때도 토큰이 더 든다. 저장 전에 한 번 맞춘다. */
-  var full=cleanPdfText(buf.join("\n"));
+  var full=buf.join("\n");
   /* 쪽 경계 표시가 없으므로, 잘린 위치가 몇 쪽인지는 marks로 되짚는다 */
   function pageAt(at){
     var lo=0, hi=marks.length-1, ans=marks[0].page;
@@ -2135,7 +2147,7 @@ function buildLawArticles(pages,docName,docKind){
     pages.forEach(function(p){
       var t=(p.content||"").trim();
       if(!t) return;
-      t=cleanPdfText(t);            /* 조문 쪽과 같은 손질을 여기에도 (글머리표 m) */
+      t=cleanPdfText(t,hre);        /* 조문 쪽과 같은 손질을 여기에도 */
       var ti=pageTitle(t);
       out.push({ seq:out.length+1, label:p.page+"쪽"+(ti?" · "+ti:""), num:p.page+"쪽",
                  page:p.page, page_end:p.page, content:t });
@@ -2191,6 +2203,7 @@ function lawReindex(id){
     if(res.error) throw new Error("쪽을 읽지 못했어요: "+res.error.message);
     var rows=res.data||[];
     if(!rows.length) throw new Error("저장된 쪽이 없어요. PDF를 다시 올려주세요.");
+    cleanPages(rows);   /* 먼저 손질하고 저장한다 — 그래야 쪽 보기도 깨끗해진다 */
     /* 쪽마다 "시작 시점에 유효한 조"도 같이 갱신한다 — 쪽 보기에서 쓴다 */
     var carry="";
     rows.forEach(function(r){
@@ -2255,7 +2268,10 @@ var PUA_RE=/[\uE000-\uF8FF]/g;
  * 「법제처 2 국가법령정보센터 첨단재생의료…법률 기기에 해당하는」으로 읽힌다. */
 var LAWHEAD_RE=/법제처\s*\d+\s*국가법령정보센터\s*/g;
 function reEsc(t){ return String(t).replace(/[.*+?^${}()|[\]\\]/g,"\\$&"); }
-function stripRunHead(t){
+function stripRunHead(t){ return t.replace(runHeadRe(t)," "); }
+/* 머리글 패턴은 문서 전체를 봐야 알 수 있다(쪽 하나에는 머리글이 하나뿐이라
+ * 공통 앞부분을 못 구한다). 그래서 패턴을 먼저 구하고, 쪽마다 그것으로 지운다. */
+function runHeadRe(t){
   var ms=[], m; LAWHEAD_RE.lastIndex=0;
   while((m=LAWHEAD_RE.exec(t))!==null) ms.push(m.index+m[0].length);
   if(ms.length>=2){
@@ -2269,18 +2285,26 @@ function stripRunHead(t){
     }
     var nm=tail[0].slice(0,n).replace(/\S*$/,"").trim();   /* 낱말 한복판에서 끊지 않는다 */
     if(nm.length>=4)
-      return t.replace(new RegExp(LAWHEAD_RE.source+reEsc(nm).replace(/\s+/g,"\\s+")+"\\s*","g")," ");
+      return new RegExp(LAWHEAD_RE.source+reEsc(nm).replace(/\s+/g,"\\s+")+"\\s*","g");
   }
-  return t.replace(LAWHEAD_RE," ");
+  return LAWHEAD_RE;
 }
 
 /* 쪽 가운데 아래에 찍히는 쪽 번호(- 15 -). 쪽을 이어 붙이면 문장에 낀다.
  * 문서 6개에 304개. 줄 첫머리에 있는 것만 지워 본문의 뺄셈과 섞이지 않게 한다. */
 var PAGENO_RE=/(^|\n)[ \t]*[-–—][ \t]*\d{1,4}[ \t]*[-–—][ \t]*/g;
 
-function cleanPdfText(t){
-  t=stripRunHead(nfc(t)).replace(PAGENO_RE,"$1").replace(PUA_RE," · ");
-  try{ return t.replace(BULLET_M," · "); }catch(e){ return t; }   /* 구형 사파리는 뒤돌아보기를 못 쓴다 */
+/* 글머리표는 두 가지로 쓰인다. 지침서에서는 「○ 세포·미생물의 저장시설」처럼
+ * 소제목을 열고(문서 10개에 22개), 서식에서는 「총 명 ⬛ 교육 명」처럼 표 칸을
+ * 가른다(83개). 앞이 문장 끝이면 소제목이니 줄을 바꾼다 — 안 바꾸면 지침서가
+ * 2천 자짜리 한 덩어리가 되어 못 읽는다. */
+function bullets(t){
+  return t.replace(/([.?!])\s*·\s*(?=[가-힣])/g,"$1\n· ");
+}
+function cleanPdfText(t,hre){
+  t=nfc(t).replace(hre||runHeadRe(nfc(t))," ").replace(PAGENO_RE,"$1").replace(PUA_RE," · ");
+  try{ t=t.replace(BULLET_M," · "); }catch(e){}   /* 구형 사파리는 뒤돌아보기를 못 쓴다 */
+  return bullets(t);
 }
 
 function nfc(t){
@@ -2873,6 +2897,18 @@ function articleAt(arts,text,at,carried,skips){
  * PDF에서 뽑으면 전부 한 줄로 이어져 읽기가 어렵다. */
 
 var META_RE=/<[^<>]{0,400}>|\[[^\[\]]{0,200}\]/g;   /* <개정 2007. 10. 17., 2008. 2. 29., …> 처럼 긴 목록도 통째로 */
+/* 「조」 「호」 「도」는 목 글자에도 있고 조문 인용의 끝말이기도 하다.
+ * 「제 5 조 · 제 6 조 )」의 「조 )」를 세부 번호로 오인해 줄이 끊겼다.
+ * 앞이 숫자면 인용의 꼬리다 — 목록 번호 앞에 숫자가 오는 일은 없다. */
+function afterNum(t,i){
+  for(var k=i-1;k>=0&&i-k<5;k--){
+    var c=t.charAt(k);
+    if(/\s/.test(c)) continue;
+    return /\d/.test(c);
+  }
+  return false;
+}
+
 /* 목 표시로 실제 쓰이는 글자 (가나다… / 거너더… / 고노도…) */
 var MOK="가나다라마바사아자차카타파하거너더러머버서어저처커터퍼허고노도로모보소오조초코토포호";
 var RUNHEAD_RE=/^(?:법제처\s*\d+\s*국가법령정보센터|■[^\[]{0,60}(?=\[))\s*/;  /* 쪽마다 반복되는 머리글 */
@@ -3013,11 +3049,12 @@ function lawBreaks(text){
       var mm=/^(\d{1,2}|[\uAC00-\uD7A3])\s*\.\s/.exec(text.slice(i,i+6));
       if(mm){
         if(/^\d+$/.test(mm[1])) pts.push({at:i,lv:2,len:0});
-        else if(MOK.indexOf(mm[1])>=0) pts.push({at:i,lv:3,len:0});
+        else if(MOK.indexOf(mm[1])>=0&&!afterNum(text,i)) pts.push({at:i,lv:3,len:0});
       } else {
         /* 목 아래 세부는 "1)" "가)" 꼴을 쓴다 */
         var m2=/^(\d{1,2}|[\uAC00-\uD7A3])\s*\)\s/.exec(text.slice(i,i+6));
-        if(m2&&(/^\d+$/.test(m2[1])||MOK.indexOf(m2[1])>=0)) pts.push({at:i,lv:4,len:0});
+        if(m2&&/^\d+$/.test(m2[1])) pts.push({at:i,lv:4,len:0});
+        else if(m2&&MOK.indexOf(m2[1])>=0&&!afterNum(text,i)) pts.push({at:i,lv:4,len:0});
       }
     }
   }
@@ -3052,7 +3089,32 @@ function lawBreaks(text){
      * "말한 다 ." 처럼 낱말 한복판에서 튀어나온 것만 걸린다. */
     if(expect<0||idx===expect||idx===0||afterEnd(p.at)){ expect=idx+1; keep.push(p); }
   });
-  return keep;
+  return softBreaks(text,keep);
+}
+
+/* 지침서처럼 항·호·목이 없는 글은 한 덩어리가 2천 자를 넘는다. 원문의 문단
+ * 구분은 PDF에서 사라지므로, 긴 덩어리만 문장 경계에서 더 나눈다.
+ * 「덩어리를 잡는」 lawBlockRange 는 이 지점을 무시한다(soft) — 무시하지 않으면
+ * 항 전문을 복사할 때 문장 하나에서 잘린다. */
+var SOFT_MIN=260;
+function softBreaks(text,pts){
+  var add=[];
+  function fill(from,to,lv){
+    if(to-from<SOFT_MIN*2) return;
+    var re=/[.?!]\s+(?=[가-힣「『(\d])/g, m, last=from;
+    re.lastIndex=from;
+    while((m=re.exec(text))!==null&&m.index<to){
+      var at=m.index+m[0].length;
+      if(at-last>=SOFT_MIN&&to-at>=SOFT_MIN/2){ add.push({at:at,lv:lv,len:0,soft:true}); last=at; }
+    }
+  }
+  if(!pts.length) fill(0,text.length,1);
+  else{
+    fill(0,pts[0].at,1);
+    pts.forEach(function(p,i){ fill(p.at+(p.len||0),i+1<pts.length?pts[i+1].at:text.length,p.lv); });
+  }
+  if(!add.length) return pts;
+  return pts.concat(add).sort(function(a,b){ return a.at-b.at||a.lv-b.lv; });
 }
 
 /* ---------- 복사·저장에 담을 「항 전문」 ----------
@@ -3065,7 +3127,7 @@ function lawBlockRange(pts,len,at){
   for(var lv=1;lv<=3;lv++){
     var any=false, st=0, en=len;
     for(var i=0;i<pts.length;i++){
-      if(pts[i].lv>lv) continue;
+      if(pts[i].soft||pts[i].lv>lv) continue;
       any=true;
       if(pts[i].at<=at) st=pts[i].at; else { en=pts[i].at; break; }
     }

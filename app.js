@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v92";
+var APP_VER="v93";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2894,11 +2894,22 @@ function buildLawHits(rows,terms){
     /* 검색어가 가까이 붙어 있으면 앞뒤 80자 창이 서로 겹쳐서
      * 같은 문장이 두세 번 나온다. 겹치는 창은 하나로 합친다.
      * 합친 창 안의 검색어는 어차피 표시할 때 전부 노랗게 칠해진다. */
+    /* 끊을 자리를 먼저 구해 둔다 — 창을 합칠지 정할 때도 쓴다 */
+    var pts=lawBreaks(c);
+    pts.text=c;                      /* 문장 경계 폴백에서 원문을 본다 */
+    /* 목·호 경계를 넘어서까지 합치면 「가목」 배지 하나에 가목과 나목이 함께
+     * 들어가 버린다(「보관」이 양쪽에 있고 두 자리가 가까울 때). 경계를 넘으면
+     * 새 조각으로 나눈다 — 배지가 가리키는 곳과 글이 맞는다. */
+    function crosses(a,b){
+      for(var i=0;i<pts.length;i++)
+        if(!pts[i].soft&&pts[i].lv<=3&&pts[i].at>a&&pts[i].at<=b) return true;
+      return false;
+    }
     var wins=[];
     found.forEach(function(f){
       var st=Math.max(0,f.at-PAD), en=Math.min(c.length,f.at+f.len+PAD);
       var last=wins.length?wins[wins.length-1]:null;
-      if(last&&st<=last.en){ if(en>last.en) last.en=en; }
+      if(last&&st<=last.en&&!crosses(last.at,f.at)){ if(en>last.en) last.en=en; }
       else wins.push({st:st,en:en,at:f.at});
     });
     if(wins.length>MAX_SNIP) wins=wins.slice(0,MAX_SNIP);
@@ -2910,8 +2921,7 @@ function buildLawHits(rows,terms){
             total:total, spots:wins.length, snips:[] };
     /* 복사·저장에 쓸 「항 전문」도 같이 만들어 둔다. 화면은 짧은 발췌가 편하지만
      * 복사한 글은 문장이 잘려 있으면 그대로 쓸 수 없다. */
-    var pts=lawBreaks(c), seen={};
-    pts.text=c;                      /* 문장 경계 폴백에서 원문을 본다 */
+    var seen={};
     wins.forEach(function(w){
       var a=articleAt(arts,c,w.at,r.label,skips);
       var rg=lawBlockRange(pts,c.length,w.at), full=null;

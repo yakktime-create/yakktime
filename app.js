@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v90";
+var APP_VER="v91";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3125,6 +3125,21 @@ function subHeads(text){
     out.push({at:i,title:ti});
     i+=len;
   }
+  /* 「5.2 제조관리」처럼 점이 둘인 것만 위에서 잡힌다. 「7. 공급관리」는 점이
+   * 하나라 못 알아봐서 길이로 잘렸고, 그 바람에 토막이 소제목 한복판에서
+   * 시작했다. 뒤에 목(가.)이나 호(1))가 바로 오는 것만 더 받는다 —
+   * 「1. 문서는 기록일부터 …」 같은 호는 그 조건에 안 걸린다. */
+  SUBH_RE.lastIndex=0;
+  while((m=SUBH_RE.exec(text))!==null){
+    var at2=m.index+(/^\d/.test(m[0])?0:1);      /* 앞 글자 한 칸을 건너뛴다 */
+    if(inSkip(at2)) continue;
+    var t2=m[2].replace(/\s+/g," ").trim();
+    if(t2.length<2||isBadSecTitle(t2)) continue;
+    var near=false;
+    for(var z=0;z<out.length;z++) if(Math.abs(out[z].at-at2)<40){ near=true; break; }
+    if(!near) out.push({at:at2,title:m[1]+". "+t2});
+  }
+  out.sort(function(x,y){ return x.at-y.at; });
   return out;
 }
 

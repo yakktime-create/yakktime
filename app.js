@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v59";
+var APP_VER="v60";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1794,6 +1794,14 @@ function saveLawPages(lawId,pages){
  * 딸려 왔다). 그래서 문서 전체를 한 줄로 이어 붙인 뒤 머리말 위치에서
  * 직접 자른다. 자른 결과가 곧 law_articles 한 줄이다. */
 var LAW_ART_SAVE_MAX=60000;   /* 조 하나가 이보다 길면 잘라 저장한다 */
+/* 별표는 열 쪽이 넘기도 한다. 통짜로 두면 세 가지가 한꺼번에 나빠진다 —
+ *   · 검색 결과가 「별표3 · 12건」 한 카드에 뭉쳐 어디를 볼지 모른다
+ *   · 「냉장 보관」처럼 낱말 둘을 찾을 때 서로 딴 쪽에 있어도 통과한다
+ *   · AI에게 먹일 때 앞부분만 잘려 들어간다
+ * 안에 번호 매김 소제목(2.1 제조부서 책임자)이 있으면 그 단위로 더 쪼갠다. */
+var SUB_MIN=1500;        /* 별표가 이만큼 길 때만 쪼갠다 */
+var SUB_HEAD_MIN=150;    /* 첫 소제목 앞에 이만큼 있으면 「머리말」로 따로 둔다 */
+var SUB_PART_MIN=80;     /* 이보다 짧은 토막은 앞 토막에 붙인다 */
 var SOON_RE=/\[\s*시행일\s*:\s*([^\]]{1,24})\]/;
 
 function buildLawArticles(pages){
@@ -1816,18 +1824,46 @@ function buildLawArticles(pages){
     return ans;
   }
   var heads=findArticles(full,20000), out=[];
+  function addRow(lab,num,text,a,b){
+    if(text.length<10) return;
+    if(text.length>LAW_ART_SAVE_MAX) text=text.slice(0,LAW_ART_SAVE_MAX);
+    out.push({ seq:out.length+1, label:lab, num:num,
+               page:pageAt(a), page_end:pageAt(b-1), content:text });
+  }
   for(var i=0;i<heads.length;i++){
     var a=heads[i].at, b=(i+1<heads.length)?heads[i+1].at:full.length;
-    var text=full.slice(a,b).replace(/\s+/g," ").trim();
+    var raw=full.slice(a,b);
+    var text=raw.replace(/\s+/g," ").trim();
     if(text.length<10) continue;
-    if(text.length>LAW_ART_SAVE_MAX) text=text.slice(0,LAW_ART_SAVE_MAX);
     /* 법제처 PDF는 「곧 시행될 개정 조문」을 현행 조문 바로 뒤에 한 번 더 싣고
      * 끝에 [시행일: 2026. 10. 8.] 을 붙인다. 같은 라벨이 두 번 나오는 진짜 이유다.
      * 지우면 안 되는 정보이므로, 라벨에 시행일을 붙여 구분되게 한다. */
     var lab=heads[i].label, sh=SOON_RE.exec(text);
     if(sh) lab+=" · 시행 "+sh[1].replace(/\s+/g," ").trim();
-    out.push({ seq:out.length+1, label:lab, num:artShort(heads[i].label),
-               page:pageAt(a), page_end:pageAt(b-1), content:text });
+    var num=artShort(heads[i].label);
+
+    /* 긴 별표는 소제목 단위로 더 쪼갠다 (SUB_MIN 설명 참고) */
+    var subs=(/^별표/.test(heads[i].label)&&raw.length>=SUB_MIN)?subHeads(raw):[];
+    if(subs.length>=2){
+      if(subs[0].at>=SUB_HEAD_MIN) subs.unshift({at:0,title:"머리말"});
+      var parts=[];
+      for(var k=0;k<subs.length;k++){
+        var sa=subs[k].at, sb=(k+1<subs.length)?subs[k+1].at:raw.length;
+        var st=raw.slice(sa,sb).replace(/\s+/g," ").trim();
+        /* 너무 짧은 토막은 앞에 붙인다 — 버리면 그 글이 통째로 사라진다 */
+        if(parts.length&&st.length<SUB_PART_MIN){
+          var pv=parts[parts.length-1];
+          pv.text+=" "+st; pv.b=a+sb; continue;
+        }
+        parts.push({title:subs[k].title,text:st,a:a+sa,b:a+sb});
+      }
+      if(parts.length>=2){
+        for(var q=0;q<parts.length;q++)
+          addRow(lab+" · "+parts[q].title,num,parts[q].text,parts[q].a,parts[q].b);
+        continue;
+      }
+    }
+    addRow(lab,num,text,a,b);
   }
   /* 같은 라벨이 두 번 이상 잡히면 — 앞쪽 목차 줄이나 인용이 섞인 것이다.
    * 가장 긴 것(=진짜 본문)만 남기고, 짧은 쪽을 버린다.
@@ -2433,23 +2469,52 @@ var MOK="가나다라마바사아자차카타파하거너더러머버서어저�
 var RUNHEAD_RE=/^(?:법제처\s*\d+\s*국가법령정보센터|■[^\[]{0,60}(?=\[))\s*/;  /* 쪽마다 반복되는 머리글 */
 
 /* 별표 안의 절 제목 — "5.2 제조관리", "4.3 제품관리기준서" 꼴.
- * 제목 길이는 14자에서 끊는다. 뒤에 이어지는 본문까지 굵어지지 않게. */
+ * 길이는 한글 12자에서 끊는다. 뒤에 이어지는 본문까지 굵어지지 않게.
+ * 괄호·중점은 세지 않는다 — PDF에서 뽑으면 "품질 ( 보증 ) 부서" 처럼
+ * 괄호마다 빈칸이 끼어서, 글자 수로 세면 정작 제목의 끝말이 잘려 나간다
+ * ("2.2 품질(보증) 부서 책임자" 에서 "책임자" 가 본문으로 밀려났었다). */
 var SEC_RE=/^(\d{1,2}(?:\.\d{1,2}){1,2})\s+(?=[가-힣])/;
 function secHeadLen(text,at){
   var m=SEC_RE.exec(text.slice(at,at+14));
   if(!m) return 0;
   var pos=at+m[0].length, len=m[0].length, title=0;
-  while(pos<text.length&&title<14){
+  while(pos<text.length&&title<12){
     var sp=text.indexOf(" ",pos);
     var tok=(sp<0?text.slice(pos):text.slice(pos,sp));
     if(!tok||!/^[가-힣()ㆍ·]/.test(tok)) break;   /* "품질 ( 보증 ) 부서" 처럼 괄호가 낀 제목 */
     /* 다음이 목·호 표시면 제목 끝 */
     if(tok.length===1&&MOK.indexOf(tok)>=0) break;
-    if(title+tok.length>14) break;
-    title+=tok.length+1; len+=tok.length+(sp<0?0:1);
+    var han=(tok.match(/[가-힣]/g)||[]).length;   /* 괄호·중점은 안 센다 */
+    if(title+han>12) break;
+    title+=han; len+=tok.length+(sp<0?0:1);
     pos=(sp<0?text.length:sp+1);
   }
   return len;
+}
+
+/* 별표 안의 소제목 자리만 뽑는다 (쪼개기용). 화면 표시용 lawBreaks 와
+ * 같은 판별(secHeadLen)을 쓰므로 굵게 보이는 줄과 쪼개지는 줄이 늘 일치한다. */
+function subHeads(text){
+  var skip=[], m; META_RE.lastIndex=0;
+  while((m=META_RE.exec(text))!==null) skip.push([m.index,m.index+m[0].length]);
+  function inSkip(i){ for(var k=0;k<skip.length;k++){ if(i>=skip[k][0]&&i<skip[k][1]) return true; } return false; }
+  var out=[];
+  for(var i=0;i<text.length;i++){
+    if(!/\d/.test(text.charAt(i))) continue;
+    if(i>0&&!/\s/.test(text.charAt(i-1))) continue;
+    if(inSkip(i)) continue;
+    /* "별표 1 제 7.1 호다목" 처럼 조문 참조 안의 숫자는 제목이 아니다 */
+    if(text.slice(Math.max(0,i-3),i).replace(/\s+/g,"").slice(-1)==="제") continue;
+    var len=secHeadLen(text,i);
+    if(!len) continue;
+    /* PDF에서 뽑으면 "품질 ( 보증 ) 부서" 처럼 괄호마다 빈칸이 낀다. 라벨에 쓸
+     * 것이므로 여기서 붙여 준다 → "품질(보증) 부서" */
+    var ti=text.slice(i,i+len).replace(/\s+/g," ")
+      .replace(/\s*\(\s*/g,"(").replace(/\s*\)/g,")").trim();
+    out.push({at:i,title:ti});
+    i+=len;
+  }
+  return out;
 }
 
 /* 끊을 자리 찾기 — 날짜(<개정 2022. 12. 29.>)를 호로 오인하지 않도록

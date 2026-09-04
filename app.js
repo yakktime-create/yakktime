@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v56";
+var APP_VER="v57";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1990,6 +1990,8 @@ function isNoArtCol(err){
  * 값이 싼 쪽(Haiku)만 쓰므로 엉뚱한 질문을 해도 재시도가 싸다.
  * API 키는 Supabase Edge Function(law-pick) 비밀값에만 있다 — 여기엔 없다. */
 var lawAsk=null, lawAsking=false, lawAskMore=false;
+/* 지난번에 실제로 든 값(원). 어림값을 적어 두는 것보다 이게 정직하다. */
+var lawAskLast=null;
 /* 어느 법령에서만 고를지. 비어 있으면 전부 본다 —
  * 「아무것도 안 고르면 아무 데서도 안 찾는다」는 헷갈리므로 그 반대로 둔다. */
 var lawOnly={};
@@ -2015,7 +2017,8 @@ function lawAskRun(){
     if(!d){ showToast("물어보지 못했어요: "+((r&&r.error&&r.error.message)||"응답이 비었어요"),true); done(); return; }
     if(d.error){ showToast(d.error,true); done(); return; }
     d.q=q; lawAsk=d; lawAskSel={}; lawAskMore=false;
-    (d.picks||[]).forEach(function(p){ if(p.score>=ASK_KEEP) lawAskSel[p.id]=true; });
+    if(d.krw!=null) lawAskLast=d.krw;
+    (d.picks||[]).forEach(function(p){ if(askRank(p.grade)<=ASK_KEEP) lawAskSel[p.id]=true; });
     done();
   }).catch(function(e){ showToast("물어보지 못했어요: "+e.message,true); done(); });
 }
@@ -2076,18 +2079,16 @@ function lawAskHtml(){
       + (d.note?'<p class="ask-note">'+esc(d.note)+'</p>':'')+'</div>';
   /* 점수가 낮은 것은 접어 둔다. 결과가 길어지면 위쪽 확실한 것부터 보이지 않는다 —
    * 화면을 넘기지 않고도 볼 것부터 보이게 하는 게 이 접기의 목적이다. */
-  var sure=d.picks.filter(function(p){ return p.score>=ASK_KEEP; });
-  var maybe=d.picks.filter(function(p){ return p.score<ASK_KEEP; });
+  var sure=d.picks.filter(function(p){ return askRank(p.grade)<=ASK_KEEP; });
+  var maybe=d.picks.filter(function(p){ return askRank(p.grade)>ASK_KEEP; });
   var shown=lawAskMore?d.picks:sure;
   function askItem(p){
     var on=!!lawAskSel[p.id];
-    /* 점수는 AI가 스스로 매긴 값이라 잰 값이 아니다. 그래도 숫자로 보여야
-     * 순서가 읽히고, 어디서 끊을지도 눈으로 정할 수 있다. */
-    var band=p.score>=80?"1":p.score>=ASK_KEEP?"2":"3";
+    var band=askRank(p.grade)+1;   /* 1 매우 높음 … 5 매우 낮음 */
     return '<li class="ask-item'+(on?" on":"")+' r-'+band+'">'
       + '<label class="ask-check"><input type="checkbox" data-act="ask-pick" data-id="'+esc(p.id)+'"'+(on?" checked":"")+' /></label>'
       + '<div class="ask-item-body">'
-      +   '<div class="ask-art"><span class="ask-score">'+p.score+'</span><b>'+esc(p.label)+'</b>'
+      +   '<div class="ask-art"><span class="ask-score">'+esc(p.grade||"중간")+'</span><b>'+esc(p.label)+'</b>'
       +     '<span class="ask-law">'+esc(p.law)+'</span>'
       +     '<button class="link-btn law-go-art" data-act="law-art" data-art-id="'+esc(p.id)+'" data-id="'+esc(p.lawId)+'">전체 보기</button></div>'
       +   '<div class="ask-why">'+esc(p.why)+'</div>'
@@ -2103,12 +2104,12 @@ function lawAskHtml(){
   var items=shown.map(askItem).join("")
     + (maybe.length&&!lawAskMore
         ? '<li class="ask-more"><button class="link-btn" data-act="ask-more">'
-          + '관련도 '+ASK_KEEP+' 미만 '+maybe.length+'개 더 보기</button></li>' : '');
+          + '관련도 낮은 '+maybe.length+'개 더 보기</button></li>' : '');
   var nSel=Object.keys(lawAskSel).filter(function(k){ return lawAskSel[k]; }).length;
   var nSure=sure.length;
   /* 낱말 검색 결과와 같은 부품·같은 자리 — 한쪽만 다르게 생기면 매번 다시 배워야 한다 */
   var acts='<div class="law-head"><div class="law-count">'+d.picks.length+'곳'
-    + (maybe.length?' <span class="law-and">관련도 '+ASK_KEEP+' 이상 '+nSure+'곳</span>':'')
+    + (maybe.length?' <span class="law-and">「중간」 이상 '+nSure+'곳</span>':'')
     + (nSel?' · <span class="law-picked">'+nSel+'곳 선택</span>':'')+'</div>'
     + '<div class="law-actions">'
     +   '<button class="link-btn" data-act="ask-all">모두 선택</button>'
@@ -2121,12 +2122,18 @@ function lawAskHtml(){
     + (d.truncated?'<p class="ask-warn">올려둔 조문이 너무 많아 <b>앞쪽 '+d.arts+'개만</b> 봤어요. 위에서 법령을 골라 범위를 좁혀주세요.</p>':'')
     + acts+'<ol class="ask-list">'+items+'</ol>'
     /* 도구지 답변자가 아니다. 이 줄을 지우면 안 된다. */
-    + '<p class="ask-foot">AI는 <b>제목만 보고</b> 어디를 볼지 골랐어요. 조문을 열어 직접 확인하세요.<br />'
+    + '<p class="ask-foot">'
+    +   '조 제목으로 후보를 추린 뒤 <b>조문을 실제로 읽고</b> 골랐어요. 그래도 마지막 확인은 직접 하세요.'
+    +   (d.looked?' <span class="ask-dim">이번에 본문까지 읽어본 조문 '+d.looked+'개</span>':'')+'<br />'
     +   '골라서 「복사」하면 <b>조문 원문</b>이 통째로 따라옵니다.</p></div>';
 }
 
-/* 이 점수부터를 「볼 만한 것」으로 친다. 처음부터 체크되고, 접히지 않는다. */
-var ASK_KEEP=60;
+/* 관련도 등급. 서버가 세 가지 판단을 더해 매기고, 여기서는 순서와 색만 쓴다.
+ * 숫자(0~100)를 그대로 보여주지 않는 이유 — 잰 값이 아닌데 잰 것처럼 보인다. */
+var ASK_GRADES=["매우 높음","높음","중간","낮음","매우 낮음"];
+function askRank(g){ var i=ASK_GRADES.indexOf(g); return i<0?2:i; }
+/* 「중간」까지가 펼쳐지고 처음부터 체크된다. 그 아래는 접어 둔다. */
+var ASK_KEEP=2;
 
 /* 문장처럼 보이면 ✦ 를 내보낸다. 낱말 한둘일 땐 쓸 일이 없다. */
 function lawAskFits(t){ return String(t||"").trim().length>=12; }
@@ -2780,16 +2787,25 @@ function lawHelpHtml(){
     + '<div class="law-help-head"><b>법령 검색 사용법</b>'
     +   '<button class="law-help-x" data-act="law-help" title="접기">접기 ✕</button></div>'
 
-    + '<div class="law-help-sec"><div class="law-help-t">◆ 관련도 점수는 이렇게 나와요</div>'
-    +   '<p>AI는 점수를 매기지 않아요. <b>세 가지만 고르고</b>, 점수는 그걸 더해서 나옵니다.</p>'
+    + '<div class="law-help-sec"><div class="law-help-t">◆ 관련도는 이렇게 나와요</div>'
+    +   '<p>AI는 등급을 직접 매기지 않아요. <b>세 가지만 고르고</b>, 등급은 그걸 합쳐서 나옵니다.</p>'
     +   '<ul>'
-    +     '<li><b>답이 여기 있나</b> — 답 <u>45</u> · 조건 <u>30</u> · 배경 <u>12</u></li>'
-    +     '<li><b>답변서에 인용해야 하나</b> — 필수 <u>30</u> · 도움 <u>18</u> · 없어도 <u>6</u></li>'
-    +     '<li><b>제목만 보고 확신하나</b> — 분명 <u>25</u> · 짐작 <u>15</u> · 막연 <u>5</u></li>'
+    +     '<li><b>답이 이 조에 있나</b><br />답이 여기 &gt; 조건을 정함 &gt; 곁가지<br />'
+    +       '<span class="law-help-dim">곁가지 = 정의·절차·벌칙처럼 답의 둘레에 있는 규정</span></li>'
+    +     '<li><b>답변서에 인용해야 하나</b><br />인용 필수 &gt; 있으면 좋음 &gt; 없어도 됨</li>'
+    +     '<li><b>얼마나 확신하나</b><br />본문에서 확인 &gt; 그럴듯함 &gt; 본문엔 안 보임<br />'
+    +       '<span class="law-help-dim">「본문에서 확인」은 조문 안에서 근거 대목을 짚을 수 있을 때만 붙어요</span></li>'
     +   '</ul>'
-    +   '<p>셋 다 최고면 <b>100</b>, 셋 다 최저면 <b>23</b>. 고른 세 낱말이 조문마다 같이 적혀 있어요.<br />'
-    +     '<b>60 미만은 접어 둡니다.</b> AI는 조 <b>제목만</b> 보고 고르므로, 이 숫자는 정확도가 아니라 '
+    +   '<p>셋 다 최고면 <b>매우 높음</b>, 셋 다 최저면 <b>매우 낮음</b>. '
+    +     '고른 세 낱말이 조문마다 같이 적혀 있으니 왜 그 등급인지 바로 보여요.<br />'
+    +     '<b>「낮음」부터는 접어 둡니다.</b> 등급은 정확도가 아니라 '
     +     '<b>어느 것부터 펴 볼지의 순서</b>로 보세요.</p>'
+    +   '<p class="law-help-dim">찾는 순서 — ① 조 <b>제목</b>만 훑어 후보 20개를 추리고 '
+    +     '② 그 20개의 <b>조문을 통째로 읽어</b> 최종 10개로 추립니다. '
+    +     '한 번에 하려면 조 목록 전체에 본문을 붙여야 해서 값이 몇 배로 뜁니다.<br />'
+    +     '아주 긴 조(정의 조항·별표가 붙은 것)는 앞 4천 자까지만 읽고 「뒤가 잘림」으로 알립니다.<br />'
+    +     '<b>값이 아까우면 위에서 법령 범위를 좁히세요.</b> 값의 대부분은 ①에서 조 목록을 '
+    +     '통째로 보내는 데 듭니다.</p>'
     + '</div>'
     + '<div class="law-help-sec"><div class="law-help-t">① 찾는 법</div>'
     +   '<ul>'
@@ -2970,7 +2986,7 @@ function renderLaws(){
     +   '<span class="ask-bar-t">'+(lawAsking?"관련 조문을 고르는 중..."
           :(lawOnlyLabel()?"<b>"+esc(lawOnlyLabel())+"</b>에서 관련 조문 찾아줘"
                           :"위에 적은 말로 <b>관련 조문 찾아줘</b>"))+'</span>'
-    +   '<span class="ask-bar-n">한 번에 약 5원</span>'
+    +   '<span class="ask-bar-n">'+(lawAskLast!=null?"지난번 "+lawAskLast+"원":"한 번에 50~150원")+'</span>'
     + '</button>'
     + lawHelpHtml()
     + '<button class="upload-bar'+(lawBusy?" busy":"")+'" data-act="law-upload"'+(lawBusy?" disabled":"")+'>'

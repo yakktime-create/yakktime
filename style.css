@@ -973,18 +973,19 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .ask-law{font-size:var(--fs-xs);color:var(--muted);background:var(--paper);
   border-radius:var(--r-full);padding:2px 8px;}
 .ask-why{margin-top:3px;font-size:var(--fs-md);color:var(--muted);line-height:var(--lh-snug);}
-/* 관련도 — 숫자로 적되 색으로 한 번 더 갈라 준다. 숫자만 있으면 훑을 때 안 읽힌다.
-   90↑ 진하게 · 60↑ 옅게 · 그 아래 회색. 폭을 고정해 숫자가 세로로 줄을 맞춘다. */
-.ask-score{flex:none;width:34px;text-align:center;font-size:var(--fs-xs);font-weight:800;
-  font-variant-numeric:tabular-nums;border-radius:var(--r-full);padding:2px 0;
+/* 관련도 등급 — 말로 적고 색으로 한 번 더 갈라 준다.
+   폭을 고정해 조 제목이 세로로 줄을 맞춘다 (등급마다 글자 수가 다르다). */
+.ask-score{flex:none;width:62px;text-align:center;font-size:var(--fs-2xs);font-weight:800;
+  border-radius:var(--r-full);padding:3px 0;white-space:nowrap;
   background:var(--paper);color:var(--muted);}
 .ask-item.r-1 .ask-score{background:var(--accent);color:#fff;}
 .ask-item.r-2 .ask-score{background:var(--accent-soft);color:var(--accent);}
+.ask-item.r-1{border-left-color:var(--accent);}
+.ask-item.r-2{border-left-color:var(--accent-soft);}
 /* 점수의 근거 — 「답 · 필수 · 분명」. 숫자 옆에 두면 줄이 복잡해져 아래에 작게 깐다. */
 .ask-parts{display:flex;gap:var(--sp-1);margin-top:4px;flex-wrap:wrap;}
 .ask-parts span{font-size:var(--fs-2xs);font-weight:700;color:var(--muted);
   background:var(--paper);border-radius:var(--r-xs);padding:1px 7px;}
-.ask-item.r-1{border-left-color:var(--accent);}
 /* 조문 본문 앞부분 — 창을 열지 않고도 맞는지 가늠하라고 붙인다 */
 .ask-head-txt{margin-top:6px;padding:8px 11px;background:var(--paper);
   border-radius:var(--r-sm);font-size:var(--fs-sm);color:var(--muted);
@@ -1051,3 +1052,5 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
   .entry.boxed:hover{opacity:1;}
   .ev-place:hover{background:var(--paper);}
 }
+.law-help-dim{color:var(--muted);font-size:var(--fs-sm);}
+.ask-dim{color:var(--muted);opacity:.8;}

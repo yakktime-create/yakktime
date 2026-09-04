@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v66";
+var APP_VER="v67";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1734,6 +1734,29 @@ function lawDate(d){
   if(!d||d.length<8) return "";
   return d.slice(0,4)+"."+(+d.slice(4,6))+"."+(+d.slice(6,8));
 }
+/* 이름 손질 — NFD(자모 분리)를 붙이고, 괄호 묶음을 떼어 짧게 한다.
+ *   약사법(법률)(제21109호)(20260621) → 약사법
+ * 직접 고쳐 둔 이름은 건드리지 않는다. 「원본 파일 이름에서 확장자만 뗀 것」과
+ * 같을 때 = 아직 손대지 않았을 때만 다듬는다.
+ * 무거운 「조문 전부 다시 만들기」에 묶어 두면 이름 하나 고치려고 1,387쪽을
+ * 다시 읽어야 한다. 목록을 열 때 저절로 하고, 한 판에 한 번만 돈다. */
+var lawTidied=false;
+function lawTidyNames(){
+  if(lawTidied) return; lawTidied=true;
+  var n=0;
+  S.laws.forEach(function(l){
+    if(!l.name||!l.fileName) return;
+    var raw=nfc(l.fileName).replace(/\.pdf$/i,"");
+    if(nfc(l.name)!==raw) return;              /* 직접 고친 이름 — 그대로 둔다 */
+    var tidy=lawParse(l.fileName).base;
+    if(!tidy||tidy===l.name) return;
+    l.name=tidy; dbUpdate("laws",l.id,{name:tidy}); n++;
+  });
+  /* 여기서 곧장 render() 를 부르면 그리는 도중에 다시 그리게 된다.
+   * 한 박자 뒤로 미룬다. */
+  if(n){ showToast("법령 이름 "+n+"개를 짧게 정리했어요"); setTimeout(render,0); }
+}
+
 /* 판을 가르는 정보(공포번호·시행일)는 <b>원본 파일 이름</b>에서 읽는다.
  * 화면에 보이는 이름은 짧게 다듬을 것이라 거기엔 숫자가 남지 않는다. */
 function lawSrc(l){ return (l&&(l.fileName||l.name))||""; }
@@ -1815,7 +1838,7 @@ function lawUpload(f){
       if(!row) throw new Error("법령 정보를 저장하지 못했어요.");
       S.laws.unshift(item);
       return saveLawPages(row.id,pages).then(function(){
-        return saveLawArticles(row.id,buildLawArticles(pages,item.name),item).then(function(){
+        return saveLawArticles(row.id,buildLawArticles(pages,f.name),item).then(function(){
           /* 새것이 온전히 올라간 다음에 지운다 — 먼저 지우면 실패했을 때 둘 다 없다 */
           drop.forEach(function(l){ del("laws",l.id,true); });
           if(drop.length) showToast("✓ 옛 판 "+drop.length+"개를 지웠어요");
@@ -1911,6 +1934,9 @@ function buildLawArticles(pages,docName){
   /* 지침서·안내서는 남의 별표를 본문에서 인용할 뿐, 자기 별표를 갖지 않는다.
    * 그걸 머리말로 잡으면 「별표 1(통칙에 따르면 세포은행은 …)」처럼 본문이
    * 제목으로 올라온다. 아예 안 잡고 쪽 단위로 간다. */
+  /* 반드시 원본 파일 이름으로 판별한다. 화면 이름은 「(식품의약품안전처고시)」를
+   * 떼어 다듬으므로, 그걸로 재면 고시가 지침서로 보여 별표를 통째로 버린다.
+   * 실제로 342쪽 고시가 조문 240개 → 10개로 무너졌었다. */
   var noTbl=(lawKind(docName).n>=4);
   var buf=[], marks=[], pos=0;
   pages.forEach(function(p){
@@ -2089,7 +2115,7 @@ function lawReindex(id){
       var a=findArticles(r.content||"");
       if(a.length) carry=a[a.length-1].label;
     });
-    var arts=buildLawArticles(rows,l&&l.name);
+    var arts=buildLawArticles(rows,lawSrc(l));
     if(!arts.length) throw new Error("조문을 하나도 찾지 못했어요.");
     showToast("조문 "+arts.length+"개를 찾았어요");
     var i=0;
@@ -2140,10 +2166,13 @@ function lawKind(name){
   for(var i=0;i<LAW_KINDS.length;i++) if(LAW_KINDS[i].re.test(s)) return LAW_KINDS[i];
   return {n:5,t:"그 밖"};
 }
-/* 위계 → 이름 순. 같은 종류끼리 모이고, 상위법이 위로 온다. */
+/* 위계 → 이름 순. 같은 종류끼리 모이고, 상위법이 위로 온다.
+ * 반드시 <b>원본 파일 이름</b>으로 가른다 — 화면 이름은 「(식품의약품안전처고시)」
+ * 같은 괄호 묶음을 떼어 짧게 다듬으므로, 그걸로 재면 고시가 「그 밖」이 된다.
+ * 실제로 이름을 다듬은 뒤 고시 두 개가 목록 맨 아래로 밀려났었다. */
 function lawSorted(){
   return S.laws.slice().sort(function(a,b){
-    var ka=lawKind(a.name).n, kb=lawKind(b.name).n;
+    var ka=lawKind(lawSrc(a)).n, kb=lawKind(lawSrc(b)).n;
     return ka-kb || String(a.name).localeCompare(String(b.name),"ko");
   });
 }
@@ -2163,15 +2192,6 @@ function lawBuildAll(all){
   function next(){
     if(k>=todo.length){ fin(); return; }
     var l=todo[k++];
-    /* 이 참에 이름도 손본다 — NFD(자모 분리)를 붙이고, 괄호 묶음을 떼어 짧게.
-     * 다만 직접 고쳐 둔 이름은 건드리지 않는다. 원본 파일 이름에서 확장자만
-     * 뗀 것과 같을 때만 = 아직 손대지 않았을 때만 다듬는다. */
-    var raw=nfc(lawSrc(l)).replace(/\.pdf$/i,""), tidy=lawParse(lawSrc(l)).base;
-    var untouched=(nfc(l.name)===raw||nfc(l.name)===nfc(l.name&&l.name));
-    if(l.name&&(nfc(l.name)!==l.name||nfc(l.name)===raw)){
-      var nn=(nfc(l.name)===raw&&tidy)?tidy:nfc(l.name);
-      if(nn!==l.name){ l.name=nn; dbUpdate("laws",l.id,{name:nn}); }
-    }
     showToast("("+k+"/"+todo.length+") "+l.name);
     lawReindexOne(l).then(function(){ ok++; next(); },function(err){
       showToast(l.name+" — "+((err&&err.message)||"실패"),true);
@@ -2187,7 +2207,7 @@ function lawReindexOne(l){
     if(res.error) throw new Error(res.error.message);
     var rows=res.data||[];
     if(!rows.length) throw new Error("쪽 없음");
-    var arts=buildLawArticles(rows,l&&l.name);
+    var arts=buildLawArticles(rows,lawSrc(l));
     if(!arts.length) throw new Error("조문 없음");
     return saveLawArticles(l.id,arts,l);
   });
@@ -3324,12 +3344,13 @@ function renderLaws(){
           : '')
       + '</div>';
     if(lawListOpen){
+      lawTidyNames();
       /* 종류별로 묶고 위계 순으로 세운다 — 열 몇 개가 되면 이름만 죽 늘어놔서는
        * 어느 게 법이고 어느 게 지침인지 알 수 없다. 칸 높이를 잡아 그 안에서
        * 굴리게 하고, 아래 내용이 저 멀리 밀려나지 않게 한다. */
       var cur=null;
       list+='<div class="law-list grouped">'+lawSorted().map(function(l){
-      var onlyOn=!!lawOnly[l.id], kd=lawKind(l.name), head="";
+      var onlyOn=!!lawOnly[l.id], kd=lawKind(lawSrc(l)), head="";
       if(kd.t!==cur){ cur=kd.t;
         head='<div class="law-kind g'+kd.n+'"><span>'+esc(kd.t)+'</span></div>'; }
       return head+'<div class="law-row'+(onlyOn?" only":"")+'">'

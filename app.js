@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v94";
+var APP_VER="v95";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3449,8 +3449,11 @@ function lawBreaks(text){
     /* 호(1. 2.) · 목(가. 나.) — 앞이 공백이고 뒤가 공백인 것만.
      * PDF에서 뽑으면 "사 ." 처럼 점 앞에 공백이 끼기도 해서 허용한다.
      * 목 글자는 실제 쓰이는 것만 열거한다 — [가-하] 범위로 잡으면
-     * 한글 거의 전부가 들어가서 "…한다 ." 같은 문장 끝까지 걸린다. */
-    if(i>0&&/\s/.test(text.charAt(i-1))){
+     * 한글 거의 전부가 들어가서 "…한다 ." 같은 문장 끝까지 걸린다.
+     * **글 맨 앞(i===0)도 받는다** — 쪽을 하나만 보여줄 때 그 쪽이 「다.」로
+     * 시작하면 앞 글자가 없어 안 잡혔고, 그래서 「다.」만 맨 왼쪽에 남고
+     * 「라.」부터 들여쓰기되어 층이 들쭉날쭉해 보였다. */
+    if(i===0||/\s/.test(text.charAt(i-1))){
       var mm=/^(\d{1,2}|[\uAC00-\uD7A3])\s*\.\s/.exec(text.slice(i,i+6));
       if(mm){
         if(/^\d+$/.test(mm[1])) pts.push({at:i,lv:2,len:0});

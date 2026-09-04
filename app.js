@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v85";
+var APP_VER="v86";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2809,9 +2809,13 @@ function openLawView(id,page){
       rows.forEach(function(r){
         if(r.page===page) here=r; else if(r.page===page-1) before=r; else if(r.page===page+1) after=r;
       });
-      lawView.content=here?(here.content||""):"";
+      /* 저장된 글자가 옛 손질본일 수 있다. 손질은 두 번 해도 결과가 같으므로
+       * 화면에 그리기 전에 한 번 더 건다 — 「다시 만들기」를 안 눌렀어도 깨끗하다.
+       * (머리글의 법령 이름은 문서 전체를 봐야 알 수 있어 여기선 못 지운다) */
+      lawView.content=here?cleanPdfText(here.content||""):"";
       lawView.article=here?(here.article||""):"";
-      var e=edgeBits(before&&before.content,lawView.content,after&&after.content);
+      var e=edgeBits(before&&cleanPdfText(before.content||""),lawView.content,
+                     after&&cleanPdfText(after.content||""));
       lawView.pre=e.pre; lawView.post=e.post;
     }
     renderLawModal();
@@ -3329,7 +3333,7 @@ function openLawArticle(artId,lawId){
     var d=(res.data||[])[0];
     if(!d) throw new Error("조문을 찾지 못했어요. 「조문 다시 만들기」를 눌러보세요.");
     lawView.loading=false; lawView.lawId=d.law_id; lawView.art=d.label;
-    lawView.text=d.content||""; lawView.page=d.page; lawView.pageEnd=d.page_end||d.page;
+    lawView.text=cleanPdfText(d.content||""); lawView.page=d.page; lawView.pageEnd=d.page_end||d.page;
     renderLawModal(); lawJump(0);
   }).catch(function(err){
     if(lawViewSeq!==seq) return;
@@ -3436,7 +3440,10 @@ function renderLawModal(){
   if(art){
     var span=(lawView.page===lawView.pageEnd)?(lawView.page+"쪽")
             :(lawView.page+"~"+lawView.pageEnd+"쪽");
-    artBar='<div class="lv-arts">'+esc(lawView.art||"")+(lawView.page?'  ·  '+span:"")+'</div>';
+    /* 지침서는 조가 없어 라벨이 「34쪽」이다. 그 옆에 또 「34쪽」을 붙이면 같은 말이
+     * 두 번이다 — 검색 결과 카드와 같은 규칙을 여기에도 건다. */
+    var dup=String(lawView.art||"").indexOf(span)===0;
+    artBar='<div class="lv-arts">'+esc(lawView.art||"")+((lawView.page&&!dup)?'  ·  '+span:"")+'</div>';
 
     foot='<div class="lv-foot">'
       + '<button class="btn quiet sm" data-act="lv-hit-prev" title="이전 검색어">‹</button>'

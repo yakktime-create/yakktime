@@ -14,8 +14,10 @@
 //  비밀값(Secrets)에 ANTHROPIC_API_KEY 를 넣어야 동작한다.
 // =====================================================================
 
-import Anthropic from "npm:@anthropic-ai/sdk";
-import { createClient } from "npm:@supabase/supabase-js@2";
+// 버전을 고정한다. 안 박아 두면 어느 날 새 판이 올라오면서 조용히 깨진다.
+// (2026-09-04 기준 최신)
+import Anthropic from "npm:@anthropic-ai/sdk@0.123.0";
+import { createClient } from "npm:@supabase/supabase-js@2.115.0";
 
 const MODEL      = "claude-haiku-4-5-20251001";
 const MAX_ARTS   = 3000;   // 조 목록 상한 — 토큰이 무한정 늘지 않게

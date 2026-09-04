@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v99";
+var APP_VER="v100";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2988,8 +2988,15 @@ function buildLawHits(rows,terms){
       if(idx>0&&pts[idx].lv===1&&pts[idx-1].lv===0&&!pts[idx-1].soft) st=pts[idx-1].at;
       return st;
     }
+    /* 조 제목 안의 낱말로는 발췌를 만들지 않는다 — 「제3조(약사 자격과 면허)」가
+     * 배지에도, 첫 조각에도 나와 같은 말이 두 번이었다. */
+    function inTitle(at){
+      for(var i=0;i<arts.length;i++) if(at>=arts[i].at&&at<arts[i].end) return true;
+      return false;
+    }
     var wins=[];
     found.forEach(function(f){
+      if(inTitle(f.at)) return;
       var bs=blockStart(f.at);
       var st=Math.max(bs,f.at-HEAD_MAX), en=Math.min(c.length,f.at+f.len+PAD);
       var last=wins.length?wins[wins.length-1]:null;
@@ -3001,6 +3008,11 @@ function buildLawHits(rows,terms){
       }
       wins.push({st:st,en:en,at:f.at,bs:bs});
     });
+    /* 검색어가 조 제목에만 있으면 조각이 하나도 안 남는다 — 그때는 하나 남긴다 */
+    if(!wins.length&&found.length){
+      var f0=found[0];
+      wins.push({st:Math.max(0,f0.at-PAD),en:Math.min(c.length,f0.at+f0.len+PAD),at:f0.at,bs:0});
+    }
     if(wins.length>MAX_SNIP) wins=wins.slice(0,MAX_SNIP);
 
     var g={ key:"a"+r.id, artId:r.id, lawId:r.law_id, art:r.label,

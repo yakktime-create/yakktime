@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v93";
+var APP_VER="v94";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2142,7 +2142,27 @@ function isCutTitle(t){
   return false;
 }
 
+/* 글꼴로 알아낸 제목 줄에서 쪽 이름을 고른다. 제목은 짧은 줄로 따로 서 있다.
+ * 큰 제목(숫자로 시작)을 먼저 쓰고, 없으면 소제목(글머리표)을 쓴다.
+ * 쪽 첫머리만 보면 앞 쪽에서 이어진 본문이라 이름을 못 얻는다(22쪽). */
+function headLineTitle(t){
+  var ls=String(t||"").split("\n"), big="", small="";
+  for(var i=0;i<ls.length;i++){
+    var L=ls[i].replace(/\s+/g," ").trim();
+    if(!L||L.length>30||/[.?!]$/.test(L)) continue;
+    if(/^[-–—]?\s*\d{1,4}\s*[-–—]?$/.test(L)) continue;            /* 쪽 번호 */
+    var bare=L.replace(/^[·ㆍ•▪○\s]+/,"").trim();
+    if(bare.length<2||isCutTitle(bare)) continue;
+    if(!big&&/^\d/.test(bare)) big=bare;
+    if(!small&&!/^\d/.test(bare)) small=bare;
+  }
+  var ti=big||small;
+  return ti&&ti.length>24?ti.slice(0,24):ti;
+}
+
 function pageTitle(t){
+  var byLine=headLineTitle(t);
+  if(byLine) return byLine;
   var s=nfc(t).replace(/\s+/g," ").replace(RUNHEAD_RE,"").trim();
   if(s.length<20) return "";
   var m=/^((?:[IVX]{1,4}|[0-9]{1,2})\s*[.)]?\s*)?([가-힣A-Za-z][^.。]{1,20})/.exec(s);
@@ -2900,17 +2920,24 @@ function buildLawHits(rows,terms){
     /* 목·호 경계를 넘어서까지 합치면 「가목」 배지 하나에 가목과 나목이 함께
      * 들어가 버린다(「보관」이 양쪽에 있고 두 자리가 가까울 때). 경계를 넘으면
      * 새 조각으로 나눈다 — 배지가 가리키는 곳과 글이 맞는다. */
-    function crosses(a,b){
+    function crossAt(a,b){       /* 두 자리 사이의 경계 위치 (없으면 -1) */
       for(var i=0;i<pts.length;i++)
-        if(!pts[i].soft&&pts[i].lv<=3&&pts[i].at>a&&pts[i].at<=b) return true;
-      return false;
+        if(!pts[i].soft&&pts[i].lv<=3&&pts[i].at>a&&pts[i].at<=b) return pts[i].at;
+      return -1;
     }
     var wins=[];
     found.forEach(function(f){
       var st=Math.max(0,f.at-PAD), en=Math.min(c.length,f.at+f.len+PAD);
       var last=wins.length?wins[wins.length-1]:null;
-      if(last&&st<=last.en&&!crosses(last.at,f.at)){ if(en>last.en) last.en=en; }
-      else wins.push({st:st,en:en,at:f.at});
+      var cut=last?crossAt(last.at,f.at):-1;
+      if(last&&st<=last.en&&cut<0){ if(en>last.en) last.en=en; return; }
+      /* 경계에서 나눌 때는 서로 겹치지 않게 그 자리에서 자른다 —
+       * 안 그러면 거의 같은 발췌가 둘 생긴다. */
+      if(cut>=0){
+        if(st<cut) st=cut;
+        if(last&&last.en>cut) last.en=cut;
+      }
+      wins.push({st:st,en:en,at:f.at});
     });
     if(wins.length>MAX_SNIP) wins=wins.slice(0,MAX_SNIP);
 
@@ -4216,9 +4243,12 @@ function renderLawResults(){
           ? (function(){
               var ws=[], seen={};
               g.snips.forEach(function(h){ if(h.where&&!seen[h.where]){ seen[h.where]=1; ws.push(h.where); } });
+              /* 자리를 다 늘어놓으면 안내가 본문보다 길어진다 — 셋까지만 */
+              var more=ws.length>3?(" 외 "+(ws.length-3)+"곳"):"";
+              if(ws.length>3) ws=ws.slice(0,3);
               return '<div class="law-tbl">'
                 + '<b>칸이 뒤섞여 읽기 어려운 대목이에요.</b>'
-                + (ws.length?' <span class="law-tbl-w">'+esc(ws.join(" · "))+'</span>에서 찾았어요.':'')
+                + (ws.length?' <span class="law-tbl-w">'+esc(ws.join(" · "))+'</span>'+more+'에서 찾았어요.':'')
                 + ' PDF 원문에서 확인하세요.</div>';
             })()
           : (function(){ var prev=null;

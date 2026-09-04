@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v67";
+var APP_VER="v68";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1761,6 +1761,41 @@ function lawTidyNames(){
  * 화면에 보이는 이름은 짧게 다듬을 것이라 거기엔 숫자가 남지 않는다. */
 function lawSrc(l){ return (l&&(l.fileName||l.name))||""; }
 
+/* 문서 안에서 종류와 시행일을 읽는다.
+ * 법제처 PDF 첫 쪽에는 늘 이렇게 적혀 있다 —
+ *   법제처 1 국가법령정보센터 약사법 [시행 2026. 6. 21.] [법률 제21109호, …]
+ * 지침서·안내서는 [시행]이 없는 대신 표지에 이렇게 적힌다 —
+ *   바이오의약품 사전 GMP 평가 지침 [공무원 지침서] 2025. 9.
+ * 파일 이름보다 정확하고, 이름을 바꿔도 안 깨진다.
+ * 실제 문서 8개로 확인 — 법령 6개는 종류·시행일을 정확히, 지침서 2개는
+ * 「공무원 지침서」와 발행 연월을 읽어냈다. */
+function lawMeta(pages){
+  var head=nfc((pages||[]).slice(0,2).map(function(p){ return p.content||""; }).join(" ")).slice(0,1200);
+  var kind=null, eff=null, m;
+  if((m=/\[\s*(법률|대통령령|총리령|부령|훈령|예규|[가-힣]{2,14}고시|고시)\s*제?\s*[0-9\-]+\s*호/.exec(head))){
+    var k=m[1];
+    kind=/고시$/.test(k)?"고시":k;
+  } else if(/공무원\s*지침서|민원인\s*안내서|지침서|안내서/.test(head)) kind="지침";
+  if((m=/\[\s*시행\s*(\d{4})\s*\.\s*(\d{1,2})\s*\.\s*(\d{1,2})/.exec(head)))
+    eff=m[1]+("0"+m[2]).slice(-2)+("0"+m[3]).slice(-2);
+  else if((m=/(20\d{2})\s*\.\s*(\d{1,2})\s*\./.exec(head)))   /* 지침서 발행 연월 */
+    eff=m[1]+("0"+m[2]).slice(-2)+"00";
+  return {kind:kind,eff:eff};
+}
+/* 종류를 정하는 차례 — ① 문서에서 읽은 것 ② 원본 파일 이름 */
+var KIND_BY_TEXT={"법률":0,"대통령령":1,"총리령":2,"부령":2,"고시":3,"훈령":3,"예규":3,"지침":4};
+function lawKindOf(l){
+  if(l&&l.kind&&KIND_BY_TEXT[l.kind]!=null)
+    return {n:KIND_BY_TEXT[l.kind],t:l.kind==="총리령"||l.kind==="부령"?"시행규칙"
+            :l.kind==="대통령령"?"시행령":l.kind==="지침"?"지침·안내서":l.kind};
+  return lawKind(lawSrc(l));
+}
+/* 시행일도 문서에서 읽은 것을 먼저 쓴다 */
+function lawEffOf(l){
+  if(l&&l.eff) return /00$/.test(l.eff)?l.eff.slice(0,4)+"."+(+l.eff.slice(4,6)):lawDate(l.eff);
+  return lawDate(lawParse(lawSrc(l)).date);
+}
+
 /* 같은 법령의 다른 판을 찾는다 (자기 자신은 뺀다) */
 function lawOtherEditions(name,skipId){
   var b=lawParse(name).base;
@@ -1773,12 +1808,14 @@ function lawOtherEditions(name,skipId){
 function lawIsOld(l){
   var mine=lawParse(lawSrc(l));
   if(!mine.base) return false;
+  var myEff=l.eff||mine.date;
   return S.laws.some(function(o){
     if(o.id===l.id) return false;
     var p=lawParse(lawSrc(o));
     if(p.base!==mine.base) return false;
-    /* 날짜가 있으면 날짜로, 없으면 공포번호로 견준다 */
-    if(p.date&&mine.date) return p.date>mine.date;
+    /* 시행일은 문서에서 읽은 것을 먼저 쓴다 (파일 이름이 잘려 있을 수 있다) */
+    var oEff=o.eff||p.date;
+    if(oEff&&myEff) return oEff>myEff;
     if(p.no&&mine.no) return p.no>mine.no;
     return false;
   });
@@ -1833,12 +1870,14 @@ function lawUpload(f){
   }).then(function(pages){
     /* 화면에 쓸 이름은 괄호 묶음을 떼어 짧게. 종류·시행일은 따로 보여주므로
      * 이름에 숫자가 남아 있을 이유가 없다. 원본은 file_name 에 그대로 둔다. */
-    var item={name:lawParse(f.name).base,filePath:path,fileName:nfc(f.name),pages:pages.length};
+    var meta=lawMeta(pages);
+    var item={name:lawParse(f.name).base,filePath:path,fileName:nfc(f.name),pages:pages.length,
+              kind:meta.kind,eff:meta.eff};
     return dbInsert("laws",item).then(function(row){
       if(!row) throw new Error("법령 정보를 저장하지 못했어요.");
       S.laws.unshift(item);
       return saveLawPages(row.id,pages).then(function(){
-        return saveLawArticles(row.id,buildLawArticles(pages,f.name),item).then(function(){
+        return saveLawArticles(row.id,buildLawArticles(pages,f.name,meta.kind),item).then(function(){
           /* 새것이 온전히 올라간 다음에 지운다 — 먼저 지우면 실패했을 때 둘 다 없다 */
           drop.forEach(function(l){ del("laws",l.id,true); });
           if(drop.length) showToast("✓ 옛 판 "+drop.length+"개를 지웠어요");
@@ -1930,14 +1969,14 @@ function pageTitle(t){
   return ti.length>24?ti.slice(0,24):ti;
 }
 
-function buildLawArticles(pages,docName){
+function buildLawArticles(pages,docName,docKind){
   /* 지침서·안내서는 남의 별표를 본문에서 인용할 뿐, 자기 별표를 갖지 않는다.
    * 그걸 머리말로 잡으면 「별표 1(통칙에 따르면 세포은행은 …)」처럼 본문이
    * 제목으로 올라온다. 아예 안 잡고 쪽 단위로 간다. */
   /* 반드시 원본 파일 이름으로 판별한다. 화면 이름은 「(식품의약품안전처고시)」를
    * 떼어 다듬으므로, 그걸로 재면 고시가 지침서로 보여 별표를 통째로 버린다.
    * 실제로 342쪽 고시가 조문 240개 → 10개로 무너졌었다. */
-  var noTbl=(lawKind(docName).n>=4);
+  var noTbl=(docKind?docKind==="지침":lawKind(docName).n>=4);
   var buf=[], marks=[], pos=0;
   pages.forEach(function(p){
     var t=(p.content||"").trim();
@@ -2115,7 +2154,12 @@ function lawReindex(id){
       var a=findArticles(r.content||"");
       if(a.length) carry=a[a.length-1].label;
     });
-    var arts=buildLawArticles(rows,lawSrc(l));
+    var meta=lawMeta(rows);
+    if(meta.kind!==l.kind||meta.eff!==l.eff){
+      l.kind=meta.kind; l.eff=meta.eff;
+      dbUpdate("laws",l.id,{kind:meta.kind,eff:meta.eff});
+    }
+    var arts=buildLawArticles(rows,lawSrc(l),meta.kind);
     if(!arts.length) throw new Error("조문을 하나도 찾지 못했어요.");
     showToast("조문 "+arts.length+"개를 찾았어요");
     var i=0;
@@ -2172,7 +2216,7 @@ function lawKind(name){
  * 실제로 이름을 다듬은 뒤 고시 두 개가 목록 맨 아래로 밀려났었다. */
 function lawSorted(){
   return S.laws.slice().sort(function(a,b){
-    var ka=lawKind(lawSrc(a)).n, kb=lawKind(lawSrc(b)).n;
+    var ka=lawKindOf(a).n, kb=lawKindOf(b).n;
     return ka-kb || String(a.name).localeCompare(String(b.name),"ko");
   });
 }
@@ -2207,7 +2251,12 @@ function lawReindexOne(l){
     if(res.error) throw new Error(res.error.message);
     var rows=res.data||[];
     if(!rows.length) throw new Error("쪽 없음");
-    var arts=buildLawArticles(rows,lawSrc(l));
+    var m2=lawMeta(rows);
+    if(m2.kind!==l.kind||m2.eff!==l.eff){
+      l.kind=m2.kind; l.eff=m2.eff;
+      dbUpdate("laws",l.id,{kind:m2.kind,eff:m2.eff});
+    }
+    var arts=buildLawArticles(rows,lawSrc(l),m2.kind);
     if(!arts.length) throw new Error("조문 없음");
     return saveLawArticles(l.id,arts,l);
   });
@@ -3350,7 +3399,7 @@ function renderLaws(){
        * 굴리게 하고, 아래 내용이 저 멀리 밀려나지 않게 한다. */
       var cur=null;
       list+='<div class="law-list grouped">'+lawSorted().map(function(l){
-      var onlyOn=!!lawOnly[l.id], kd=lawKind(lawSrc(l)), head="";
+      var onlyOn=!!lawOnly[l.id], kd=lawKindOf(l), head="";
       if(kd.t!==cur){ cur=kd.t;
         head='<div class="law-kind g'+kd.n+'"><span>'+esc(kd.t)+'</span></div>'; }
       return head+'<div class="law-row'+(onlyOn?" only":"")+'">'
@@ -3360,7 +3409,7 @@ function renderLaws(){
         + (lawIsOld(l)?'<span class="law-old-tag">옛 판</span>':'')
         /* 종류 배지는 뺐다 — 바로 위 묶음 머리말과 같은 말이다.
          * 시행일·쪽수는 폭을 고정해 세로로 줄을 맞춘다. */
-        + '<span class="law-eff">'+(lawDate(lawParse(lawSrc(l)).date)||'')+'</span>'
+        + '<span class="law-eff">'+esc(lawEffOf(l)||'')+'</span>'
         + '<span class="law-pages">'+(l.pages||0)+'쪽'
         +   (l.arts?' · 조문 '+l.arts+'개':'')+'</span>'
         + (l.arts?'':'<button class="link-btn law-need" data-act="law-reindex" data-id="'+l.id+'">조문 만들기</button>')

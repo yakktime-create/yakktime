@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v64";
+var APP_VER="v65";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1717,8 +1717,68 @@ document.getElementById("reffile").addEventListener("change",function(e){
   refUpload(f);
 });
 
+/* 법제처 파일 이름은 「법령명(종류)(제N호)(시행일)」로 딱 떨어진다.
+ *   약사법(법률)(제21109호)(20260621)
+ * 괄호 묶음을 떼면 법령명만 남고, 그게 같으면 같은 법령의 다른 판이다.
+ * 개정본을 올릴 때 옛 판을 자동으로 알아채는 근거가 이것이다. */
+function lawParse(name){
+  var t=nfc(name).replace(/\.pdf$/i,"").trim(), m;
+  var no=(m=/\(\s*제\s*([0-9\-]+)\s*호\s*\)/.exec(t))?m[1]:null;
+  var date=(m=/\((\d{8})\)?/.exec(t))?m[1]:null;
+  /* 괄호 묶음을 떼어 낸 것이 법령명. 지침서처럼 괄호가 없으면 이름 그대로. */
+  var base=t.replace(/\([^()]*\)?/g,"").replace(/\s+/g," ").trim();
+  return {base:base||t, no:no, date:date};
+}
+/* 시행일을 사람이 읽는 꼴로 — 20260621 → 2026.6.21 */
+function lawDate(d){
+  if(!d||d.length<8) return "";
+  return d.slice(0,4)+"."+(+d.slice(4,6))+"."+(+d.slice(6,8));
+}
+/* 같은 법령의 다른 판을 찾는다 (자기 자신은 뺀다) */
+function lawOtherEditions(name,skipId){
+  var b=lawParse(name).base;
+  if(!b) return [];
+  return S.laws.filter(function(l){
+    return l.id!==skipId && lawParse(l.name).base===b;
+  });
+}
+/* 같은 법령이 여럿이면 시행일이 가장 늦은 것만 「지금 판」이다 */
+function lawIsOld(l){
+  var mine=lawParse(l.name);
+  if(!mine.base) return false;
+  return S.laws.some(function(o){
+    if(o.id===l.id) return false;
+    var p=lawParse(o.name);
+    if(p.base!==mine.base) return false;
+    /* 날짜가 있으면 날짜로, 없으면 공포번호로 견준다 */
+    if(p.date&&mine.date) return p.date>mine.date;
+    if(p.no&&mine.no) return p.no>mine.no;
+    return false;
+  });
+}
+
 function lawUpload(f){
   if(lawBusy) return;
+  /* 개정본을 올릴 때 옛 판을 여기서 잡는다. 나중에 목록을 뒤지게 하면
+   * 열 몇 개 중에서 어느 게 옛것인지 일일이 봐야 한다. */
+  var old=lawOtherEditions(f.name,null), drop=[];
+  if(old.length){
+    var mine=lawParse(f.name);
+    var lines=old.map(function(l){
+      var p=lawParse(l.name);
+      return "  · "+(lawDate(p.date)?lawDate(p.date)+" 시행":"날짜 없음")+"  "+l.name;
+    }).join("\n");
+    var newer=old.every(function(l){
+      var p=lawParse(l.name);
+      return !(p.date&&mine.date)||mine.date>p.date;
+    });
+    var msg="「"+mine.base+"」이(가) 이미 올라와 있어요.\n\n"+lines
+      +"\n\n새로 올리는 것: "+(lawDate(mine.date)?lawDate(mine.date)+" 시행":"날짜 없음")
+      +(newer?"\n\n옛 판을 지우고 새것으로 바꿀까요?"
+             :"\n\n⚠️ 이미 올라온 쪽이 더 새것입니다.\n그래도 옛 판을 지우고 이걸로 바꿀까요?")
+      +"\n\n[취소]를 누르면 둘 다 남습니다.";
+    if(confirm(msg)) drop=old;
+  }
   lawBusy=true; render();
   var path=Date.now()+"_"+f.name.replace(/[^a-zA-Z0-9._-]/g,"_");
   var uploaded=false;
@@ -1749,7 +1809,11 @@ function lawUpload(f){
       if(!row) throw new Error("법령 정보를 저장하지 못했어요.");
       S.laws.unshift(item);
       return saveLawPages(row.id,pages).then(function(){
-        return saveLawArticles(row.id,buildLawArticles(pages,item.name),item);
+        return saveLawArticles(row.id,buildLawArticles(pages,item.name),item).then(function(){
+          /* 새것이 온전히 올라간 다음에 지운다 — 먼저 지우면 실패했을 때 둘 다 없다 */
+          drop.forEach(function(l){ del("laws",l.id,true); });
+          if(drop.length) showToast("✓ 옛 판 "+drop.length+"개를 지웠어요");
+        });
       });
     });
   }).then(function(){
@@ -3224,6 +3288,13 @@ function renderLaws(){
 
   var list="";
   if(items.length){
+    /* 같은 법령이 두 벌 이상이면 검색 결과가 두 번씩 나오고 AI도 헷갈린다.
+     * 열 몇 개를 일일이 볼 수 없으므로 여기서 세어 알린다. */
+    var olds=items.filter(lawIsOld);
+    if(olds.length) list+='<div class="notice"><span class="notice-ic">!</span>'
+      + '<div>같은 법령의 <b>옛 판이 '+olds.length+'개</b> 남아 있어요. '
+      +   '두면 검색 결과가 두 번씩 나오고 AI도 헷갈려요.</div>'
+      + '<button class="btn sm" data-act="law-drop-old">옛 판 정리</button></div>';
     var need=items.filter(function(l){ return !l.arts; }).length;
     if(need) list+='<div class="notice"><span class="notice-ic">!</span>'
       + '<div>조문으로 안 쪼개진 법령이 <b>'+need+'개</b> 있어요. 이걸 해야 검색이 조 단위로 나와요.</div>'
@@ -3246,7 +3317,9 @@ function renderLaws(){
         + '<label class="law-only"><input type="checkbox" data-act="law-only" data-id="'+l.id+'"'+(onlyOn?" checked":"")+' title="이 법령에서만 찾기" /></label>'
         + '<span class="law-name" data-act="edit" data-table="laws" data-field="name" data-id="'+l.id+'" title="눌러서 이름 수정">'+esc(l.name)+'</span>'
         + '<span class="law-kind-tag k'+kd.n+'">'+esc(kd.t)+'</span>'
-        + '<span class="law-pages">'+(l.pages||0)+'쪽'+(l.arts?' · 조문 '+l.arts+'개':'')+'</span>'
+        + (lawIsOld(l)?'<span class="law-old-tag">옛 판</span>':'')
+        + '<span class="law-pages">'+(lawDate(lawParse(l.name).date)?lawDate(lawParse(l.name).date)+' 시행 · ':'')
+        +   (l.pages||0)+'쪽'+(l.arts?' · 조문 '+l.arts+'개':'')+'</span>'
         /* 조문이 아직 없으면 글자로 크게 — 그게 지금 해야 할 일이다.
          * 이미 있으면 아이콘 하나로 줄인다. 열한 줄에 「조문 다시 만들기」가
          * 다 적혀 있으면 정작 이름이 안 읽힌다. */
@@ -3485,6 +3558,15 @@ document.getElementById("app").addEventListener("click",function(e){
     case "lv-close": closeLawView(); break;
     case "law-art": openLawArticle(parseInt(el.getAttribute("data-art-id"),10)||0,id); break;
     case "law-build-all": lawBuildAll(id==="all"); break;
+    case "law-drop-old": {
+      var olds=S.laws.filter(lawIsOld);
+      if(!olds.length){ showToast("정리할 옛 판이 없어요."); break; }
+      var lst=olds.map(function(l){ return "  · "+l.name; }).join("\n");
+      if(!confirm("아래 "+olds.length+"개를 지웁니다. 같은 법령의 더 새 판이 남아 있어요.\n\n"
+        +lst+"\n\n계속할까요?")) break;
+      olds.forEach(function(l){ del("laws",l.id,true); });
+      showToast("✓ 옛 판 "+olds.length+"개를 지웠어요");
+      break; }
     case "law-help": lawHelpToggle(); break;
     case "ref-search": refSearch(); break;
     case "ref-list": refListOpen=!refListOpen; render(); break;

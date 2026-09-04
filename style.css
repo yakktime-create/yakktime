@@ -2,6 +2,7 @@
   /* 출장·여행 — 일정(초록)·식약처 업무(파랑)과 구분되는 세 번째 색.
      여행 중에도 그 날 다른 일정을 계속 적으므로, 칠하지 않고 옅게만 둘러 알린다. */
   --brass-soft:#F7F0E2; --brass-bd:#E3D2AC; --brass-band:#FBF7EF;
+  --brick-soft:#FBECE8;   /* 옛 판 배지 — 지워야 할 것 */
   --paper:#F3F5F2; --surface:#FFFFFF; --ink:#1E2A24; --muted:#6C7A72;
   --line:#E3E7E2; --accent:#2F5D50; --accent-soft:#E5EEE9; --brass:#A67C2E; --brick:#A4503E;
   /* 식약처 업무 — 세이지 그린과 같은 명도·채도대의 슬레이트 블루 (형제색) */
@@ -1096,3 +1097,6 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .ask-kind{flex:none;font-size:var(--fs-2xs);font-weight:800;color:var(--blue-deep);
   background:var(--blue-soft);border-radius:var(--r-full);padding:1px 8px;}
 @media (hover:hover){ .law-ic:hover{background:var(--paper);color:var(--ink);} .law-ic.del:hover{color:var(--brick);} }
+/* 같은 법령의 더 새 판이 있는 줄 — 지워야 할 것이므로 눈에 띄되 요란하지 않게 */
+.law-old-tag{flex:none;font-size:var(--fs-2xs);font-weight:800;color:var(--brick);
+  background:var(--brick-soft);border-radius:var(--r-full);padding:1px 8px;}

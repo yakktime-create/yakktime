@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v117";
+var APP_VER="v118";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2639,7 +2639,11 @@ function runHeadRe(t){
      * 오는 글의 공통 앞부분」으로 알아낸다 — 쪽마다 똑같이 찍히기 때문이다. */
     /* **마지막 꼬리말 뒤에는 아무것도 없다.** 그 빈 조각까지 견주면 공통 앞부분이
      * 첫 글자에서 끊겨 이름을 못 얻는다 — 약사법 87쪽이 이것 때문에 안 지워졌다. */
-    var tail=ms.map(function(i){ return t.slice(i,i+80); })
+    /* 별표 쪽은 머리글이 「■ 법령명 [별표 1] …」이라 ■ 가 앞에 붙는다. 그대로
+     * 견주면 공통 앞부분이 첫 글자에서 깨져 이름을 못 얻는다 — 「의약품 등의
+     * 안전에 관한 규칙」 71쪽이 이것 때문에 머리글이 안 지워졌고, 그 바람에
+     * 「…규칙 제39조(…)」가 인용으로 오인되어 **조문 7개가 통째로 사라졌다.** */
+    var tail=ms.map(function(i){ return t.slice(i,i+80).replace(/^\s*■\s*/,""); })
                .filter(function(s){ return s.trim().length>=2; });
     var n=0, same=tail.length>=2;
     while(same&&n<80){
@@ -2661,7 +2665,7 @@ function runHeadRe(t){
        * 그래서 **쪽 첫머리에 이름만 오는 것**도 함께 지운다. 손질은 쪽마다 하므로
        * ^ 는 곧 쪽의 시작이다. 실측: 약사법 87/87쪽 · 첨단재생 27/27 · 규칙 71 ·
        * 시설기준령 6/6 · 생물학적제제 45 · GMP규정 5. 지침서는 0쪽(머리글이 없다). */
-      return new RegExp("(?:"+LAWHEAD_RE.source+"(?:"+e+"\\s*)?|^\\s*"+e+"\\s+)","g");
+      return new RegExp("(?:"+LAWHEAD_RE.source+"(?:■?\\s*"+e+"\\s*)?|^\\s*■?\\s*"+e+"\\s+)","g");
     }
   }
   return LAWHEAD_RE;
@@ -3382,7 +3386,10 @@ function isCitedHere(text,at,end){
   if(JOSA_RE.test(post)) return true;                 /* "…) 에 따라" */
   var pre=text.slice(Math.max(0,at-24),at).replace(/\s+/g,"");
   if(/[」』】]$/.test(pre)) return true;                /* "「약사법」 제31조" */
-  if(/(법|규칙|영|고시|기준|규정)$/.test(pre)) return true; /* "약사법 제31조" */
+  /* **「기준」은 뺐다.** 「…제6조 각 호의 기준 제8조(의약외품 제조소의 시설 기준)」처럼
+   * 앞 조문이 「기준」으로 끝나면 다음 조가 통째로 사라졌다(시설기준령 제8조).
+   * 법령 이름의 끝말만 남긴다. */
+  if(/(법|규칙|영|고시|규정)$/.test(pre)) return true; /* "약사법 제31조" */
   return false;
 }
 

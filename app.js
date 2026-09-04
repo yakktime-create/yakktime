@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v77";
+var APP_VER="v78";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2274,8 +2274,12 @@ function stripRunHead(t){
   return t.replace(LAWHEAD_RE," ");
 }
 
+/* 쪽 가운데 아래에 찍히는 쪽 번호(- 15 -). 쪽을 이어 붙이면 문장에 낀다.
+ * 문서 6개에 304개. 줄 첫머리에 있는 것만 지워 본문의 뺄셈과 섞이지 않게 한다. */
+var PAGENO_RE=/(^|\n)[ \t]*[-–—][ \t]*\d{1,4}[ \t]*[-–—][ \t]*/g;
+
 function cleanPdfText(t){
-  t=stripRunHead(nfc(t)).replace(PUA_RE," · ");
+  t=stripRunHead(nfc(t)).replace(PAGENO_RE,"$1").replace(PUA_RE," · ");
   try{ return t.replace(BULLET_M," · "); }catch(e){ return t; }   /* 구형 사파리는 뒤돌아보기를 못 쓴다 */
 }
 
@@ -3031,7 +3035,10 @@ function lawBreaks(text){
     for(var k=at-1;k>=0;k--){
       var c=text.charAt(k);
       if(/\s/.test(c)) continue;
-      return ".)]>」』\u201D\"·;:".indexOf(c)>=0;
+      /* 물음표·느낌표도 문장 끝이다. 점검표(별지 서식)는 「…적당한가?」처럼
+       * 온 문장이 물음표로 끝나는데, 이걸 빼 놓았더니 목 하나의 마침표가
+       * PDF에서 빠진 순간 그 뒤 라·마·바·사·아·자·차가 연쇄로 다 죽었다. */
+      return ".?!)]>」』\u201D\"·;:".indexOf(c)>=0;
     }
     return true;                  /* 글 맨 앞 */
   }

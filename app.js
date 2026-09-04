@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v110";
+var APP_VER="v111";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -618,7 +618,7 @@ function renderToday(){
   var tmrD=tomorrow();
   var tmrLabel=(tmrD.getMonth()+1)+"월 "+tmrD.getDate()+"일("+WD[tmrD.getDay()]+")";
   view().innerHTML='<div class="page">'
-    + '<header class="today-hero"><div class="today-date">'+esc(dateStr)+'</div><h1 class="today-greet">'+greet+', 이랑님.</h1><p class="today-line">오늘 할 일 '+open.length+'건'+(open.length?" 남았어요.":"이 없어요.")+(todayEv.length?" · 오늘 일정 "+todayEv.length+"건.":"")+'</p></header>'
+    + '<header class="today-hero"><div class="today-date">'+esc(dateStr)+'</div><h1 class="today-greet">'+greet+', 이랑님.</h1><p class="today-line">'+(open.length?("오늘 할 일 "+open.length+"건 남았어요."):"오늘 할 일이 없어요.")+(todayEv.length?" · 오늘 일정 "+todayEv.length+"건.":"")+'</p></header>'
     + '<section class="stat-row">'
     +   statTile("articles","brass",inProg,"작성 중 기고글")
     +   statTile("mfds","blue",mfdsOpen,"진행 중 식약처 업무")
@@ -2815,6 +2815,9 @@ function lawAskRun(){
   if(q.length<5){ showToast("질문을 문장으로 적어주세요. 민원 글을 그대로 붙여넣어도 돼요."); return; }
   if(!S.laws.length){ showToast("먼저 법령 PDF를 올려주세요."); return; }
   lawQuery=q; lawHits=null; lawSel={}; lawOpen={};
+  /* 옛 검색어 형광펜을 지운다. 안 지우면 원문 창이 노란 범벅이 되어 못 읽는다 —
+   * AI 결과에서는 **근거 문장 하나만** 칠한다(창을 열 때 정한다). */
+  lawTermList=[];
   lawAsking=true; lawAsk=null; renderLawResults();
   function done(){ lawAsking=false; renderLawResults(); }
   var only=lawOnlyIds();
@@ -2927,8 +2930,8 @@ function lawAskHtml(){
     + (maybe.length?' <span class="law-and">「중간」 이상 '+nSure+'곳</span>':'')+'</div>'
     + '<div class="law-actions">'
     +   (d.picks.length>1
-          ? (nSel?'<button class="link-btn quiet-link" data-act="ask-none">☐ 해제</button>'
-                 :'<button class="link-btn" data-act="ask-all">☑ 모두</button>'):'')
+          ? (nSel?'<button class="link-btn quiet-link" data-act="ask-none">☐ 선택 지우기</button>'
+                 :'<button class="link-btn" data-act="ask-all">☑ 모두 고르기</button>'):'')
     +   '<button class="btn quiet sm" data-act="ask-copy">'+askWhat+' 복사</button>'
     +   '<button class="btn sm" data-act="ask-save">텍스트로 저장</button>'
     + '</div></div>';
@@ -2940,9 +2943,11 @@ function lawAskHtml(){
     + (d.skipped?'<p class="ask-note">아직 시행 전인 개정 조문 '+d.skipped+'개는 빼고 봤어요 — 답변 근거는 <b>지금 적용되는 조문</b>이어야 하니까요. 그 조문들은 낱말 검색에서는 그대로 보입니다.</p>':'')
     /* 등급이 무슨 뜻인지 결과 바로 옆에 적어 둔다. 사용법 안에만 있으면
      * 펼쳐 보지 않는 한 「매우 높음이 뭐 기준인데」로 남는다. */
-    + '<div class="ask-legend"><b>등급</b>은 셋을 합쳐서 매겨요 —'
-    +   '<span>답이 이 조에 있나</span><span>답변서에 인용해야 하나</span><span>본문에서 근거를 찾았나</span>'
-    +   '<i>조문마다 아래에 그 셋이 적혀 있어요.</i></div>'
+    /* 배지를 「인용 필수」로 바꿨으면 이 줄도 같이 바꿔야 한다 —
+     * 안 바꾸면 화면엔 「인용 필수」가 떠 있는데 설명은 「등급」을 말한다. */
+    + '<div class="ask-legend"><b>앞 배지</b>는 답변서에 <b>인용해야 하나</b> —'
+    +   '<span>인용 필수</span><span>있으면 좋음</span><span>없어도 됨</span>'
+    +   '<i>그 아래 낱말 둘은 왜 그렇게 봤는지예요. 차례는 셋을 합쳐 매깁니다.</i></div>'
     + acts+'<ol class="ask-list">'+items+'</ol>'
     /* 도구지 답변자가 아니다. 이 줄을 지우면 안 된다. */
     + '<p class="ask-foot">'
@@ -3296,6 +3301,12 @@ var ART_RE=/제\s*(\d+)\s*조(?:\s*의\s*(\d+))?\s*\(\s*([^()]{1,40}?)\s*\)/g;
  * 필수로 두면 그런 쪽에서 규칙이 통째로 실패해 머리말을 아예 못 찾는다. */
 var BP_RE=/\[\s*별\s*(표|지)\s*(?:제\s*)?(\d+)(?:\s*의\s*(\d+))?\s*(?:호\s*서\s*식)?\s*\]\s*(?:<[^<>]{0,40}>\s*)?(?:([^()\[\]<>]{0,40}?)\s*(?=\(|\[|<|$))?/g;
 var HANG="①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";
+/* 지침서가 쓰는 글머리표. 07 사전GMP평가는 「ㅇ」(홑자음)를, 09·10은 「○」를 쓴다.
+ * **네모(□ ■ ◇ ◆)는 뺀다** — 그건 글머리표가 아니라 점검표의 **체크칸**이다.
+ * 넣었더니 07 한 문서에서만 433곳이 걸려 「□ 예 ■ 아니오」가 줄마다 쪼개졌다.
+ * 실측(문서 10개): 이 목록으로 07은 249곳(문단당 171자), 06은 353곳(632자),
+ * 08·09·10은 26~27곳. 법률·고시(01·02·04·05)는 0곳이라 손대지 않는다. */
+var GBUL="○◦●▶ㅇ";
 
 /* 이 자리의 「제N조(…)」가 문서 자신의 조문인지, 본문에 낀 인용인지 가른다.
  *
@@ -3630,6 +3641,14 @@ function lawBreaks(text){
       continue;
     }
     if(HANG.indexOf(ch)>=0){ pts.push({at:i,lv:1,len:0}); continue; }
+    /* **지침서 글머리표.** 법령은 항(①)·호(1.)·목(가.)으로 층을 나누지만 지침서는
+     * ○ · ㅇ · ※ 를 쓴다. 이걸 안 끊으면 한 쪽이 통째로 한 문단이 되어 못 읽는다
+     * (「· -1 서류평가 대상 ○ 우리 처의 … ※ 생략기간 기산 : … ○ PIC/S …」).
+     * 앞뒤가 공백인 것만 본다 — 글 속의 ○ 는 대개 빈칸 없이 붙어 있다. */
+    if(GBUL.indexOf(ch)>=0&&(i===0||/\s/.test(text.charAt(i-1)))&&/\s/.test(text.charAt(i+1)||" ")){
+      pts.push({at:i,lv:1,len:0}); continue;
+    }
+    if(ch==="※"&&(i===0||/\s/.test(text.charAt(i-1)))){ pts.push({at:i,lv:2,len:0}); continue; }
     /* 호(1. 2.) · 목(가. 나.) — 앞이 공백이고 뒤가 공백인 것만.
      * PDF에서 뽑으면 "사 ." 처럼 점 앞에 공백이 끼기도 해서 허용한다.
      * 목 글자는 실제 쓰이는 것만 열거한다 — [가-하] 범위로 잡으면
@@ -4347,7 +4366,10 @@ function renderLaws(){
      * 나타난다 — 평소 화면은 예전과 똑같이 조용하다. */
     + '<button class="ask-bar'+(lawAskFits(lawQuery)?"":" gone")+(lawAsking?" busy":"")+'" data-act="law-ask"'+(lawAsking?" disabled":"")+'>'
     +   '<span class="ask-ic">✦</span>'
-    +   '<span class="ask-bar-t">'+(lawAsking?"관련 조문을 고르는 중..."
+    /* 기다리는 동안 점 셋이 차례로 켜진다. 점멸이 없으면 눌렸는지조차 모른다 —
+     * 이 일은 5~15초가 걸리므로 「지금 일하는 중」이 보여야 한다. */
+    +   '<span class="ask-bar-t">'+(lawAsking
+          ?'조문을 고르는 중<span class="ask-dots"><i></i><i></i><i></i></span>'
           :(lawOnlyLabel()?"<b>"+esc(lawOnlyLabel())+"</b>에서 관련 조문 찾아줘"
                           :"위에 적은 말로 <b>관련 조문 찾아줘</b>"))+'</span>'
     +   '<span class="ask-bar-n">'+(lawAskLast!=null?"지난번 "+lawAskLast+"원":"한 번에 50~150원")+'</span>'
@@ -4600,7 +4622,18 @@ document.getElementById("app").addEventListener("click",function(e){
     case "law-reindex": lawReindex(id); break;
     case "law-pdf": openLawPdf(id,parseInt(el.getAttribute("data-page"),10)||1); break;
     case "lv-close": closeLawView(); break;
-    case "law-art": openLawArticle(parseInt(el.getAttribute("data-art-id"),10)||0,id); break;
+    case "law-art": {
+      var aid=parseInt(el.getAttribute("data-art-id"),10)||0;
+      /* AI 가 고른 조라면 원문과 대조를 통과한 **근거 문장 하나만** 칠한다.
+       * 낱말마다 칠하면 「제조소」가 스무 번 노래져 글을 못 읽는다. */
+      if(lawAsk&&lawAsk.picks){
+        var pk=null;
+        lawAsk.picks.forEach(function(x){ if(String(x.id)===String(aid)) pk=x; });
+        if(pk) lawTermList=pk.quote?[pk.quote]:[];
+      }
+      openLawArticle(aid,id);
+      break;
+    }
     case "lv-raw": if(lawView){ lawView.raw=true; renderLawModal(); } break;
     case "law-build-all": lawBuildAll(id==="all"); break;
     case "law-drop-old": {

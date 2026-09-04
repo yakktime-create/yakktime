@@ -113,7 +113,12 @@ textarea.input{min-height:60px;resize:vertical;line-height:var(--lh-snug);width:
 
 .page-head{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--sp-4);margin-bottom:22px;}
 .page-title{font-size:var(--fs-2xl);font-weight:680;letter-spacing:-.02em;margin:0 0 6px;font-family:Georgia,"Times New Roman",serif;}
-.page-sub{font-size:var(--fs-md);color:var(--muted);margin:0;max-width:46ch;line-height:var(--lh-snug);}
+/* 46ch 에서 접히므로 긴 부제는 「…다시 올리면 / 갱신돼요」처럼 어색하게 끊긴다.
+   text-wrap:pretty 가 끊을 자리를 고른다(안 되는 브라우저는 지금과 같다). */
+/* 제목은 두 줄이 될 때 길이를 고르게 나눈다 */
+h1,h2{text-wrap:balance;}
+.page-sub{font-size:var(--fs-md);color:var(--muted);margin:0;max-width:46ch;
+  line-height:var(--lh-snug);text-wrap:pretty;}
 
 .form{display:flex;flex-direction:column;gap:var(--sp-3);margin-bottom:20px;}
 .seg{display:flex;gap:var(--sp-2);}
@@ -981,13 +986,30 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
    값이 안 보이면 얼마나 쓰는지 모르게 된다. */
 /* 낱말만 칠 때는 아예 자리를 안 차지한다 */
 .ask-bar.gone{display:none;}
+/* **눌리는 것처럼 생겨야 한다.** 점선 테두리는 「적을 자리」로 읽혀서 누를 수
+ * 있다는 걸 몰랐다. 실선 테두리 + 옅은 그림자 + 눌리면 내려앉는 움직임. */
 .ask-bar{display:flex;align-items:center;gap:var(--sp-2);width:100%;
   min-height:var(--tap);margin:-6px 0 var(--sp-4);
-  padding:10px var(--sp-4);border:1px dashed var(--brass-bd);border-radius:var(--r-md);
+  padding:11px var(--sp-4);border:1px solid var(--brass-bd);border-radius:var(--r-md);
   background:var(--brass-band);color:var(--ink);font-family:inherit;font-size:var(--fs-md);
-  text-align:left;cursor:pointer;transition:.15s;-webkit-tap-highlight-color:transparent;}
-.ask-bar:active{background:var(--brass-soft);}
-.ask-bar[disabled]{opacity:.6;cursor:default;}
+  font-weight:600;text-align:left;cursor:pointer;box-shadow:var(--sh-1);
+  transition:transform .1s,box-shadow .15s,background .15s;
+  -webkit-tap-highlight-color:transparent;}
+.ask-bar:active{background:var(--brass-soft);transform:translateY(1px);box-shadow:none;}
+.ask-bar[disabled]{cursor:progress;box-shadow:none;background:var(--brass-soft);}
+/* 기다리는 동안 점 셋이 차례로 켜진다 */
+.ask-dots{display:inline-block;margin-left:2px;letter-spacing:2px;}
+.ask-dots i{display:inline-block;width:4px;height:4px;margin-left:3px;border-radius:50%;
+  background:var(--brass);opacity:.25;animation:askdot 1.05s infinite;}
+.ask-dots i:nth-child(2){animation-delay:.18s;}
+.ask-dots i:nth-child(3){animation-delay:.36s;}
+@keyframes askdot{0%,70%,100%{opacity:.25;transform:translateY(0);}
+                  35%{opacity:1;transform:translateY(-2px);}}
+@media (prefers-reduced-motion:reduce){ .ask-dots i{animation:none;opacity:.6;} }
+/* 기다리는 동안 테두리가 천천히 숨쉰다 — 점 셋만으로는 멀리서 안 보인다 */
+.ask-bar.busy{animation:askwait 1.6s ease-in-out infinite;}
+@keyframes askwait{0%,100%{border-color:var(--brass-bd);}50%{border-color:var(--brass);}}
+@media (prefers-reduced-motion:reduce){ .ask-bar.busy{animation:none;} }
 .ask-ic{flex:none;color:var(--brass);font-size:var(--fs-lg);}
 .ask-bar-t{min-width:0;}
 .ask-bar-t b{color:var(--brass);font-weight:700;}
@@ -1170,7 +1192,10 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
   .entry.boxed:hover{opacity:1;}
   .ev-place:hover{background:var(--paper);}
 }
-.law-help-dim{color:var(--muted);font-size:var(--fs-sm);}
+/* 작은 글씨일수록 줄 사이가 넉넉해야 읽힌다 — 세 줄이 붙어 있으면 눈이 미끄러진다 */
+.law-help-dim{color:var(--muted);font-size:var(--fs-sm);line-height:var(--lh-body);}
+.law-help-sec p{line-height:var(--lh-snug);}
+.law-help-sec>p.law-help-dim{line-height:1.75;}
 .ask-dim{color:var(--muted);opacity:.8;}
 /* 조문이 어느 층의 규범인지 — 법률인지 지침서인지가 근거의 무게를 가른다 */
 .ask-kind{flex:none;font-size:var(--fs-2xs);font-weight:800;color:var(--blue-deep);

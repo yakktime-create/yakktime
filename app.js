@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v119";
+var APP_VER="v120";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2297,7 +2297,8 @@ function buildLawArticles(pages,docName,docKind){
    * 만큼 글자 수가 줄어드는데 marks는 옛 위치라, 「몇 쪽인지」가 통째로
    * 어긋난다(별지 제80호서식이 475쪽에서 469쪽으로 밀렸다).
    * 머리글 패턴만은 문서 전체를 봐야 알 수 있으므로 한 번 구해 두고 쓴다. */
-  var hre=runHeadRe(nfc(pages.map(function(p){ return p.content||""; }).join("\n")));
+  var hre=[runHeadRe(nfc(pages.map(function(p){ return p.content||""; }).join("\n"))),
+           nameHeadRe(docName)];
   pages.forEach(function(p){
     var t=cleanPdfText(p.content||"",hre).trim();
     if(!t) return;
@@ -2702,9 +2703,31 @@ function tidyPunct(t){
           .replace(/[ \t]*([ㆍ・])[ \t]*/g,"$1");
 }
 
+/* **발행처에 기대지 않는 머리글 지우개.** 「법제처 N 국가법령정보센터」가 없는
+ * 식약처 고시는 이름을 알아낼 실마리가 없어 머리글이 그대로 남았고, 그 바람에
+ * 「…규정 제7조(심사자료의 요건)」이 인용으로 오인돼 조가 통째로 사라졌다.
+ * **법령 이름은 이미 알고 있으니 추측할 필요가 없다** — 그걸로 바로 지운다.
+ * (실측: 생물학적제제 고시 259쪽 중 45쪽이 이름으로 시작. 「쪽마다 반복되는
+ *  앞부분」으로 알아내려면 6할 문턱을 못 넘어 못 잡는다.) */
+function nameHeadRe(name){
+  /* 파일 이름은 「약사법(법률)(제21109호)(20260621).pdf」꼴이라 괄호 묶음이
+   * 여럿 붙는다. 하나만 떼면 「약사법(법률)(제21109호)」가 남는다 — 다 뗀다. */
+  var nm=String(name||"").replace(/\.(pdf|docx?)$/i,"").trim();
+  for(var k=0;k<6;k++){
+    var m2=nm.replace(/\s*[\[(（][^\[\]()（）]*[\])）]\s*$/,"").trim();
+    if(m2===nm) break; nm=m2;
+  }
+  if(nm.length<4) return null;
+  try{ return new RegExp("^\\s*■?\\s*"+reEsc(nm).replace(/\s+/g,"\\s+")+"\\s+","g"); }
+  catch(e){ return null; }
+}
+
 function cleanPdfText(t,hre){
-  t=nfc(t).replace(hre||runHeadRe(nfc(t))," ").replace(PAGENO_RE,"$1")
-          .replace(PAGENO_END_RE,"").replace(PUA_RE," · ");
+  t=nfc(t);
+  /* 지우개를 여럿 받는다 — 「법제처…센터+이름」과 「이름만」을 함께 쓴다 */
+  var hs=(hre&&hre.length!=null)?hre:[hre||runHeadRe(t)];
+  hs.forEach(function(rx){ if(rx) t=t.replace(rx," "); });
+  t=t.replace(PAGENO_RE,"$1").replace(PAGENO_END_RE,"").replace(PUA_RE," · ");
   t=t.replace(BULLET_M0,"$1· ");
   try{ t=t.replace(BULLET_M," · "); }catch(e){}   /* 구형 사파리는 뒤돌아보기를 못 쓴다 */
   return tidyPunct(bullets(t));

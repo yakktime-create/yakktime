@@ -45,17 +45,26 @@ const KRW        = 1400;   // 원/달러
 // 법 위계 — 이름만 보고 가른다. 같은 내용이면 상위법이 더 센 근거다.
 // 다만 실제 답은 고시·규칙에 적힌 경우가 많으므로 가중치는 작게 준다.
 // 「답이 여기 있나」(45점)를 뒤집을 만큼 주면 엉뚱한 조를 위로 올리게 된다.
-type Kind = { n:number; t:string; re:RegExp; w:number };
-const KINDS: Kind[] = [
-  { n:0, t:"법률",       re:/\(법률\)|법률\s*제\s*\d/,        w:8 },
-  { n:1, t:"시행령",     re:/\(대통령령\)|시행령/,               w:6 },
-  { n:2, t:"시행규칙",   re:/\(총리령\)|\(부령\)|규칙/,          w:5 },
-  { n:3, t:"고시",       re:/고시|규정\s*\(/,                   w:3 },
-  { n:4, t:"지침·안내서", re:/지침|안내서|절차|가이드|해설/,        w:0 },
-];
+type Kind = { n:number; t:string; w:number };
+const K_LAW:  Kind = { n:0, t:"법률",       w:8 };
+const K_DEC:  Kind = { n:1, t:"시행령",     w:6 };
+const K_RULE: Kind = { n:2, t:"시행규칙",   w:5 };
+const K_NOTI: Kind = { n:3, t:"고시",       w:3 };
+const K_GUID: Kind = { n:4, t:"지침·안내서", w:0 };
+const K_ETC:  Kind = { n:5, t:"그 밖",      w:0 };
 function kindOf(name: string) {
-  for (const k of KINDS) if (k.re.test(String(name || ""))) return k;
-  return { n:5, t:"그 밖", re:/$^/, w:0 };
+  const raw = String(name || "");
+  // 꼬리표를 뗀다. 「약사법(법률)(제21109호)」 「…운영지침[공무원 지침서]」
+  const s = raw.replace(/[\[(（].*$/, "").replace(/\.pdf$/i, "").trim();
+  // 지침서는 이름 어디에 적혀 있어도 지침서다(꼬리표 안에 있는 일이 많다)
+  if (/지침|안내서|가이드|해설|매뉴얼|업무처리방안|운영방안/.test(raw)) return K_GUID;
+  if (/절차$|방안$/.test(s)) return K_GUID;
+  // 나머지는 **이름 끝**으로 가른다 — 「약사법」 「…에 관한 법률」 「…규칙」 「…규정」
+  if (/규칙$/.test(s)) return K_RULE;
+  if (/법률$|법$/.test(s)) return K_LAW;
+  if (/시행령$|령$/.test(s)) return K_DEC;
+  if (/고시|규정$|기준$/.test(s)) return K_NOTI;
+  return K_ETC;
 }
 
 // Haiku 4.5 값 ($/100만 토큰). 캐시 읽기 0.1배, 캐시 쓰기 1.25배.
@@ -88,6 +97,22 @@ async function pg(query: string) {
   if (!r.ok) return { data: null as any, error: { message: t.slice(0, 300) } };
   try { return { data: JSON.parse(t), error: null }; }
   catch (_) { return { data: null as any, error: { message: "읽은 값이 JSON 이 아니에요" } }; }
+}
+// PostgREST 는 한 번에 **1,000줄**까지만 준다. limit 을 3000 으로 걸어도 소용없다.
+// 실제로 조문 1,289개 중 972개만 AI 에게 갔고, 뒤쪽 법령은 아예 안 보였다.
+// (그래서 낱말로 찾아낸 조문도 「목록에 없는 번호」라 버려져 보강이 0이 됐다.)
+// 나눠서 끝까지 가져온다. offset 을 쓰므로 order 가 반드시 붙어 있어야 한다.
+const PG_PAGE = 1000;
+async function pgAll(query: string, cap: number) {
+  let out: any[] = [];
+  for (let off = 0; off < cap; off += PG_PAGE) {
+    const r = await pg(query + "&limit=" + PG_PAGE + "&offset=" + off);
+    if (r.error) return r;
+    const rows = r.data || [];
+    out = out.concat(rows);
+    if (rows.length < PG_PAGE) break;
+  }
+  return { data: out, error: null };
 }
 // id 목록 조건. 따옴표로 묶어야 값에 쉼표·괄호가 있어도 안 깨진다.
 const inList = (xs: any[]) =>
@@ -162,7 +187,7 @@ const RULES2 = `${HEAD}
   direct — 질문에 대한 답이 이 조에 들어 있나?
     "답이 여기"   이 조를 펴면 질문의 답이 나온다.
     "조건이 여기" 답 자체는 아니지만 그 답의 조건·범위·수량·기준이 여기 있다.
-    "곁가지"      정의·절차·벌칙처럼 답의 둘레에 있는 규정이다.
+    "말뜻·절차만" 낱말 뜻풀이(정의)나 신청 절차·벌칙만 있고 답은 없다.
 
   need — 민원 답변서를 쓸 때 이 조를 인용해야 하나?
     "인용 필수"   이 조를 안 적으면 답변이 성립하지 않는다.
@@ -193,7 +218,7 @@ const SCHEMA2 = {
         type: "object",
         properties: {
           n:      { type: "integer" },
-          direct: { type: "string", enum: ["답이 여기", "조건이 여기", "곁가지"] },
+          direct: { type: "string", enum: ["답이 여기", "조건이 여기", "말뜻·절차만"] },
           need:   { type: "string", enum: ["인용 필수", "있으면 좋음", "없어도 됨"] },
           sure:   { type: "string", enum: ["근거 찾음", "비슷한 대목만", "못 찾음"] },
           why:    { type: "string" },
@@ -247,9 +272,9 @@ Deno.serve(async (req) => {
     const lawName = new Map<string, string>((laws || []).map((l: any) => [String(l.id), String(l.name)]));
     const lawKind = new Map<string, Kind>((laws || []).map((l: any) => [String(l.id), kindOf(l.name)]));
 
-    const { data: arts, error: ae } = await pg(
-      "law_articles?select=id,law_id,seq,label&order=law_id.asc,seq.asc&limit=" + MAX_ARTS
-      + (only ? "&law_id=" + encodeURIComponent(inList(only)) : ""));
+    const { data: arts, error: ae } = await pgAll(
+      "law_articles?select=id,law_id,seq,label&order=law_id.asc,seq.asc"
+      + (only ? "&law_id=" + encodeURIComponent(inList(only)) : ""), MAX_ARTS);
     if (ae) return json({ error: "조문을 못 읽었어요: " + ae.message });
     if (!arts || !arts.length) {
       return json({ error: only
@@ -300,12 +325,13 @@ Deno.serve(async (req) => {
       .map((n: number) => index[n] ? { n, ...index[n] } : null)
       .filter(Boolean).slice(0, SHORTLIST);
 
-    // --- 낱말로 상위법을 보탠다 -------------------------------------------
-    // 지침서는 제목만 봐도 잘 걸리므로 손대지 않는다. 제목에 안 드러나는
-    // 법률·시행령·시행규칙·고시만 본문으로 뒤진다.
-    const upperIds = (laws || [])
-      .filter((l: any) => (lawKind.get(l.id)?.n ?? 9) <= 3)
-      .map((l: any) => l.id);
+    // --- 낱말로 후보를 보탠다 ---------------------------------------------
+    // 처음엔 상위법만 뒤졌다. 「지침서는 제목만 봐도 걸린다」고 봤기 때문인데,
+    // 1차가 엉뚱한 제목에 꽂히면 **지침서도 통째로 놓친다.** 실제로 그랬다 —
+    // 답은 「바이오의약품 사전 GMP 평가 지침」 붙임 1에 있는데 1차가 「적합판정
+    // 제외 대상」 쪽으로 새서, 상위법에만 친 그물로는 건질 수가 없었다.
+    // 그물은 **전체**에 친다. 대신 낱말이 여러 개 겹치는 조부터 몇 개만.
+    const upperIds = (laws || []).map((l: any) => l.id);
     const words: string[] = (p1.words || [])
       .map((w: any) => String(w || "").trim())
       .filter((w: string) => w.length >= 2 && w.length <= 20)
@@ -322,7 +348,9 @@ Deno.serve(async (req) => {
         (rows || []).forEach((r: any) => score.set(r.id, (score.get(r.id) || 0) + 1));
       }
       const extra = [...score.entries()]
-        .filter(([id]) => !have.has(id) && nOf.has(id))
+        // 낱말 하나만 걸린 것은 잡음이다. 둘 이상 겹칠 때만 —
+        // 다만 낱말이 하나뿐이면 그것이라도 본다.
+        .filter(([id, c]) => !have.has(id) && nOf.has(id) && (words.length < 2 || c >= 2))
         // 여러 낱말이 겹쳐 나오는 조가 먼저다. 같으면 위계가 높은 쪽부터.
         .sort((a, b) => (b[1] - a[1])
           || ((lawKind.get(index[nOf.get(a[0])!].law_id)?.n ?? 9)
@@ -342,8 +370,8 @@ Deno.serve(async (req) => {
     }
 
     // --- 후보의 본문을 읽어 온다 (2차에게 먹이고, 화면 미리보기로도 쓴다) ---
-    const { data: bodies } = await pg("law_articles?select=id,content&id="
-      + encodeURIComponent(inList(cand.map((c: any) => c.id))));
+    const { data: bodies } = await pg("law_articles?select=id,content&limit=" + PG_PAGE
+      + "&id=" + encodeURIComponent(inList(cand.map((c: any) => c.id))));
     const bodyOf = new Map<string, string>((bodies || []).map((b: any) => [String(b.id), String(b.content || "")]));
     const flat = (t: string) => t.replace(/\s+/g, " ").trim();
 
@@ -374,7 +402,10 @@ Deno.serve(async (req) => {
     // 죄다 90점대가 나오고 87 과 84 의 차이에 아무 뜻이 없다.
     // 합계는 화면에 숫자로 내보내지 않는다 — 잰 값이 아닌데 잰 것처럼 보인다.
     // 다섯 등급으로 바꿔 보여주고, 합계는 같은 등급 안의 순서에만 쓴다.
-    const W_DIRECT: Record<string, number> = { "답이 여기": 45, "조건이 여기": 30, "곁가지": 12 };
+    // 「곁가지」는 옛 이름이다. 뜻을 알려면 설명을 읽어야 하는 낱말이라 바꿨는데,
+    // 옛 이름으로 오는 답이 있어도 점수가 튀지 않게 둘 다 받아 둔다.
+    const W_DIRECT: Record<string, number> =
+      { "답이 여기": 45, "조건이 여기": 30, "말뜻·절차만": 12, "곁가지": 12 };
     const W_NEED:   Record<string, number> = { "인용 필수": 30, "있으면 좋음": 18, "없어도 됨": 6 };
     const W_SURE:   Record<string, number> = { "근거 찾음": 25, "비슷한 대목만": 15, "못 찾음": 5 };
     // 위계 가산(최대 8점)만큼 눈금도 올려 잡는다 — 안 그러면 법률이 죄다 「매우 높음」이 된다

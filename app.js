@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v68";
+var APP_VER="v69";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3502,7 +3502,12 @@ function renderLawResults(){
       + '<div class="law-hit-body">'
       +   '<div class="law-meta">'
       +     '<span class="law-art">'+esc(g.art)+'</span>'
-      +     '<span class="law-page">'+(g.page===g.pageEnd?g.page+'쪽':g.page+'~'+g.pageEnd+'쪽')+'</span>'
+      /* 지침서는 조가 없어 라벨이 「22쪽」이다. 그 옆에 또 「22쪽」을 붙이면
+       * 같은 말이 두 번이다. 라벨이 이미 그 쪽을 말하고 있으면 생략한다. */
+      +     (function(){
+              var pg=(g.page===g.pageEnd?g.page+'쪽':g.page+'~'+g.pageEnd+'쪽');
+              return String(g.art||"").indexOf(pg)===0?'':'<span class="law-page">'+pg+'</span>';
+            })()
       +     (g.total>1?'<span class="law-n">'+g.total+'건</span>':'')
       +     '<span class="law-acts">'
       +       '<button class="link-btn law-go-art" data-act="law-art" data-art-id="'+g.artId+'" data-id="'+g.lawId+'">'+esc(artShort(g.art))+' 전체 보기</button>'
@@ -3510,11 +3515,16 @@ function renderLawResults(){
       +       '<button class="link-btn quiet-link" data-act="law-pdf" data-id="'+g.lawId+'" data-page="'+g.page+'">PDF ↗</button>'
       +     '</span>'
       +   '</div>'
-      +   list.map(function(h){
-            return '<div class="law-snip">'
-              + (h.where?'<span class="law-where">'+esc(h.where)+'</span>':'')
-              + lawSegHtml(h.text,lawTermList,0)+'</div>';
-          }).join("")
+      /* 같은 조 안에서 여러 군데가 걸리면 「7호 다목」이 줄마다 반복된다.
+       * 바뀔 때만 적는다 — 어디가 달라졌는지가 그때 보인다. */
+      +   (function(){ var prev=null;
+            return list.map(function(h){
+              var w=(h.where&&h.where!==prev)?'<span class="law-where">'+esc(h.where)+'</span>':'';
+              if(h.where) prev=h.where;
+              return '<div class="law-snip'+(w?'':' law-snip-same')+'">'
+                + w + lawSegHtml(h.text,lawTermList,0)+'</div>';
+            }).join("");
+          })()
       +   (g.snips.length>SHOW
             ? '<button class="link-btn law-more-btn" data-act="law-expand" data-key="'+esc(g.key)+'">'
               +(open?"접기":"이 조에서 "+(g.snips.length-SHOW)+"건 더 보기")+'</button>'

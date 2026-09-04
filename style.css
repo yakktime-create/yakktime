@@ -1108,3 +1108,5 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 /* 같은 법령의 더 새 판이 있는 줄 — 지워야 할 것이므로 눈에 띄되 요란하지 않게 */
 .law-old-tag{flex:none;font-size:var(--fs-2xs);font-weight:800;color:var(--brick);
   background:var(--brick-soft);border-radius:var(--r-full);padding:1px 8px;}
+/* 앞줄과 같은 자리에서 나온 것 — 「7호 다목」을 되풀이하지 않는 대신 살짝 들여 쓴다 */
+.law-snip.law-snip-same{padding-left:var(--sp-4);}

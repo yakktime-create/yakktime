@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v76";
+var APP_VER="v77";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1635,7 +1635,7 @@ document.getElementById("file").addEventListener("change",function(e){
 /* ========== 법령 검색 (1단계) ==========
  * PDF → pdf.js로 쪽마다 텍스트 추출 → law_pages(쪽) + law_articles(조문) 저장.
  * 검색은 law_articles를 본다 — 한 줄이 곧 조 하나라 결과 묶기·조 전체 보기가
- * 추측 없이 정확해진다. law_pages는 "이 쪽만 보기"와 PDF 쪽 이동에 쓴다. */
+ * 추측 없이 정확해진다. law_pages는 "쪽 그대로 보기"와 PDF 쪽 이동에 쓴다. */
 
 var lawQuery="", lawTermList=[], lawHits=null, lawSel={}, lawOpen={}, lawBusy=false, lawSearching=false, lawListOpen=false;
 /* 처음 쓰는 사람에겐 펼쳐서 보여주고, 한 번 접으면 그 뒤로는 접힌 채로 둔다 */
@@ -2243,8 +2243,39 @@ function lawReindex(id){
  * 앞이 한글·문장부호이고 뒤에 한글이 두 자 이상 이어질 때만 바꾼다.
  * 문서 열 개로 확인 — 글머리표 30개를 모두 잡고 단위는 하나도 안 건드린다. */
 var BULLET_M=/(?<=[가-힣.)\]」』\-–—])\s+m\s+(?=[가-힣]{2})/g;
+
+/* 심볼 글꼴의 글머리표는 유니코드 「사용자 영역」(U+E000~U+F8FF)으로 뽑히기도 한다.
+ * 글꼴이 없으면 가로줄이 쌓인 네모(▤)처럼 보이는데, 문서 열 개에 75자 들어 있었다.
+ * 실제로 쓰인 자리는 두 가지뿐이라 둘 다 가운뎃점이 맞다:
+ *   「 유전자변형생물체의 취급」(글머리표) · 「위  수탁」(사이점) */
+var PUA_RE=/[\uE000-\uF8FF]/g;
+
+/* 국가법령정보센터 PDF는 쪽마다 「법제처 N 국가법령정보센터 + 법령 이름」이 찍힌다.
+ * 쪽을 이어 붙이면 이 머리글이 문장 한복판에 끼어서, 「…의료기기에 해당하는」이
+ * 「법제처 2 국가법령정보센터 첨단재생의료…법률 기기에 해당하는」으로 읽힌다. */
+var LAWHEAD_RE=/법제처\s*\d+\s*국가법령정보센터\s*/g;
+function reEsc(t){ return String(t).replace(/[.*+?^${}()|[\]\\]/g,"\\$&"); }
+function stripRunHead(t){
+  var ms=[], m; LAWHEAD_RE.lastIndex=0;
+  while((m=LAWHEAD_RE.exec(t))!==null) ms.push(m.index+m[0].length);
+  if(ms.length>=2){
+    /* 머리글 뒤 법령 이름은 문서마다 다르다. 미리 알 필요 없이 「머리글 다음에
+     * 오는 글의 공통 앞부분」으로 알아낸다 — 쪽마다 똑같이 찍히기 때문이다. */
+    var tail=ms.map(function(i){ return t.slice(i,i+80); }), n=0, same=true;
+    while(same&&n<80){
+      var c=tail[0].charAt(n); if(!c) break;
+      for(var k=1;k<tail.length;k++){ if(tail[k].charAt(n)!==c){ same=false; break; } }
+      if(same) n++;
+    }
+    var nm=tail[0].slice(0,n).replace(/\S*$/,"").trim();   /* 낱말 한복판에서 끊지 않는다 */
+    if(nm.length>=4)
+      return t.replace(new RegExp(LAWHEAD_RE.source+reEsc(nm).replace(/\s+/g,"\\s+")+"\\s*","g")," ");
+  }
+  return t.replace(LAWHEAD_RE," ");
+}
+
 function cleanPdfText(t){
-  t=nfc(t);
+  t=stripRunHead(nfc(t)).replace(PUA_RE," · ");
   try{ return t.replace(BULLET_M," · "); }catch(e){ return t; }   /* 구형 사파리는 뒤돌아보기를 못 쓴다 */
 }
 
@@ -2581,9 +2612,18 @@ function buildLawHits(rows,terms){
     var g={ key:"a"+r.id, artId:r.id, lawId:r.law_id, art:r.label,
             page:r.page, pageEnd:r.page_end||r.page,
             total:total, spots:wins.length, snips:[] };
+    /* 복사·저장에 쓸 「항 전문」도 같이 만들어 둔다. 화면은 짧은 발췌가 편하지만
+     * 복사한 글은 문장이 잘려 있으면 그대로 쓸 수 없다. */
+    var pts=lawBreaks(c), seen={};
+    pts.text=c;                      /* 문장 경계 폴백에서 원문을 본다 */
     wins.forEach(function(w){
       var a=articleAt(arts,c,w.at,r.label,skips);
-      g.snips.push({ where:(a&&a.detail)||"",
+      var rg=lawBlockRange(pts,c.length,w.at), full=null;
+      if(rg){
+        var bk=rg.st+"-"+rg.en;
+        full=seen[bk]?"":(seen[bk]=1,lawPlain(c.slice(rg.st,rg.en)));
+      }
+      g.snips.push({ where:(a&&a.detail)||"", full:full,
         text:(w.st>0?"…":"")+c.slice(w.st,w.en)+(w.en<c.length?"…":"") });
     });
     out.push(g);
@@ -3008,6 +3048,59 @@ function lawBreaks(text){
   return keep;
 }
 
+/* ---------- 복사·저장에 담을 「항 전문」 ----------
+ * 발췌만 복사하면 「…에 관하여 이 법에서 규정한 것을 제외하고...」처럼 잘려서
+ * 민원 답변에 그대로 붙일 수 없다. 검색어가 든 항(①)을 통째로 담고,
+ * 검색어가 없는 항은 담지 않는다 — 없는 내용까지 딸려오면 오히려 방해다.
+ * 별표처럼 항이 없는 글은 호(1.) · 목(가.) 순으로 내려가며 잡는다. */
+var BLOCK_MAX=2600;              /* 이보다 긴 덩어리는 한 단계 잘게 */
+function lawBlockRange(pts,len,at){
+  for(var lv=1;lv<=3;lv++){
+    var any=false, st=0, en=len;
+    for(var i=0;i<pts.length;i++){
+      if(pts[i].lv>lv) continue;
+      any=true;
+      if(pts[i].at<=at) st=pts[i].at; else { en=pts[i].at; break; }
+    }
+    if(any&&en-st<=BLOCK_MAX) return {st:st,en:en};
+  }
+  return sentRange(pts.text||null,at);
+}
+/* 지침서처럼 항·호·목이 없는 글 — 그래도 문장 한복판에서 끊기면 안 되니
+ * 앞뒤 문장 경계까지는 넓힌다. 문서 열 개 중 지침서 두 개가 여기로 온다. */
+var SENT_PAD=450;
+function sentRange(text,at){
+  if(!text) return null;
+  function edge(i,dir){
+    var lim=dir<0?Math.max(0,at-SENT_PAD):Math.min(text.length,at+SENT_PAD);
+    for(var k=i;dir<0?k>lim:k<lim;k+=dir){
+      var c=text.charAt(k);
+      if(c==="\n") return dir<0?k+1:k;
+      if(c==="."&&/\s/.test(text.charAt(k+1)||" ")) return dir<0?k+2:k+1;
+    }
+    return lim;
+  }
+  return {st:edge(at,-1),en:edge(at,1)};
+}
+
+/* 화면의 「원문 보기」와 같은 모양의 평문. 글자는 하나도 바꾸지 않고
+ * 줄바꿈과 들여쓰기만 넣는다 — 붙여 넣으면 층이 그대로 보인다. */
+var LP_PAD=["","    ","      ","        ","          "];
+function lawPlain(text){
+  var pts=lawBreaks(text), lines=[], prev=0;
+  function push(to,lv){
+    var seg=text.slice(prev,to).replace(/\s+/g," ").trim();
+    if(seg) lines.push(LP_PAD[Math.min(lv,4)]+seg);
+  }
+  if(!pts.length){ push(text.length,1); return lines.join("\n"); }
+  if(pts[0].at>0) push(pts[0].at,1);
+  pts.forEach(function(p,i){
+    prev=p.at;
+    push(i+1<pts.length?pts[i+1].at:text.length,p.lv);
+  });
+  return lines.join("\n");
+}
+
 /* 한 토막을 HTML로 — 검색어 형광펜, <개정…> 같은 부가 표시는 흐리게 */
 function lawSegHtml(seg,q,artLen){   /* q: 낱말 하나 또는 배열 */
   var ranges=[];
@@ -3161,7 +3254,7 @@ function renderLawModal(){
       + '<button class="btn quiet sm" data-act="lv-hit-prev" title="이전 검색어">‹</button>'
       + '<span class="lv-hit-n" id="lv-hit-n">–</span>'
       + '<button class="btn quiet sm" data-act="lv-hit-next" title="다음 검색어">›</button>'
-      + '<button class="link-btn" data-act="lv-page">이 쪽만 보기</button>'
+      + '<button class="link-btn" data-act="lv-page">쪽 그대로 보기</button>'
       + '<button class="link-btn lv-pdf" data-act="lv-pdf">PDF 원문 열기 ↗</button>'
       + '</div>';
   } else {
@@ -3234,7 +3327,9 @@ function lawExportText(){
     if(nm!==cur){ cur=nm; lines.push("■ "+nm); }
     lines.push("  ["+(g.art||"")+" · "+(g.page===g.pageEnd?g.page+"쪽":g.page+"~"+g.pageEnd+"쪽")+"]");
     g.snips.forEach(function(h){
-      lines.push("   - "+(h.where?"("+h.where+") ":"")+h.text);
+      if(h.full==="") return;                       /* 같은 항에서 또 걸린 것 */
+      if(h.full){ lines.push(h.full); return; }     /* 항 전문 */
+      lines.push("    "+(h.where?"("+h.where+") ":"")+h.text);
     });
     lines.push("");
   });
@@ -3321,9 +3416,9 @@ function lawHelpHtml(){
     +     '<li><b>카드 하나 = 조 하나</b>예요. 한 조 안에서 검색어가 열 번 나와도 카드는 하나입니다.</li>'
     +     '<li>조각 앞의 <span class="law-help-chip">2호 나목</span> 같은 표시는 '
     +       '<b>그 조 안에서 몇 항·몇 호·몇 목인지</b>예요.</li>'
-    +     '<li><b>「제N조 전체 보기」</b> — 그 조 전체를 읽어요. 조 하나가 통째로 나옵니다.</li>'
-    +     '<li><b>「이 쪽만」</b> — 조가 아니라 <b>그 쪽</b>을 봐요. 앞뒤 쪽으로 넘길 수 있어요.</li>'
-    +     '<li><b>「PDF ↗」</b> — 원본 PDF를 그 쪽으로 열어요. <b>표를 볼 때 꼭 쓰세요.</b></li>'
+    +     '<li><b>카드를 누르면</b> 그 조 전체가 열려요. 조 하나가 통째로 나옵니다.</li>'
+    +     '<li>열린 창 아래 <b>「쪽 그대로 보기」</b> — 조로 묶은 글이 아니라 <b>PDF의 그 쪽</b>을 그대로 봐요. 앞뒤 쪽으로 넘길 수 있어요.</li>'
+    +     '<li>열린 창 아래 <b>「PDF 원문 열기 ↗」</b> — 원본 PDF를 그 쪽으로 열어요. <b>표를 볼 때 꼭 쓰세요.</b></li>'
     +     '<li>왼쪽 <b>체크박스</b>로 고른 뒤 <b>복사</b>·<b>텍스트로 저장</b>하면 모아서 가져갑니다.</li>'
     +   '</ul></div>'
 
@@ -3486,9 +3581,11 @@ function renderLaws(){
       if(kd.t!==cur){ cur=kd.t;
         var kn=lawSorted().filter(function(x){ return lawKindOf(x).n===kd.n; });
         var kOn=kn.length&&kn.every(function(x){ return lawOnly[x.id]; });
+        /* 개수는 뺐다. 이름 옆에 붙이면 이름보다 튀고, 줄을 맞추려 칸을 넓히면
+         * 이름과 멀어진다. 세어야 할 일이 있으면 목록을 보면 된다. */
         head='<button class="law-kind g'+kd.n+(kOn?" on":"")+'" data-act="law-only-kind" data-id="'+kd.n+'"'
            + ' title="이 묶음만 고르기"><span>'+esc(kd.t)+'</span>'
-           + '<span class="law-kind-n">'+kn.length+'</span></button>'; }
+           + '<span class="law-kind-hint">'+(kOn?"이 묶음만 보는 중":"")+'</span></button>'; }
       return head+'<div class="law-row'+(onlyOn?" only":"")+'">'
         /* 하나도 안 고르면 전부 본다. 「고른 것만」은 좁힐 때만 쓰는 장치다. */
         + '<label class="law-only"><input type="checkbox" data-act="law-only" data-id="'+l.id+'"'+(onlyOn?" checked":"")+' title="이 법령에서만 찾기" /></label>'
@@ -3594,7 +3691,11 @@ function renderLawResults(){
     var open=!!lawOpen[g.key], list=open?g.snips:g.snips.slice(0,SHOW);
     body+='<div class="law-hit'+(lawSel[g.key]?" on":"")+'">'
       + '<label class="law-pick"><input type="checkbox" class="law-check" data-act="law-pick" data-key="'+esc(g.key)+'"'+(lawSel[g.key]?" checked":"")+' /></label>'
-      + '<div class="law-hit-body">'
+      /* 카드 자체가 「조 전체 보기」다. 카드마다 버튼을 셋씩 두면 여덟 카드에
+       * 버튼이 스물넷이라 화면이 어지럽고, 좁은 화면에선 줄까지 밀렸다.
+       * 「쪽 그대로 보기」·「PDF 원문」은 열린 창 아래에 이미 있으므로
+       * 누를 것만 줄고 할 수 있는 일은 그대로다. */
+      + '<div class="law-hit-body" data-act="law-art" data-art-id="'+g.artId+'" data-id="'+g.lawId+'">'
       +   '<div class="law-meta">'
       +     '<span class="law-art">'+esc(g.art)+'</span>'
       +     (lawIsFuture(g.art)?'<span class="law-soon">아직 시행 전</span>':'')
@@ -3605,11 +3706,7 @@ function renderLawResults(){
               return String(g.art||"").indexOf(pg)===0?'':'<span class="law-page">'+pg+'</span>';
             })()
       +     (g.total>1?'<span class="law-n">'+g.total+'건</span>':'')
-      +     '<span class="law-acts">'
-      +       '<button class="link-btn law-go-art" data-act="law-art" data-art-id="'+g.artId+'" data-id="'+g.lawId+'">'+esc(artShort(g.art))+' 전체 보기</button>'
-      +       '<button class="link-btn" data-act="law-view" data-id="'+g.lawId+'" data-page="'+g.page+'">이 쪽만</button>'
-      +       '<button class="link-btn quiet-link" data-act="law-pdf" data-id="'+g.lawId+'" data-page="'+g.page+'">PDF ↗</button>'
-      +     '</span>'
+      +     '<span class="law-open" aria-hidden="true">›</span>'
       +   '</div>'
       /* 같은 조 안에서 여러 군데가 걸리면 「7호 다목」이 줄마다 반복된다.
        * 바뀔 때만 적는다 — 어디가 달라졌는지가 그때 보인다. */
@@ -3629,7 +3726,7 @@ function renderLawResults(){
   });
 
   el.innerHTML=head+'<div class="law-hits">'+body+'</div>'
-    + '<p class="law-note">같은 조에서 나온 것은 한 카드로 묶었어요. 원문은 새 창에서 열리며, 기기에 따라 해당 쪽으로 바로 넘어가지 않을 수 있어요.</p>';
+    + '<p class="law-note">같은 조에서 나온 것은 한 카드로 묶었어요. <b>카드를 누르면 그 조 전문이 열리고</b>, 그 창에서 「쪽 그대로 보기」·「PDF 원문」으로 갈 수 있어요.</p>';
 }
 
 /* 쪽 보기 창은 Esc로 닫는다 */
@@ -3658,6 +3755,12 @@ document.getElementById("app").addEventListener("click",function(e){
   }
   if(!el) return;
   var act=el.getAttribute("data-act"), id=el.getAttribute("data-id");
+  /* 카드 전체가 누르는 자리가 되면서, 발췌 글자를 끌어 고르기만 해도 창이 열렸다.
+   * 글자를 고른 채 손을 뗀 것이면 열지 않는다. */
+  if(act==="law-art"&&el.className.indexOf("law-hit-body")>=0){
+    var sel=window.getSelection&&window.getSelection();
+    if(sel&&String(sel).trim().length>1) return;
+  }
   switch(act){
     case "tab": active=id; closeForms(); render(); break;
     case "s-add": addSchedule(id,el.getAttribute("data-input")); break;

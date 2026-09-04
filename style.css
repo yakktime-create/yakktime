@@ -580,14 +580,20 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
 /* 결과 목록 */
 /* 법령 이름은 굴려도 위에 붙어 있는다 — 「별표 8」이 어느 법의 별표인지
    카드만 보고는 알 수 없기 때문이다. 위계 색도 함께 얹는다. */
-.law-group{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:var(--sp-2);}
-.law-group-kind{margin-left:auto;font-size:var(--fs-2xs);font-weight:800;opacity:.75;}
+/* 한 규칙으로 합쳐 둔다. 예전에 .law-group 을 두 번 적어서 뒤쪽의
+   display:inline-block 이 앞쪽의 display:flex 를 덮었고, 그 바람에
+   gap 과 margin-left:auto 가 죽어 「…에 관한 규칙시행규칙」처럼
+   이름과 종류가 붙어 나왔다. */
+.law-group{position:sticky;top:0;z-index:3;display:flex;align-items:baseline;gap:var(--sp-3);
+  font-size:var(--fs-sm);font-weight:700;color:var(--blue-deep);background:var(--blue-soft);
+  border-radius:var(--r-sm);padding:7px 12px;margin:14px 0 8px;}
+/* 종류는 오른쪽 끝에, 이름보다 한 단계 조용하게 */
+.law-group-kind{margin-left:auto;flex-shrink:0;font-size:var(--fs-2xs);font-weight:650;
+  letter-spacing:.02em;opacity:.6;}
 .law-group.g0{border-left:3px solid var(--accent);}
 .law-group.g1,.law-group.g2{border-left:3px solid #6F9A8B;}
 .law-group.g3{border-left:3px solid var(--blue);}
 .law-group.g4{border-left:3px solid var(--brass);}
-.law-group{font-size:var(--fs-sm);font-weight:700;color:var(--blue-deep);background:var(--blue-soft);
-  border-radius:var(--r-sm);padding:6px 11px;margin:14px 0 8px;display:inline-block;}
 .law-hits{display:flex;flex-direction:column;}
 .law-hit{display:flex;gap:var(--sp-3);background:var(--surface);border:1px solid var(--line);
   border-radius:var(--r-md);padding:13px 14px;margin-bottom:8px;
@@ -675,9 +681,11 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
   .lv-foot .btn{flex:0 0 auto;}
 }
 
-/* 조문 표시 */
+/* 조문 표시 — 라벨이 길면 「전체 보기 · 이 쪽만 · PDF」가 다음 줄로 밀려
+   오른쪽에 홀로 뜬다. 라벨 쪽이 줄어들게 하고 버튼 묶음은 안 줄어들게 둔다. */
 .law-art{font-size:var(--fs-xs);font-weight:700;color:#6B5518;background:#F7EFDF;
-  border-radius:var(--r-sm);padding:3px 9px;white-space:nowrap;}
+  border-radius:var(--r-sm);padding:3px 9px;white-space:nowrap;
+  flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;}
 .law-hit.on .law-art{background:#fff;}
 .lv-arts{flex-shrink:0;padding:9px 16px;border-bottom:1px solid var(--line);
   background:var(--paper);font-size:var(--fs-sm);font-weight:650;color:#6B5518;
@@ -697,11 +705,15 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
 /* 조 전체 보기 */
 .lv-text mark.on{background:#FFC845;box-shadow:0 0 0 2px #E0A21B;}
 .lv-hit-n{font-size:var(--fs-sm);font-weight:650;color:var(--muted);min-width:46px;text-align:center;}
-.law-acts{display:inline-flex;align-items:center;gap:var(--sp-2);margin-left:auto;flex-wrap:wrap;}
+/* 카드 자체가 「조 전체 보기」 버튼이다. 오른쪽 끝의 홑화살표만이
+   눌린다는 신호다 — 버튼 셋을 늘어놓지 않아도 알아본다. */
+.law-hit-body{cursor:pointer;}
+.law-open{margin-left:auto;flex-shrink:0;font-size:var(--fs-lg);font-weight:400;
+  color:var(--muted);opacity:.7;line-height:1;padding:0 2px;transition:color .15s,opacity .15s;}
+.law-hit.on .law-open{color:var(--blue);opacity:1;}
 .law-go-art{font-weight:750;color:var(--blue-deep)!important;}
 @media (max-width:1024px){
   .lv-foot{flex-wrap:wrap;}
-  .law-acts{margin-left:0;width:100%;padding-top:2px;}
 }
 
 /* 조문이 아직 안 만들어진 법령 안내 */
@@ -1018,18 +1030,14 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .law-kind:active{background:var(--accent-soft);}
 .law-kind.on{background:var(--accent-soft);}
 .law-kind.on span:first-of-type{color:var(--accent);}
-/* 개수는 이름 바로 옆에. 오른쪽 끝에 두면 굴릴 때 이름과 900px 떨어진 숫자가
-   따로 떠 있어 무엇의 개수인지 안 읽힌다. */
-.law-kind-n{font-size:var(--fs-2xs);font-weight:700;color:var(--muted);
-  background:var(--surface);border-radius:var(--r-full);padding:1px 7px;}
-.law-kind.on .law-kind-n{color:var(--accent);background:#fff;}
+/* 고른 묶음에만 한 마디. 개수를 적었더니 이름보다 숫자가 먼저 읽혔다. */
+.law-kind-hint{margin-left:auto;font-size:var(--fs-2xs);font-weight:700;color:var(--accent);}
 .law-head-sep{color:var(--line);}
 .law-kind span{display:inline-flex;align-items:center;gap:var(--sp-2);
   font-size:var(--fs-xs);font-weight:800;color:var(--ink);letter-spacing:.04em;}
 /* 색 막대는 제목 앞에만 — 오른쪽 개수에도 붙으면 줄이 어지럽다 */
 /* 이름 칸에 최소 너비를 줘서 개수가 세로로 줄을 선다 —
    「고시 2」「시행규칙 2」「지침·안내서 5」는 글자 수가 달라 그냥 붙이면 어긋난다 */
-.law-kind span:first-of-type{min-width:104px;}
 .law-kind span:first-of-type::before{content:"";width:3px;height:12px;border-radius:2px;background:var(--muted);}
 .law-kind.g0 span:first-of-type::before{background:var(--accent);}
 .law-kind.g1 span:first-of-type::before,.law-kind.g2 span:first-of-type::before{background:#6F9A8B;}
@@ -1117,6 +1125,7 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
   .law-toggle:hover{color:var(--ink);}
   .law-row:hover .doc-del{opacity:.75;}
   .law-hit:hover{border-color:#CFD8D3;box-shadow:var(--sh-2);}
+  .law-hit:hover .law-open{opacity:1;}
   .lv-x:hover{background:var(--paper);color:var(--ink);}
   .quiet-link:hover{color:var(--blue-deep)!important;}
   /* --- 민원 자료: 보관 --- */

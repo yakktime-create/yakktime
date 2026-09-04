@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v63";
+var APP_VER="v64";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1233,7 +1233,7 @@ function refUpload(f){
         .then(function(){ if(oldPath&&oldPath!==path) sb.storage.from("files").remove([oldPath]); })
         .then(function(){ return saveRefParts(target,parts); });
     }
-    var item={name:f.name.replace(/\.(docx|pdf)$/i,""),filePath:path,fileName:f.name,
+    var item={name:nfc(f.name).replace(/\.(docx|pdf)$/i,""),filePath:path,fileName:f.name,
               chars:chars,parts:parts.length};
     return dbInsert("refs",item).then(function(row){
       if(!row) throw new Error("자료 정보를 저장하지 못했어요.");
@@ -1744,12 +1744,12 @@ function lawUpload(f){
       return pages;
     });
   }).then(function(pages){
-    var item={name:f.name.replace(/\.pdf$/i,""),filePath:path,fileName:f.name,pages:pages.length};
+    var item={name:nfc(f.name).replace(/\.pdf$/i,""),filePath:path,fileName:f.name,pages:pages.length};
     return dbInsert("laws",item).then(function(row){
       if(!row) throw new Error("법령 정보를 저장하지 못했어요.");
       S.laws.unshift(item);
       return saveLawPages(row.id,pages).then(function(){
-        return saveLawArticles(row.id,buildLawArticles(pages),item);
+        return saveLawArticles(row.id,buildLawArticles(pages,item.name),item);
       });
     });
   }).then(function(){
@@ -1822,7 +1822,26 @@ var TBL_CHUNK=3000;      /* 이 길이를 목표로 나눈다 */
 var TBL_SPLIT_MIN=8000;  /* 이보다 길고 소제목이 없으면 나눈다 */
 var SOON_RE=/\[\s*시행일\s*:\s*([^\]]{1,24})\]/;
 
-function buildLawArticles(pages){
+/* 지침서 한 쪽의 첫머리에서 제목을 뽑는다. 「20쪽」만 있으면 검색 결과에서
+ * 어느 대목인지 알 수 없다. 「20쪽 · IV. 세포은행 시스템」이면 바로 보인다.
+ * 문장(마침표로 끝나는 글)은 제목이 아니므로 버린다. */
+function pageTitle(t){
+  var s=nfc(t).replace(/\s+/g," ").replace(RUNHEAD_RE,"").trim();
+  if(s.length<20) return "";
+  var m=/^((?:[IVX]{1,4}|[0-9]{1,2})\s*[.)]?\s*)?([가-힣A-Za-z][^.。]{1,20})/.exec(s);
+  if(!m) return "";
+  var ti=((m[1]||"")+m[2]).replace(/\s+/g," ")
+    .replace(/[\[\(<「『·ᆞㆍ,\-]+$/,"").trim();   /* 끝에 매달린 여는 괄호·구분점을 턴다 */
+  /* 조사로 끝나면 문장 도막이다 */
+  if(/(은|는|이|가|을|를|에|의|와|과|로|으로|및)$/.test(ti)) return "";
+  return ti.length>24?ti.slice(0,24):ti;
+}
+
+function buildLawArticles(pages,docName){
+  /* 지침서·안내서는 남의 별표를 본문에서 인용할 뿐, 자기 별표를 갖지 않는다.
+   * 그걸 머리말로 잡으면 「별표 1(통칙에 따르면 세포은행은 …)」처럼 본문이
+   * 제목으로 올라온다. 아예 안 잡고 쪽 단위로 간다. */
+  var noTbl=(lawKind(docName).n>=4);
   var buf=[], marks=[], pos=0;
   pages.forEach(function(p){
     var t=(p.content||"").trim();
@@ -1841,7 +1860,8 @@ function buildLawArticles(pages){
     }
     return ans;
   }
-  var heads=findArticles(full,20000), out=[];
+  var heads=findArticles(full,20000).filter(function(h){ return !(noTbl&&h.table); });
+  var out=[];
   function addRow(lab,num,text,a,b){
     if(text.length<10) return;
     if(text.length>LAW_ART_SAVE_MAX) text=text.slice(0,LAW_ART_SAVE_MAX);
@@ -1937,7 +1957,8 @@ function buildLawArticles(pages){
     pages.forEach(function(p){
       var t=(p.content||"").trim();
       if(!t) return;
-      out.push({ seq:out.length+1, label:p.page+"쪽", num:p.page+"쪽",
+      var ti=pageTitle(t);
+      out.push({ seq:out.length+1, label:p.page+"쪽"+(ti?" · "+ti:""), num:p.page+"쪽",
                  page:p.page, page_end:p.page, content:t });
     });
   }
@@ -1998,7 +2019,7 @@ function lawReindex(id){
       var a=findArticles(r.content||"");
       if(a.length) carry=a[a.length-1].label;
     });
-    var arts=buildLawArticles(rows);
+    var arts=buildLawArticles(rows,l&&l.name);
     if(!arts.length) throw new Error("조문을 하나도 찾지 못했어요.");
     showToast("조문 "+arts.length+"개를 찾았어요");
     var i=0;
@@ -2026,6 +2047,17 @@ function lawReindex(id){
 /* 법 위계 — 이름만 보고 가른다. 법제처 PDF는 이름에 종류가 들어 있고
  * (법률)(총리령)(식품의약품안전처고시), 지침서는 [공무원 지침서] 꼴이다.
  * 목록 순서와 AI 근거 가중치에 함께 쓴다. 위가 셀수록 숫자가 작다. */
+/* 맥·아이패드에서 만든 파일 이름은 한글이 「자모가 분리된 형태(NFD)」다.
+ * ㅇ+ㅑ+ㄱ 처럼 쪼개져 있어서 화면엔 똑같이 「약사법」으로 보이지만,
+ * 글자 비교로는 하나도 안 맞는다. 실제로 법 위계 분류가 전부 「그 밖」으로
+ * 떨어졌고, 파일 여섯 개를 뜯어보니 전부 NFD였다.
+ * 붙여넣는 민원 글도 마찬가지라 검색에도 같은 함정이 있다. 들어오는 글자는
+ * 한 군데서 모아 NFC 로 맞춘다. */
+function nfc(t){
+  t=String(t==null?"":t);
+  try{ return t.normalize?t.normalize("NFC"):t; }catch(e){ return t; }
+}
+
 var LAW_KINDS=[
   {n:0,t:"법률",   re:/\(법률\)|법률\s*제\s*\d|「[^」]*법」\s*$/},
   {n:1,t:"시행령", re:/\(대통령령\)|시행령/},
@@ -2034,7 +2066,7 @@ var LAW_KINDS=[
   {n:4,t:"지침·안내서",re:/지침|안내서|절차|가이드|해설/}
 ];
 function lawKind(name){
-  var s=String(name||"");
+  var s=nfc(name);
   for(var i=0;i<LAW_KINDS.length;i++) if(LAW_KINDS[i].re.test(s)) return LAW_KINDS[i];
   return {n:5,t:"그 밖"};
 }
@@ -2061,6 +2093,10 @@ function lawBuildAll(all){
   function next(){
     if(k>=todo.length){ fin(); return; }
     var l=todo[k++];
+    /* 아이패드에서 올린 이름은 NFD 라 분류가 안 된다. 이 참에 고쳐 둔다. */
+    if(l.name&&nfc(l.name)!==l.name){
+      l.name=nfc(l.name); dbUpdate("laws",l.id,{name:l.name});
+    }
     showToast("("+k+"/"+todo.length+") "+l.name);
     lawReindexOne(l).then(function(){ ok++; next(); },function(err){
       showToast(l.name+" — "+((err&&err.message)||"실패"),true);
@@ -2076,7 +2112,7 @@ function lawReindexOne(l){
     if(res.error) throw new Error(res.error.message);
     var rows=res.data||[];
     if(!rows.length) throw new Error("쪽 없음");
-    var arts=buildLawArticles(rows);
+    var arts=buildLawArticles(rows,l&&l.name);
     if(!arts.length) throw new Error("조문 없음");
     return saveLawArticles(l.id,arts,l);
   });
@@ -2118,7 +2154,7 @@ function lawOnlyLabel(){
 }
 
 function lawAskRun(){
-  var q=(val("law-q")||"").trim();
+  var q=nfc(val("law-q")||"").trim();
   if(q.length<5){ showToast("질문을 문장으로 적어주세요. 민원 글을 그대로 붙여넣어도 돼요."); return; }
   if(!S.laws.length){ showToast("먼저 법령 PDF를 올려주세요."); return; }
   lawQuery=q; lawHits=null; lawSel={}; lawOpen={};
@@ -2265,7 +2301,7 @@ function lawQBox(q){
 }
 
 function lawSearch(){
-  var q=(val("law-q")||"").trim();
+  var q=nfc(val("law-q")||"").trim();
   lawQuery=q; lawSel={}; lawHits=null; lawOpen={}; lawAsk=null; lawAsking=false;
   lawTermList=lawTerms(q);
   if(!lawTermList.length){ renderLawResults(); showToast("두 글자 이상 입력해 주세요."); return; }

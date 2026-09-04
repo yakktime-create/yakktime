@@ -90,7 +90,7 @@ const RULES2 = `${HEAD}
 
   direct — 질문에 대한 답이 이 조에 들어 있나?
     "답이 여기"   이 조를 펴면 질문의 답이 나온다.
-    "조건을 정함" 답 자체는 아니지만 그 답의 조건·범위·수량·기준을 정한다.
+    "조건이 여기" 답 자체는 아니지만 그 답의 조건·범위·수량·기준이 여기 있다.
     "곁가지"      정의·절차·벌칙처럼 답의 둘레에 있는 규정이다.
 
   need — 민원 답변서를 쓸 때 이 조를 인용해야 하나?
@@ -98,14 +98,14 @@ const RULES2 = `${HEAD}
     "있으면 좋음" 적어 두면 답변이 튼튼해진다.
     "없어도 됨"   안 적어도 답변은 된다.
 
-  sure — 얼마나 확신하나?
-    "본문에서 확인"  준 본문 안에 근거가 실제로 보인다. 어느 대목인지 짚을 수 있다.
-    "그럴듯함"       관련은 있어 보이나 딱 떨어지는 대목을 짚기는 어렵다.
-    "본문엔 안 보임" 본문에서는 못 찾았고 제목으로 짐작한다.
+  sure — 본문에서 근거를 찾았나?
+    "근거 찾음"      준 본문 안에 근거가 실제로 보인다. 어느 대목인지 짚을 수 있다.
+    "비슷한 대목만"  관련 있어 보이는 말은 있으나 딱 떨어지는 대목을 짚기는 어렵다.
+    "못 찾음"        본문에서는 못 찾았고 제목으로 짐작한다.
 
   세 가지를 정직하게 고른다. 다 최고로 몰면 순서를 매긴 뜻이 없다.
 
-- why 에는 왜 그 조인지 한 문장. <b>본문에서 확인했으면 그 대목을 짚어 적는다</b>
+- why 에는 왜 그 조인지 한 문장. <b>근거를 찾았으면 그 대목을 짚어 적는다</b>
   (예: 「1회 1개 품목 포장단위로 판매할 것」이 여기 있습니다).
   본문에서 못 찾았으면 그렇다고 적는다.
 - note 는 한두 문장. 무엇을 보고 골랐는지, 빠진 게 있어 보이면 무엇인지.`;
@@ -119,9 +119,9 @@ const SCHEMA2 = {
         type: "object",
         properties: {
           n:      { type: "integer" },
-          direct: { type: "string", enum: ["답이 여기", "조건을 정함", "곁가지"] },
+          direct: { type: "string", enum: ["답이 여기", "조건이 여기", "곁가지"] },
           need:   { type: "string", enum: ["인용 필수", "있으면 좋음", "없어도 됨"] },
-          sure:   { type: "string", enum: ["본문에서 확인", "그럴듯함", "본문엔 안 보임"] },
+          sure:   { type: "string", enum: ["근거 찾음", "비슷한 대목만", "못 찾음"] },
           why:    { type: "string" },
         },
         required: ["n", "direct", "need", "sure", "why"],
@@ -257,9 +257,9 @@ Deno.serve(async (req) => {
     // 죄다 90점대가 나오고 87 과 84 의 차이에 아무 뜻이 없다.
     // 합계는 화면에 숫자로 내보내지 않는다 — 잰 값이 아닌데 잰 것처럼 보인다.
     // 다섯 등급으로 바꿔 보여주고, 합계는 같은 등급 안의 순서에만 쓴다.
-    const W_DIRECT: Record<string, number> = { "답이 여기": 45, "조건을 정함": 30, "곁가지": 12 };
+    const W_DIRECT: Record<string, number> = { "답이 여기": 45, "조건이 여기": 30, "곁가지": 12 };
     const W_NEED:   Record<string, number> = { "인용 필수": 30, "있으면 좋음": 18, "없어도 됨": 6 };
-    const W_SURE:   Record<string, number> = { "본문에서 확인": 25, "그럴듯함": 15, "본문엔 안 보임": 5 };
+    const W_SURE:   Record<string, number> = { "근거 찾음": 25, "비슷한 대목만": 15, "못 찾음": 5 };
     const gradeOf = (v: number) =>
       v >= 85 ? "매우 높음" : v >= 70 ? "높음" : v >= 55 ? "중간" : v >= 40 ? "낮음" : "매우 낮음";
 
@@ -268,9 +268,9 @@ Deno.serve(async (req) => {
         const hit = index[p.n];
         if (!hit) return null;   // 없는 번호를 지어냈으면 조용히 버린다
         // 목록에 없는 말이 오면 가운데 값으로 본다 (등급이 튀지 않게)
-        const direct = W_DIRECT[p.direct] != null ? p.direct : "조건을 정함";
+        const direct = W_DIRECT[p.direct] != null ? p.direct : "조건이 여기";
         const need   = W_NEED[p.need]     != null ? p.need   : "있으면 좋음";
-        const sure   = W_SURE[p.sure]     != null ? p.sure   : "그럴듯함";
+        const sure   = W_SURE[p.sure]     != null ? p.sure   : "비슷한 대목만";
         const score  = W_DIRECT[direct] + W_NEED[need] + W_SURE[sure];
         const t = flat(bodyOf.get(hit.id) || "");
         return { id: hit.id, lawId: hit.law_id, law: hit.law, label: hit.label,

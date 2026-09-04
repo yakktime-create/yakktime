@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v58";
+var APP_VER="v59";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2123,7 +2123,7 @@ function lawAskHtml(){
     /* 등급이 무슨 뜻인지 결과 바로 옆에 적어 둔다. 사용법 안에만 있으면
      * 펼쳐 보지 않는 한 「매우 높음이 뭐 기준인데」로 남는다. */
     + '<div class="ask-legend"><b>등급</b>은 셋을 합쳐서 매겨요 —'
-    +   '<span>답이 이 조에 있나</span><span>답변서에 인용해야 하나</span><span>본문에서 확인했나</span>'
+    +   '<span>답이 이 조에 있나</span><span>답변서에 인용해야 하나</span><span>본문에서 근거를 찾았나</span>'
     +   '<i>조문마다 아래에 그 셋이 적혀 있어요.</i></div>'
     + acts+'<ol class="ask-list">'+items+'</ol>'
     /* 도구지 답변자가 아니다. 이 줄을 지우면 안 된다. */
@@ -2795,11 +2795,13 @@ function lawHelpHtml(){
     + '<div class="law-help-sec"><div class="law-help-t">◆ 관련도는 이렇게 나와요</div>'
     +   '<p>AI는 등급을 직접 매기지 않아요. <b>세 가지만 고르고</b>, 등급은 그걸 합쳐서 나옵니다.</p>'
     +   '<ul>'
-    +     '<li><b>답이 이 조에 있나</b><br />답이 여기 &gt; 조건을 정함 &gt; 곁가지<br />'
-    +       '<span class="law-help-dim">곁가지 = 정의·절차·벌칙처럼 답의 둘레에 있는 규정</span></li>'
+    +     '<li><b>답이 이 조에 있나</b><br />답이 여기 &gt; 조건이 여기 &gt; 곁가지<br />'
+    +       '<span class="law-help-dim">조건이 여기 = 답 자체는 아니지만 몇 개까지·누구에게 같은 <b>조건</b>이 여기 있다<br />'
+    +       '곁가지 = 정의·절차·벌칙처럼 답의 <b>둘레</b>에 있는 규정</span></li>'
     +     '<li><b>답변서에 인용해야 하나</b><br />인용 필수 &gt; 있으면 좋음 &gt; 없어도 됨</li>'
-    +     '<li><b>얼마나 확신하나</b><br />본문에서 확인 &gt; 그럴듯함 &gt; 본문엔 안 보임<br />'
-    +       '<span class="law-help-dim">「본문에서 확인」은 조문 안에서 근거 대목을 짚을 수 있을 때만 붙어요</span></li>'
+    +     '<li><b>본문에서 근거를 찾았나</b><br />근거 찾음 &gt; 비슷한 대목만 &gt; 못 찾음<br />'
+    +       '<span class="law-help-dim">「근거 찾음」은 조문 안에서 <b>그 대목을 짚을 수 있을 때만</b> 붙어요. '
+    +       '그때는 왼쪽 설명에도 그 대목이 그대로 적힙니다.</span></li>'
     +   '</ul>'
     +   '<p>셋 다 최고면 <b>매우 높음</b>, 셋 다 최저면 <b>매우 낮음</b>. '
     +     '고른 세 낱말이 조문마다 같이 적혀 있으니 왜 그 등급인지 바로 보여요.<br />'

@@ -579,6 +579,9 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
   padding:12px 2px 11px;border-bottom:1px solid var(--line);margin-bottom:4px;}
 .law-count{font-size:var(--fs-md);color:var(--muted);}
 .law-count b{color:var(--ink);font-size:var(--fs-base);}
+/* 결과가 상한에서 잘렸다는 표시 — 잘린 줄 모르는 것이 제일 위험하다 */
+.law-cap{font-size:var(--fs-2xs);font-weight:700;color:var(--brick);
+  background:var(--warn-bg,#FBF0E6);border-radius:var(--r-full);padding:2px 9px;margin-left:6px;}
 .law-picked{color:var(--blue-deep);font-weight:650;}
 .law-actions{margin-left:auto;display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap;}
 

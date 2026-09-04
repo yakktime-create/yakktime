@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v118";
+var APP_VER="v119";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3034,6 +3034,8 @@ function lawQBox(q){
   if(bar) bar.classList.toggle("gone",!lawAskFits(q.value));
 }
 
+var LAW_HIT_MAX=600;   /* 검색 결과 상한 — 닿으면 화면에 알린다 */
+var lawCapped=false;
 function lawSearch(){
   var q=nfc(val("law-q")||"").trim();
   lawQuery=q; lawSel={}; lawHits=null; lawOpen={}; lawAsk=null; lawAsking=false;
@@ -3047,7 +3049,10 @@ function lawSearch(){
         .select("id,law_id,seq,label,num,page,page_end,content"+(lawTblCol?",tbl":""));
       /* 낱말마다 조건을 겹쳐 걸면 모두 들어 있는 조문만 남는다 (교집합) */
       lawTermList.forEach(function(t){ qb=qb.ilike("content","%"+escLike(t)+"%"); });
-      return qb.order("law_id").order("seq").limit(200);
+      /* **잘린 줄 모르는 것이 제일 위험하다.** 「제조」「의약품」「시험」「관리」
+       * 「품질」「보관」은 실제로 300~400곳이 넘는데 200에서 잘렸고, 화면에는
+       * 아무 표시가 없어 그게 전부인 줄 알았다. 상한을 올리고 **닿으면 알린다.** */
+      return qb.order("law_id").order("seq").limit(LAW_HIT_MAX);
     });
   }
   run().then(function(res){
@@ -3062,6 +3067,7 @@ function lawSearch(){
       } else showToast("검색 실패: "+res.error.message,true);
       lawHits=[]; renderLawResults(); return;
     }
+    lawCapped=(res.data||[]).length>=LAW_HIT_MAX;
     lawHits=buildLawHits(res.data||[],lawTermList);
     /* 결과가 나오면 위쪽 부속(도움말·올려둔 목록)을 접는다. 안 그러면 결과를
      * 보려고 500px 넘게 굴려 내려가야 한다. 다시 펼치는 건 한 번 누르면 된다. */
@@ -4501,6 +4507,7 @@ function renderLawResults(){
   var what=picked?("고른 "+picked+"곳"):"전부";
   var head='<div class="law-head">'
     + '<div class="law-count"><b>'+lawHits.length+'</b>곳 · '+total+'건'
+    +   (lawCapped?' <span class="law-cap">'+LAW_HIT_MAX+'곳에서 끊었어요 — 낱말을 더 넣어 좁히세요</span>':'')
     +   (lawTermList.length>1?' <span class="law-and">'+esc(lawTermList.join(" + "))+' 모두 포함</span>':'')+'</div>'
     + '<div class="law-actions">'
     /* 하나뿐일 때 「모두 선택」은 말이 안 된다 */

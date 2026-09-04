@@ -980,6 +980,10 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
   background:var(--paper);color:var(--muted);}
 .ask-item.r-1 .ask-score{background:var(--accent);color:#fff;}
 .ask-item.r-2 .ask-score{background:var(--accent-soft);color:var(--accent);}
+/* 점수의 근거 — 「답 · 필수 · 분명」. 숫자 옆에 두면 줄이 복잡해져 아래에 작게 깐다. */
+.ask-parts{display:flex;gap:var(--sp-1);margin-top:4px;flex-wrap:wrap;}
+.ask-parts span{font-size:var(--fs-2xs);font-weight:700;color:var(--muted);
+  background:var(--paper);border-radius:var(--r-xs);padding:1px 7px;}
 .ask-item.r-1{border-left-color:var(--accent);}
 /* 조문 본문 앞부분 — 창을 열지 않고도 맞는지 가늠하라고 붙인다 */
 .ask-head-txt{margin-top:6px;padding:8px 11px;background:var(--paper);

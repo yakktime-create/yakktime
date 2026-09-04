@@ -51,14 +51,25 @@ const RULES = `너는 대한민국 식품의약품안전처 GMP 담당 공무원
 - 많아야 ${MAX_PICKS}개. 관련이 높은 것부터 순서대로 낸다.
 - 관련이 어중간한 것을 채워 넣지 않는다. 확실한 게 둘뿐이면 둘만 낸다.
   목록을 길게 만드는 것보다 쳐내는 것이 이 도구의 일이다.
-- score 는 이 질문과 얼마나 관련 있는지를 0~100 으로 매긴다. 눈금은 이렇게 쓴다.
-    90~100  질문에 바로 답하는 조. 이것부터 편다.
-    70~89   답하려면 같이 봐야 하는 조 (정의·절차·수량·기준).
-    50~69   앞뒤 사정을 아는 데 도움이 되는 조 (벌칙·경과규정 등).
-    40~49   관련될 수도 있으나 확신이 없는 조.
-  40 미만이면 아예 내지 않는다.
-  전부 90점대로 몰아 주지 않는다. 점수가 다 같으면 순서를 매긴 뜻이 없다.
-  같은 값을 두 조에 주지 않도록 조금씩 벌린다.
+- 점수는 네가 매기지 않는다. 아래 세 가지만 골라라. 점수는 이쪽에서 계산한다.
+
+  direct — 질문에 대한 답이 이 조에 들어 있나?
+    "답"   이 조를 펴면 질문의 답이 나온다.
+    "조건" 답 자체는 아니지만 그 답의 조건·범위·수량·기준을 정한다.
+    "배경" 정의·절차·벌칙처럼 곁가지다.
+
+  need — 민원 답변서를 쓸 때 이 조를 인용해야 하나?
+    "필수"   이 조를 안 적으면 답변이 성립하지 않는다.
+    "도움"   적어 두면 답변이 튼튼해진다.
+    "없어도" 안 적어도 답변은 된다.
+
+  sure — 조 제목만 보고 얼마나 확신하나? (본문은 못 봤다는 걸 잊지 마라)
+    "분명" 제목에 질문의 말이 그대로 들어 있다.
+    "짐작" 제목으로 미루어 그럴 것 같다.
+    "막연" 아닐 수도 있다.
+
+  세 가지를 정직하게 고른다. 다 "답·필수·분명" 으로 몰면 순서를 매긴 뜻이 없다.
+  본문을 못 봤으므로 "분명" 은 제목에 질문의 낱말이 실제로 있을 때만 쓴다.
 - 조문 본문을 못 봤으므로 답을 만들지 않는다. 여기서 하는 일은 「어디를 볼지 고르는 것」뿐이다.
 - why 에는 왜 그 조를 골랐는지 한 문장. 본문을 못 봤다는 사실이 드러나게
   「제목으로 보아 …」처럼 적는다.
@@ -75,11 +86,13 @@ const SCHEMA = {
       items: {
         type: "object",
         properties: {
-          n:     { type: "integer" },
-          score: { type: "integer", minimum: 40, maximum: 100 },
-          why:   { type: "string" },
+          n:      { type: "integer" },
+          direct: { type: "string", enum: ["답", "조건", "배경"] },
+          need:   { type: "string", enum: ["필수", "도움", "없어도"] },
+          sure:   { type: "string", enum: ["분명", "짐작", "막연"] },
+          why:    { type: "string" },
         },
-        required: ["n", "score", "why"],
+        required: ["n", "direct", "need", "sure", "why"],
         additionalProperties: false,
       },
     },
@@ -160,16 +173,24 @@ Deno.serve(async (req) => {
     }
     if (!parsed) return json({ error: "AI 답을 읽지 못했어요. 다시 한 번 눌러주세요." });
 
+    // 점수는 여기서 계산한다. AI 에게 「0~100 중 알아서」를 시키면 죄다 90점대가
+    // 나오고 87 과 84 의 차이에 아무 뜻이 없다. 세 가지 판단에 값을 매겨 더하면
+    // 같은 판단이 늘 같은 점수가 되고, 왜 그 점수인지도 사람이 볼 수 있다.
+    const W_DIRECT: Record<string, number> = { "답": 45, "조건": 30, "배경": 12 };
+    const W_NEED:   Record<string, number> = { "필수": 30, "도움": 18, "없어도": 6 };
+    const W_SURE:   Record<string, number> = { "분명": 25, "짐작": 15, "막연": 5 };
+
     let picks = (parsed.picks || []).slice(0, MAX_PICKS)
       .map((p: any) => {
         const hit = index[p.n];
         if (!hit) return null;   // 없는 번호를 지어냈으면 조용히 버린다
-        // 눈금 밖 값이 오면 잘라 맞춘다. 화면이 0~100 을 전제로 그려진다.
-        let sc = Math.round(Number(p.score));
-        if (!isFinite(sc)) sc = 50;
-        sc = Math.max(0, Math.min(100, sc));
+        // 목록에 없는 말이 오면 가운데 값으로 본다 (점수가 튀지 않게)
+        const direct = W_DIRECT[p.direct] != null ? p.direct : "조건";
+        const need   = W_NEED[p.need]     != null ? p.need   : "도움";
+        const sure   = W_SURE[p.sure]     != null ? p.sure   : "짐작";
+        const score  = W_DIRECT[direct] + W_NEED[need] + W_SURE[sure];
         return { id: hit.id, lawId: hit.law_id, law: hit.law, label: hit.label,
-                 score: sc, why: String(p.why || "") };
+                 direct, need, sure, score, why: String(p.why || "") };
       })
       .filter(Boolean);
     // AI가 순서를 흐트러뜨려도 화면에서는 늘 점수 높은 것부터 선다.

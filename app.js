@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v55";
+var APP_VER="v56";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2083,14 +2083,19 @@ function lawAskHtml(){
     var on=!!lawAskSel[p.id];
     /* 점수는 AI가 스스로 매긴 값이라 잰 값이 아니다. 그래도 숫자로 보여야
      * 순서가 읽히고, 어디서 끊을지도 눈으로 정할 수 있다. */
-    var band=p.score>=90?"1":p.score>=ASK_KEEP?"2":"3";
+    var band=p.score>=80?"1":p.score>=ASK_KEEP?"2":"3";
     return '<li class="ask-item'+(on?" on":"")+' r-'+band+'">'
       + '<label class="ask-check"><input type="checkbox" data-act="ask-pick" data-id="'+esc(p.id)+'"'+(on?" checked":"")+' /></label>'
       + '<div class="ask-item-body">'
-      +   '<div class="ask-art"><span class="ask-score" title="AI가 매긴 관련도">'+p.score+'</span><b>'+esc(p.label)+'</b>'
+      +   '<div class="ask-art"><span class="ask-score">'+p.score+'</span><b>'+esc(p.label)+'</b>'
       +     '<span class="ask-law">'+esc(p.law)+'</span>'
       +     '<button class="link-btn law-go-art" data-act="law-art" data-art-id="'+esc(p.id)+'" data-id="'+esc(p.lawId)+'">전체 보기</button></div>'
       +   '<div class="ask-why">'+esc(p.why)+'</div>'
+      /* 점수가 어디서 나왔는지 같이 적는다. 숫자만 있으면 「87이 무슨 뜻이냐」가 된다.
+       * 이 셋을 AI가 고르고, 점수는 서버가 더해서 낸다. */
+      +   (p.direct?'<div class="ask-parts">'
+            + '<span>'+esc(p.direct)+'</span><span>'+esc(p.need)+'</span><span>'+esc(p.sure)+'</span>'
+            + '</div>':'')
       /* 본문 앞부분을 같이 보여준다 — 창을 열었다 닫지 않아도 맞는지 가늠된다 */
       +   (p.head?'<div class="ask-head-txt">'+esc(p.head)+'</div>':'')
       + '</div></li>';
@@ -2775,6 +2780,17 @@ function lawHelpHtml(){
     + '<div class="law-help-head"><b>법령 검색 사용법</b>'
     +   '<button class="law-help-x" data-act="law-help" title="접기">접기 ✕</button></div>'
 
+    + '<div class="law-help-sec"><div class="law-help-t">◆ 관련도 점수는 이렇게 나와요</div>'
+    +   '<p>AI는 점수를 매기지 않아요. <b>세 가지만 고르고</b>, 점수는 그걸 더해서 나옵니다.</p>'
+    +   '<ul>'
+    +     '<li><b>답이 여기 있나</b> — 답 <u>45</u> · 조건 <u>30</u> · 배경 <u>12</u></li>'
+    +     '<li><b>답변서에 인용해야 하나</b> — 필수 <u>30</u> · 도움 <u>18</u> · 없어도 <u>6</u></li>'
+    +     '<li><b>제목만 보고 확신하나</b> — 분명 <u>25</u> · 짐작 <u>15</u> · 막연 <u>5</u></li>'
+    +   '</ul>'
+    +   '<p>셋 다 최고면 <b>100</b>, 셋 다 최저면 <b>23</b>. 고른 세 낱말이 조문마다 같이 적혀 있어요.<br />'
+    +     '<b>60 미만은 접어 둡니다.</b> AI는 조 <b>제목만</b> 보고 고르므로, 이 숫자는 정확도가 아니라 '
+    +     '<b>어느 것부터 펴 볼지의 순서</b>로 보세요.</p>'
+    + '</div>'
     + '<div class="law-help-sec"><div class="law-help-t">① 찾는 법</div>'
     +   '<ul>'
     +     '<li><b>낱말을 띄어 쓰면 「모두 들어 있는 곳」</b>만 나와요.<br />'

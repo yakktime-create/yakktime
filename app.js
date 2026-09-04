@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v71";
+var APP_VER="v72";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1826,12 +1826,15 @@ function lawIsOld(l){
   var mine=lawParse(lawSrc(l));
   if(!mine.base) return false;
   var myEff=l.eff||mine.date;
-  return S.laws.some(function(o){
+  var idx=S.laws.indexOf(l);
+  return S.laws.some(function(o,oi){
     if(o.id===l.id) return false;
     var p=lawParse(lawSrc(o));
     if(p.base!==mine.base) return false;
-    /* 시행일은 문서에서 읽은 것을 먼저 쓴다 (파일 이름이 잘려 있을 수 있다) */
     var oEff=o.eff||p.date;
+    /* 같은 판이 두 벌이면 하나만 남긴다 — 뒤에 있는 쪽을 지울 것으로 본다.
+     * 날짜가 같아서 「더 새것」으로는 안 걸리는데, 검색 결과는 두 번씩 나온다. */
+    if(oEff&&myEff&&oEff===myEff) return oi<idx;
     if(oEff&&myEff) return oEff>myEff;
     if(p.no&&mine.no) return p.no>mine.no;
     return false;
@@ -1840,7 +1843,7 @@ function lawIsOld(l){
 
 function lawUpload(f){
   if(lawBusy) return;
-  var drop=[];
+  var drop=[], meta=null;
   lawBusy=true; render();
   var path=Date.now()+"_"+f.name.replace(/[^a-zA-Z0-9._-]/g,"_");
   var uploaded=false;
@@ -1859,19 +1862,10 @@ function lawUpload(f){
     /* 스캔본이면 글자가 거의 안 나온다 — 올려봐야 검색이 안 되므로 여기서 멈춘다 */
     var chars=0; pages.forEach(function(p){ chars+=p.content.length; });
     if(chars<200) throw new Error("SCAN");
-    showToast("파일 올리는 중...");
-    return sb.storage.from("files").upload(path,f).then(function(res){
-      if(res.error) throw new Error("업로드 실패: "+res.error.message);
-      uploaded=true;
-      return pages;
-    });
-  }).then(function(pages){
-    /* 화면에 쓸 이름은 괄호 묶음을 떼어 짧게. 종류·시행일은 따로 보여주므로
-     * 이름에 숫자가 남아 있을 이유가 없다. 원본은 file_name 에 그대로 둔다. */
-    var meta=lawMeta(pages);
-    /* 대체 확인은 <b>PDF를 읽은 뒤에</b> 묻는다. 파일 이름만 보고 물으면
-     * 지침서처럼 이름에 날짜가 없는 문서는 「날짜 없음 vs 날짜 없음」이 되어
-     * 어느 쪽이 새것인지 알려줄 수가 없다. 문서 안에는 발행 연월이 있다. */
+    /* 대체 확인은 <b>PDF를 읽은 뒤, 파일을 올리기 전에</b> 묻는다.
+     *  · 읽은 뒤라야 문서 안의 시행일로 견줄 수 있다 (지침서는 이름에 날짜가 없다)
+     *  · 올리기 전이라야 취소했을 때 저장 공간에 쓰레기가 안 남는다 */
+    meta=lawMeta(pages);
     var old=lawOtherEditions(f.name,null);
     if(old.length){
       var mine=lawParse(f.name), myEff=meta.eff||mine.date;
@@ -1879,17 +1873,30 @@ function lawUpload(f){
       var lines=old.map(function(l){
         return "  · "+show(l.eff||lawParse(lawSrc(l)).date)+"  "+l.name;
       }).join("\n");
-      var newer=old.every(function(l){
-        var oe=l.eff||lawParse(lawSrc(l)).date;
-        return !(oe&&myEff)||myEff>oe;
-      });
+      /* 세 갈래로 갈라 말한다. 「같은 판」을 「더 새것이 아님」으로 뭉뚱그리면
+       * ⚠️ 가 떠서, 같은 파일을 다시 올리는 것뿐인데 겁을 먹게 된다. */
+      var same=old.every(function(l){ var oe=l.eff||lawParse(lawSrc(l)).date;
+                                      return oe&&myEff&&oe===myEff; });
+      var newer=!same&&old.every(function(l){ var oe=l.eff||lawParse(lawSrc(l)).date;
+                                              return !(oe&&myEff)||myEff>oe; });
+      var tail = same  ? "\n\n같은 판입니다. 다시 올려 덮어쓸까요?\n(내용이 바뀌었다면 이걸 고르세요)"
+               : newer ? "\n\n옛 판을 지우고 새것으로 대체할까요?"
+               :         "\n\n⚠️ 이미 올라온 쪽이 더 새것입니다.\n그래도 이것으로 대체할까요?";
       var msg="「"+mine.base+"」이(가) 이미 올라와 있어요.\n\n"+lines
-        +"\n\n새로 올리는 것: "+show(myEff)
-        +(newer?"\n\n옛 판을 지우고 새것으로 대체할까요?"
-               :"\n\n⚠️ 이미 올라온 쪽이 더 새것입니다.\n그래도 이것으로 대체할까요?")
-        +"\n\n[확인] 대체 — 옛 판은 지웁니다\n[취소] 둘 다 남깁니다";
-      if(confirm(msg)) drop=old;
+        +"\n\n새로 올리는 것: "+show(myEff)+tail
+        +"\n\n[확인] 대체 — 옛 것은 지웁니다\n[취소] 올리지 않습니다";
+      /* 취소는 「올리지 않음」이다. 「둘 다 남김」은 중복을 만드는 선택지라
+       * 고를 이유가 없다 — 그걸 고르면 나중에 목록에서 하나씩 지워야 한다. */
+      if(!confirm(msg)) throw new Error("CANCEL");
+      drop=old;
     }
+    showToast("파일 올리는 중...");
+    return sb.storage.from("files").upload(path,f).then(function(res){
+      if(res.error) throw new Error("업로드 실패: "+res.error.message);
+      uploaded=true;
+      return pages;
+    });
+  }).then(function(pages){
     var item={name:lawParse(f.name).base,filePath:path,fileName:nfc(f.name),pages:pages.length,
               kind:meta.kind,eff:meta.eff};
     return dbInsert("laws",item).then(function(row){
@@ -1910,7 +1917,9 @@ function lawUpload(f){
     lawBusy=false;
     if(uploaded) sb.storage.from("files").remove([path]);
     render();
-    if(err&&err.message==="SCAN"){
+    if(err&&err.message==="CANCEL"){
+      showToast("올리지 않았어요.");   /* 사람이 고른 것이지 잘못된 게 아니다 */
+    } else if(err&&err.message==="SCAN"){
       alert("글자가 없는 스캔본 같아요.\n\n1단계는 글자가 들어 있는 PDF만 지원해요.\n법제처에서 받은 PDF면 대부분 됩니다.");
     } else showToast((err&&err.message)||"법령을 추가하지 못했어요.",true);
   });
@@ -3404,9 +3413,9 @@ function renderLaws(){
      * 열 몇 개를 일일이 볼 수 없으므로 여기서 세어 알린다. */
     var olds=items.filter(lawIsOld);
     if(olds.length) list+='<div class="notice"><span class="notice-ic">!</span>'
-      + '<div>같은 법령의 <b>옛 판이 '+olds.length+'개</b> 남아 있어요. '
+      + '<div>같은 법령이 <b>'+olds.length+'개 겹쳐</b> 있어요 (옛 판이거나 같은 판 두 벌). '
       +   '두면 검색 결과가 두 번씩 나오고 AI도 헷갈려요.</div>'
-      + '<button class="btn sm" data-act="law-drop-old">옛 판 정리</button></div>';
+      + '<button class="btn sm" data-act="law-drop-old">겹치는 것 정리</button></div>';
     var need=items.filter(function(l){ return !l.arts; }).length;
     if(need) list+='<div class="notice"><span class="notice-ic">!</span>'
       + '<div>조문으로 안 쪼개진 법령이 <b>'+need+'개</b> 있어요. 이걸 해야 검색이 조 단위로 나와요.</div>'
@@ -3438,7 +3447,7 @@ function renderLaws(){
         /* 하나도 안 고르면 전부 본다. 「고른 것만」은 좁힐 때만 쓰는 장치다. */
         + '<label class="law-only"><input type="checkbox" data-act="law-only" data-id="'+l.id+'"'+(onlyOn?" checked":"")+' title="이 법령에서만 찾기" /></label>'
         + '<span class="law-name" data-act="edit" data-table="laws" data-field="name" data-id="'+l.id+'" title="눌러서 이름 수정">'+esc(l.name)+'</span>'
-        + (lawIsOld(l)?'<span class="law-old-tag">옛 판</span>':'')
+        + (lawIsOld(l)?'<span class="law-old-tag">겹침</span>':'')
         /* 종류 배지는 뺐다 — 바로 위 묶음 머리말과 같은 말이다.
          * 시행일·쪽수는 폭을 고정해 세로로 줄을 맞춘다. */
         + '<span class="law-eff">'+esc(lawEffOf(l)||'')+'</span>'
@@ -3688,7 +3697,7 @@ document.getElementById("app").addEventListener("click",function(e){
       var olds=S.laws.filter(lawIsOld);
       if(!olds.length){ showToast("정리할 옛 판이 없어요."); break; }
       var lst=olds.map(function(l){ return "  · "+l.name; }).join("\n");
-      if(!confirm("아래 "+olds.length+"개를 지웁니다. 같은 법령의 더 새 판이 남아 있어요.\n\n"
+      if(!confirm("아래 "+olds.length+"개를 지웁니다. 같은 법령이 하나씩은 남습니다.\n\n"
         +lst+"\n\n계속할까요?")) break;
       olds.forEach(function(l){ del("laws",l.id,true); });
       showToast("✓ 옛 판 "+olds.length+"개를 지웠어요");

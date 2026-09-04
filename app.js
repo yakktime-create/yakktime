@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v98";
+var APP_VER="v99";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -4343,10 +4343,12 @@ function renderLawResults(){
                 + (ws.length?' <span class="law-tbl-w">'+esc(ws.join(" · "))+'</span>'+more+'에서 찾았어요.':'')
                 + ' PDF 원문에서 확인하세요.</div>';
             })()
-          : (function(){ var prev=null;
+          : (function(){
+            /* 조각마다 어디인지 붙인다. 예전에는 「바뀔 때만」 적었는데, 같은 목
+             * 안에서 검색어가 멀리 떨어져 조각이 나뉘면 둘째 조각에 배지가 없어
+             * 「이건 어디지?」가 됐다. 조각은 점선으로 갈려 있어 반복해도 안 어지럽다. */
             return list.map(function(h){
-              var w=(h.where&&h.where!==prev)?'<span class="law-where">'+esc(h.where)+'</span>':'';
-              if(h.where) prev=h.where;
+              var w=h.where?'<span class="law-where">'+esc(h.where)+'</span>':'';
               return '<div class="law-snip'+(w?'':' law-snip-same')+'">'
                 + w + lawSegHtml(h.text,lawTermList,0)+'</div>';
             }).join("");

@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v89";
+var APP_VER="v90";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2121,7 +2121,10 @@ function buildLawArticles(pages,docName,docKind){
            * 그걸 이름으로 쓴다. **못 찾으면 아무것도 안 붙인다** — 「6/14 토막」은
            * 기계가 센 번호라 사람에게는 뜻이 없다. 어디인지는 쪽 배지가 말해준다. */
           var t=parts[q].title, num0=/^\d+$/.test(t);
-          if(num0) t=chunkTitle(parts[q].text);
+          /* 토막은 길이로 자르므로 소제목 한복판에서 시작한다(253쪽 토막은
+           * 「7. 공급관리」의 중간부터다). 토막 첫머리에 소제목이 없으면
+           * **그 자리에서 유효한 소제목**을 앞에서 찾아 온다. */
+          if(num0) t=chunkTitle(parts[q].text)||chunkHead(text,parts[q].a-a);
           addRow(lab+(t?" · "+t:""),num,parts[q].text,parts[q].a,parts[q].b,num0&&!t);
         }
         continue;
@@ -3017,8 +3020,13 @@ function secHeadLen(text,at){
     var sp=text.indexOf(" ",pos);
     var tok=(sp<0?text.slice(pos):text.slice(pos,sp));
     if(!tok||!/^[가-힣()ㆍ·]/.test(tok)) break;   /* "품질 ( 보증 ) 부서" 처럼 괄호가 낀 제목 */
-    /* 다음이 목·호 표시면 제목 끝 */
-    if(tok.length===1&&MOK.indexOf(tok)>=0) break;
+    /* 다음이 목·호 표시면 제목 끝.
+     * 문장부호 앞 빈칸을 지우면서 「가 .」가 「가.」 한 덩어리가 되는 바람에
+     * 이 검사가 뚫려서, 「5.4 원 자재 및 제품의 관리 가.」처럼 목까지 제목에
+     * 딸려 들어갔다. 마침표를 떼고 본다. */
+    var bare=tok.replace(/[.)]+$/,"");
+    if(bare.length===1&&MOK.indexOf(bare)>=0) break;
+    if(/^\d{1,2}$/.test(bare)&&tok!==bare) break;   /* 「1.」 「2)」 같은 호 표시 */
     var han=(tok.match(/[가-힣]/g)||[]).length;   /* 괄호·중점은 안 센다 */
     if(title+han>12) break;
     title+=han; len+=tok.length+(sp<0?0:1);
@@ -3037,6 +3045,19 @@ function chunkTitle(text){
   var ti=m[2].replace(/\s+/g," ").trim();
   if(ti.length<2||isBadSecTitle(ti)) return "";
   return m[1]+". "+ti;
+}
+
+/* 그 자리에서 유효한 소제목 — 앞에서부터 훑어 마지막으로 나온 「N. 제목」.
+ * 토막 경계는 길이로 자르니 소제목 경계와 안 맞는다. */
+var SUBH_RE=/(?:^|[.\s])(\d{1,2})\s*\.\s*([가-힣][가-힣A-Za-z0-9()ㆍ·\s]{1,14}?)\s+(?=[가-힣]\s*\.\s|\d{1,2}\s*[).]\s)/g;
+function chunkHead(text,upto){
+  var m, last=""; SUBH_RE.lastIndex=0;
+  while((m=SUBH_RE.exec(text))!==null){
+    if(m.index>upto) break;
+    var ti=m[2].replace(/\s+/g," ").trim();
+    if(ti.length>=2&&!isBadSecTitle(ti)) last=m[1]+". "+ti;
+  }
+  return last;
 }
 
 /* 소제목이 없는 표 별표를 토막낸다. 호(1. 2. 3.)가 있으면 그 자리에서,

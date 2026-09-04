@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v91";
+var APP_VER="v92";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1693,6 +1693,110 @@ function readBuffer(f){
   });
 }
 
+/* ---------- PDF에서 「구조」까지 읽어내기 ----------
+ * 글자만 뽑으면 제목도 본문도 한 줄로 이어져, 뒤에서 정규식으로 짐작해야 한다.
+ * PDF에는 글꼴·크기·좌표·선이 들어 있으니 그걸 읽으면 짐작이 사라진다.
+ * 실측(문서 10개): 지침서 09는 제목만 정확히 갈렸고, 한글에서 만든 07은
+ * 글꼴이 85가지로 쪼개져 본문까지 제목으로 잡혔다.
+ * 그래서 **믿을 수 있는 문서에만** 쓴다 — 나머지는 예전처럼 이어 붙인다. */
+
+/* 글자 조각을 줄로 묶는다. 줄마다 대표 글꼴(이름+높이)을 함께 남긴다. */
+function pdfLines(tc,H){
+  var it=[];
+  (tc.items||[]).forEach(function(x){
+    if(!x.str||!x.str.trim()) return;
+    it.push({s:x.str,y:H-x.transform[5],x:x.transform[4],
+             f:x.fontName+"|"+Math.round(x.height||0)});
+  });
+  it.sort(function(a,b){ return (a.y-b.y)||(a.x-b.x); });
+  var lines=[], cur=null;
+  it.forEach(function(z){
+    if(cur&&Math.abs(z.y-cur.y)<=3.2) cur.items.push(z);
+    else { cur={y:z.y,items:[z]}; lines.push(cur); }
+  });
+  lines.forEach(function(l){
+    l.items.sort(function(a,b){ return a.x-b.x; });
+    l.text=l.items.map(function(z){ return z.s; }).join(" ").replace(/\s+/g," ").trim();
+    var c={}, best=null;
+    l.items.forEach(function(z){ c[z.f]=(c[z.f]||0)+z.s.length; if(!best||c[z.f]>c[best]) best=z.f; });
+    l.font=best||"";
+  });
+  return lines;
+}
+
+/* 본문 글꼴 무리 — 글자 수로 위에서부터 쌓아 8할을 넘길 때까지.
+ * 무리가 셋을 넘으면 글꼴을 못 믿는다(한글에서 만든 문서는 85가지로 쪼개진다). */
+function pickBody(tally){
+  var ks=Object.keys(tally).sort(function(a,b){ return tally[b]-tally[a]; });
+  var all=0; ks.forEach(function(k){ all+=tally[k]; });
+  if(!all) return null;
+  var acc=0, set={}, n=0;
+  for(var i=0;i<ks.length;i++){ set[ks[i]]=1; n++; acc+=tally[ks[i]]; if(acc/all>=0.8) break; }
+  return n<=3?set:null;
+}
+
+/* 본문 무리에 없는 글꼴로 쓰인 줄은 제목이다. 앞뒤로 줄을 바꿔 둔다 —
+ * 화면과 복사가 그 줄바꿈을 그대로 절 경계로 읽는다. */
+function linesToText(lines,bodySet){
+  if(!bodySet) return lines.map(function(l){ return l.text; }).join(" ").replace(/\s+/g," ").trim();
+  var out=[];
+  lines.forEach(function(l){
+    if(!l.text) return;
+    out.push(bodySet[l.font]?l.text:("\n"+l.text+"\n"));
+  });
+  return out.join(" ").replace(/[ \t]+/g," ").replace(/[ \t]*\n[ \t]*/g,"\n")
+            .replace(/\n{2,}/g,"\n").trim();
+}
+
+/* 표는 선으로 그린다. 가로줄·세로줄이 여럿이면 그 쪽에 표가 있다.
+ * 밑줄만 있는 쪽은 세로줄이 없어 걸리지 않는다. */
+function pdfHasGrid(pdfjsLib,ops,H){
+  var O=pdfjsLib.OPS, m=[1,0,0,1,0,0], st=[], hy=[], vx=[];
+  function ap(x,y){ return [m[0]*x+m[2]*y+m[4], m[1]*x+m[3]*y+m[5]]; }
+  /* 같은 선을 여러 번 그린 것을 따로 세면 밑줄 몇 개짜리 쪽도 표가 된다.
+   * 서로 다른 자리의 줄만 센다 — 세로줄이 셋이면 적어도 두 칸짜리 표다. */
+  function add(x1,y1,x2,y2){
+    var dx=Math.abs(x2-x1), dy=Math.abs(y2-y1);
+    /* 표의 칸 구분선은 여러 줄을 가로지르므로 길다. 짧은 장식선·밑줄은 뺀다.
+     * 문서 10개로 재보니 이 길이에서 표 없는 규칙(시설기준령)은 0쪽, 지침서
+     * 본문 쪽도 안 걸리고, 별표 8·점검표 같은 진짜 표만 남는다. */
+    if(dy<1.5&&dx>=120){ if(hy.length<400) hy.push((y1+y2)/2); }
+    else if(dx<1.5&&dy>=60){ if(vx.length<400) vx.push((x1+x2)/2); }
+  }
+  function spread(v){
+    var a=v.slice().sort(function(x,y){ return x-y; }), n=0, last=-1e9;
+    for(var i=0;i<a.length;i++){ if(a[i]-last>3){ n++; last=a[i]; } }
+    return n;
+  }
+  for(var i=0;i<ops.fnArray.length;i++){
+    var fn=ops.fnArray[i], a=ops.argsArray[i];
+    if(fn===O.save) st.push(m.slice());
+    else if(fn===O.restore) m=st.pop()||m;
+    else if(fn===O.transform){
+      var n=a;
+      m=[n[0]*m[0]+n[1]*m[2], n[0]*m[1]+n[1]*m[3],
+         n[2]*m[0]+n[3]*m[2], n[2]*m[1]+n[3]*m[3],
+         n[4]*m[0]+n[5]*m[2]+m[4], n[4]*m[1]+n[5]*m[3]+m[5]];
+    }
+    else if(fn===O.constructPath){
+      var oa=a[0], co=a[1], k=0, cur=null;
+      for(var j=0;j<oa.length;j++){
+        var o=oa[j];
+        if(o===O.moveTo){ cur=ap(co[k],co[k+1]); k+=2; }
+        else if(o===O.lineTo){ var nx=ap(co[k],co[k+1]); k+=2;
+          if(cur) add(cur[0],cur[1],nx[0],nx[1]); cur=nx; }
+        else if(o===O.curveTo){ k+=6; cur=null; }
+        else if(o===O.rectangle){
+          var rx=co[k],ry=co[k+1],rw=co[k+2],rh=co[k+3]; k+=4;
+          var p1=ap(rx,ry), p2=ap(rx+rw,ry), p3=ap(rx+rw,ry+rh);
+          add(p1[0],p1[1],p2[0],p2[1]); add(p2[0],p2[1],p3[0],p3[1]);
+        }
+      }
+    }
+  }
+  return spread(hy)>=4&&spread(vx)>=3;
+}
+
 /* 쪽마다 텍스트를 뽑는다. 글자가 없는 쪽(표지·이미지)은 건너뛴다. */
 function extractPdfPages(buf,onProgress){
   var bytes=new Uint8Array(buf);
@@ -1704,17 +1808,39 @@ function extractPdfPages(buf,onProgress){
       });
     });
   }).then(function(doc){
-    var pages=[], total=doc.numPages;
+    var total=doc.numPages, raw=[], tally={}, lib=window.pdfjsLib;
     function step(i){
-      if(i>total) return Promise.resolve(pages);
-      return doc.getPage(i).then(function(pg){ return pg.getTextContent(); }).then(function(tc){
-        var txt=tc.items.map(function(it){ return it.str; }).join(" ").replace(/\s+/g," ").trim();
-        if(txt) pages.push({page:i,content:txt});
-        if(onProgress) onProgress(i,total);
-        return step(i+1);
+      if(i>total) return Promise.resolve();
+      var page;
+      return doc.getPage(i).then(function(pg){
+        page=pg; return pg.getTextContent();
+      }).then(function(tc){
+        var H=page.getViewport({scale:1}).height;
+        var lines=pdfLines(tc,H);
+        lines.forEach(function(l){ if(l.font) tally[l.font]=(tally[l.font]||0)+l.text.length; });
+        /* 선을 읽어 표가 있는 쪽을 짚는다. 글자로 짐작하던 것을 확실하게 한다. */
+        return page.getOperatorList().then(function(ops){
+          var tbl=false;
+          try{ tbl=pdfHasGrid(lib,ops,H); }catch(e){}
+          raw.push({page:i,lines:lines,tbl:tbl});
+          if(onProgress) onProgress(i,total);
+          return step(i+1);
+        },function(){
+          raw.push({page:i,lines:lines,tbl:false});
+          if(onProgress) onProgress(i,total);
+          return step(i+1);
+        });
       });
     }
-    return step(1);
+    return step(1).then(function(){
+      var bodySet=pickBody(tally);
+      var pages=[];
+      raw.forEach(function(r){
+        var txt=linesToText(r.lines,bodySet);
+        if(txt) pages.push({page:r.page,content:txt,tbl:r.tbl});
+      });
+      return pages;
+    });
   });
 }
 
@@ -1940,17 +2066,24 @@ function cleanPages(rows){
 /* 한 번에 다 넣으면 요청이 너무 커진다 — 50쪽씩 나눠 보낸다 */
 function saveLawPages(lawId,pages){
   cleanPages(pages);
-  var rows=pages.map(function(p){ return {law_id:lawId,page:p.page,content:p.content,article:p.article||null}; });
+  var rows=pages.map(function(p){
+    return {law_id:lawId,page:p.page,content:p.content,article:p.article||null,tbl:!!p.tbl};
+  });
   var i=0;
   function chunk(){
     if(i>=rows.length) return Promise.resolve();
     var part=rows.slice(i,i+50); i+=50;
     showToast("저장 중 "+Math.min(i,rows.length)+"/"+rows.length+"쪽");
-    return withAuthRetry(function(){ return sb.from("law_pages").insert(part); }).then(function(res){
+    function put(rs){ return withAuthRetry(function(){ return sb.from("law_pages").insert(rs); }); }
+    return put(lawTblCol?part:dropTbl(part)).then(function(res){
+      /* 없는 칸이면 그 칸만 빼고 다시 넣는다 (SQL을 아직 안 돌린 경우) */
+      if(res.error&&isNoTblCol(res.error)){ lawTblCol=false; return put(dropTbl(part)); }
+      return res;
+    }).then(function(res){
       if(res.error&&isNoArtCol(res.error)){
         lawArtCol=false;
         var plain=part.map(function(r){ return {law_id:r.law_id,page:r.page,content:r.content}; });
-        return withAuthRetry(function(){ return sb.from("law_pages").insert(plain); });
+        return put(plain);
       }
       return res;
     }).then(function(res){
@@ -2063,11 +2196,18 @@ function buildLawArticles(pages,docName,docKind){
 
   var heads=findArticles(full,20000).filter(function(h){ return !(noTbl&&h.table); });
   var out=[];
+  /* 표가 있는 쪽 — PDF의 선을 읽어 둔 것이다. 조문이 걸친 쪽 중 하나라도
+   * 표면 그 조문은 표로 본다. 글자로 짐작하던 것을 대신한다. */
+  var tblPage={};
+  pages.forEach(function(p){ if(p.tbl) tblPage[p.page]=1; });
+  var hasTbl=false; for(var tk in tblPage){ hasTbl=true; break; }
   function addRow(lab,num,text,a,b,chunk){
     if(text.length<10) return;
     if(text.length>LAW_ART_SAVE_MAX) text=text.slice(0,LAW_ART_SAVE_MAX);
-    out.push({ seq:out.length+1, label:lab, num:num, chunk:!!chunk,
-               page:pageAt(a), page_end:pageAt(b-1), content:text });
+    var p1=pageAt(a), p2=pageAt(b-1), t=null;
+    if(hasTbl){ t=false; for(var z=p1;z<=p2;z++) if(tblPage[z]){ t=true; break; } }
+    out.push({ seq:out.length+1, label:lab, num:num, chunk:!!chunk, tbl:t,
+               page:p1, page_end:p2, content:text });
   }
   for(var i=0;i<heads.length;i++){
     var a=heads[i].at, b=(i+1<heads.length)?heads[i+1].at:full.length;
@@ -2188,15 +2328,21 @@ function saveLawArticles(lawId,arts,localItem){
   }).then(function(res){
     if(res.error) throw new Error("옛 조문을 지우지 못했어요: "+res.error.message);
     var rows=arts.map(function(a){
-      return {law_id:lawId,seq:a.seq,label:a.label,num:a.num,
-              page:a.page,page_end:a.page_end,content:a.content};
+      var o={law_id:lawId,seq:a.seq,label:a.label,num:a.num,
+             page:a.page,page_end:a.page_end,content:a.content};
+      if(a.tbl!=null) o.tbl=a.tbl;
+      return o;
     });
     var i=0;
     function chunk(){
       if(i>=rows.length) return Promise.resolve();
       var part=rows.slice(i,i+30); i+=30;
       showToast("조문 저장 "+Math.min(i,rows.length)+"/"+rows.length);
-      return withAuthRetry(function(){ return sb.from("law_articles").insert(part); }).then(function(r){
+      function put(rs){ return withAuthRetry(function(){ return sb.from("law_articles").insert(rs); }); }
+      return put(lawTblCol?part:dropTbl(part)).then(function(r){
+        if(r.error&&isNoTblCol(r.error)){ lawTblCol=false; return put(dropTbl(part)); }
+        return r;
+      }).then(function(r){
         if(r.error) throw new Error("조문 저장 실패: "+r.error.message);
         return chunk();
       });
@@ -2208,19 +2354,81 @@ function saveLawArticles(lawId,arts,localItem){
   }).then(unlock,fail);
 }
 
-/* 조문 판별 규칙이 나아질 때마다 다시 올리지 않아도 되게,
- * 이미 저장된 쪽 텍스트만으로 조문 정보를 다시 계산한다 (PDF 안 받음). */
+/* 조문 판별 규칙이 나아질 때마다 다시 올리지 않아도 되게 다시 계산한다.
+ * **원본 PDF가 Storage에 있으면 그걸 다시 읽는다** — 글꼴·선 같은 「구조」는
+ * 저장된 글자에는 없고 PDF에만 있기 때문이다. 없으면 저장된 글자로만 한다. */
+function lawPagesForReindex(l){
+  if(!l.filePath) return null;
+  return withAuthRetry(function(){
+    return sb.storage.from("files").createSignedUrl(l.filePath,3600);
+  }).then(function(r){
+    var u=r&&r.data&&r.data.signedUrl;
+    if(r.error||!u) return null;
+    showToast("원본 PDF를 받는 중...");
+    return fetch(u).then(function(x){ return x.ok?x.arrayBuffer():null; });
+  }).then(function(buf){
+    if(!buf) return null;
+    return extractPdfPages(buf,function(i,t){
+      if(i%25===0||i===t) showToast("PDF 다시 읽는 중 "+i+"/"+t+"쪽");
+    });
+  }).catch(function(){ return null; });
+}
+
+/* 쪽 저장 — 「다시 만들기」의 두 길(하나씩·전부)이 함께 쓴다.
+ * PDF에서 새로 뽑은 쪽에는 id가 없어서 upsert 하면 행이 하나 더 생긴다.
+ * 그래서 옛 쪽을 통째로 지우고 넣는다. 저장된 글자로만 다시 만들 때는 upsert. */
+function savePageRows(lawId,rows,isNew,loud){
+  var i=0;
+  function put(rs){
+    return withAuthRetry(function(){
+      return isNew?sb.from("law_pages").insert(rs):sb.from("law_pages").upsert(rs);
+    });
+  }
+  function chunk(){
+    if(i>=rows.length) return Promise.resolve();
+    var part=rows.slice(i,i+50); i+=50;
+    if(loud) showToast("쪽 저장 "+Math.min(i,rows.length)+"/"+rows.length);
+    return put(lawTblCol?part:dropTbl(part)).then(function(r){
+      if(r.error&&isNoTblCol(r.error)){ lawTblCol=false; return put(dropTbl(part)); }
+      return r;
+    }).then(function(r){
+      if(r.error&&isNoArtCol(r.error)){
+        lawArtCol=false;
+        return put(part.map(function(x){ return {law_id:x.law_id,page:x.page,content:x.content}; }));
+      }
+      return r;
+    }).then(function(r){
+      if(r.error) throw new Error("쪽 저장 실패: "+r.error.message);
+      return chunk();
+    });
+  }
+  var pre=isNew
+    ? withAuthRetry(function(){ return sb.from("law_pages").delete().eq("law_id",lawId); })
+        .then(function(r){ if(r.error) throw new Error("옛 쪽을 지우지 못했어요: "+r.error.message); })
+    : Promise.resolve();
+  return pre.then(chunk);
+}
+
 function lawReindex(id){
   if(lawBusy) return;
   var l=S.laws.find(function(x){ return x.id===id; });
   if(!l) return;
   lawBusy=true; render();
   showToast("쪽을 읽는 중...");
-  withAuthRetry(function(){
-    return sb.from("law_pages").select("id,law_id,page,content").eq("law_id",id).order("page");
+  var fresh=null;
+  Promise.resolve(lawPagesForReindex(l)).then(function(fp){
+    fresh=fp;
+    if(fresh&&fresh.length) return {data:null};   /* PDF에서 새로 뽑았다 */
+    return withAuthRetry(function(){
+      return sb.from("law_pages").select("id,law_id,page,content").eq("law_id",id).order("page");
+    });
   }).then(function(res){
-    if(res.error) throw new Error("쪽을 읽지 못했어요: "+res.error.message);
-    var rows=res.data||[];
+    if(res&&res.error) throw new Error("쪽을 읽지 못했어요: "+res.error.message);
+    var rows;
+    if(fresh&&fresh.length){
+      /* 새로 뽑은 쪽에는 id가 없다 — 옛 쪽을 지우고 새로 넣는다 */
+      rows=fresh.map(function(p){ return {law_id:id,page:p.page,content:p.content,tbl:!!p.tbl}; });
+    } else rows=(res&&res.data)||[];
     if(!rows.length) throw new Error("저장된 쪽이 없어요. PDF를 다시 올려주세요.");
     cleanPages(rows);   /* 먼저 손질하고 저장한다 — 그래야 쪽 보기도 깨끗해진다 */
     /* 쪽마다 "시작 시점에 유효한 조"도 같이 갱신한다 — 쪽 보기에서 쓴다 */
@@ -2238,17 +2446,8 @@ function lawReindex(id){
     var arts=buildLawArticles(rows,lawSrc(l),meta.kind);
     if(!arts.length) throw new Error("조문을 하나도 찾지 못했어요.");
     showToast("조문 "+arts.length+"개를 찾았어요");
-    var i=0;
-    function pageChunk(){
-      if(i>=rows.length) return Promise.resolve();
-      var part=rows.slice(i,i+50); i+=50;
-      return withAuthRetry(function(){ return sb.from("law_pages").upsert(part); }).then(function(r2){
-        if(r2.error&&isNoArtCol(r2.error)){ lawArtCol=false; return null; }
-        if(r2.error) throw new Error("쪽 저장 실패: "+r2.error.message);
-        return pageChunk();
-      });
-    }
-    return pageChunk().then(function(){ return saveLawArticles(id,arts,l); });
+    return savePageRows(id,rows,!!(fresh&&fresh.length),true)
+      .then(function(){ return saveLawArticles(id,arts,l); });
   }).then(function(){
     lawBusy=false; lawArtCol=true; lawPageCache={};
     if(lawQuery) lawSearch(); else render();
@@ -2398,12 +2597,26 @@ function lawBuildAll(all){
   next();
 }
 function lawReindexOne(l){
-  return withAuthRetry(function(){
-    return sb.from("law_pages").select("page,content").eq("law_id",l.id).order("page");
+  var fresh=null;
+  return Promise.resolve(lawPagesForReindex(l)).then(function(fp){
+    fresh=fp;
+    if(fresh&&fresh.length) return {data:null};
+    return withAuthRetry(function(){
+      return sb.from("law_pages").select("id,law_id,page,content").eq("law_id",l.id).order("page");
+    });
   }).then(function(res){
-    if(res.error) throw new Error(res.error.message);
-    var rows=res.data||[];
+    if(res&&res.error) throw new Error(res.error.message);
+    var isNew=!!(fresh&&fresh.length), rows;
+    if(isNew) rows=fresh.map(function(p){ return {law_id:l.id,page:p.page,content:p.content,tbl:!!p.tbl}; });
+    else rows=(res&&res.data)||[];
     if(!rows.length) throw new Error("쪽 없음");
+    cleanPages(rows);
+    var carry="";
+    rows.forEach(function(r){
+      r.article=carry||null;
+      var a=findArticles(r.content||"");
+      if(a.length) carry=a[a.length-1].label;
+    });
     var m2=lawMeta(rows);
     if(m2.kind!==l.kind||m2.eff!==l.eff){
       l.kind=m2.kind; l.eff=m2.eff;
@@ -2411,7 +2624,8 @@ function lawReindexOne(l){
     }
     var arts=buildLawArticles(rows,lawSrc(l),m2.kind);
     if(!arts.length) throw new Error("조문 없음");
-    return saveLawArticles(l.id,arts,l);
+    return savePageRows(l.id,rows,isNew,false)
+      .then(function(){ return saveLawArticles(l.id,arts,l); });
   });
 }
 
@@ -2430,6 +2644,14 @@ function isNoArtCol(err){
   var m=((err&&err.message)||"").toLowerCase();
   return m.indexOf("article")>=0&&(m.indexOf("column")>=0||m.indexOf("does not exist")>=0);
 }
+/* 표 여부(tbl) 칸은 SQL을 돌려야 생긴다. 아직 없으면 조용히 빼고 저장한다 —
+ * 예전 article 칸을 그렇게 다뤘고, 같은 방식이라야 사용자가 SQL을 안 돌려도 쓸 수 있다. */
+var lawTblCol=true;
+function isNoTblCol(err){
+  var m=((err&&err.message)||"").toLowerCase();
+  return m.indexOf("tbl")>=0&&(m.indexOf("column")>=0||m.indexOf("does not exist")>=0);
+}
+function dropTbl(rows){ return rows.map(function(r){ var o={}; for(var k in r) if(k!=="tbl") o[k]=r[k]; return o; }); }
 
 /* ===== 법령 AI — 「어느 조를 펴 볼까」 고르기 =====
  * 답변은 쓰지 않는다. 어디를 볼지만 고른다.
@@ -2613,13 +2835,18 @@ function lawSearch(){
   lawSearching=true; renderLawResults();
   function run(){
     return withAuthRetry(function(){
-      var qb=sb.from("law_articles").select("id,law_id,seq,label,num,page,page_end,content");
+      var qb=sb.from("law_articles")
+        .select("id,law_id,seq,label,num,page,page_end,content"+(lawTblCol?",tbl":""));
       /* 낱말마다 조건을 겹쳐 걸면 모두 들어 있는 조문만 남는다 (교집합) */
       lawTermList.forEach(function(t){ qb=qb.ilike("content","%"+escLike(t)+"%"); });
       return qb.order("law_id").order("seq").limit(200);
     });
   }
   run().then(function(res){
+    /* 표 칸이 아직 없으면(SQL 전) 그 칸만 빼고 다시 찾는다 */
+    if(res.error&&lawTblCol&&isNoTblCol(res.error)){ lawTblCol=false; return run(); }
+    return res;
+  }).then(function(res){
     lawSearching=false;
     if(res.error){
       if(/law_articles/.test(res.error.message||"")){
@@ -2677,7 +2904,9 @@ function buildLawHits(rows,terms){
     if(wins.length>MAX_SNIP) wins=wins.slice(0,MAX_SNIP);
 
     var g={ key:"a"+r.id, artId:r.id, lawId:r.law_id, art:r.label,
-            page:r.page, pageEnd:r.page_end||r.page, table:looksLikeTable(c),
+            page:r.page, pageEnd:r.page_end||r.page,
+            /* PDF의 선으로 짚어 둔 것이 있으면 그걸 믿고, 없으면(옛 자료) 글자로 짐작한다 */
+            table:(r.tbl==null?looksLikeTable(c):!!r.tbl),
             total:total, spots:wins.length, snips:[] };
     /* 복사·저장에 쓸 「항 전문」도 같이 만들어 둔다. 화면은 짧은 발췌가 편하지만
      * 복사한 글은 문장이 잘려 있으면 그대로 쓸 수 없다. */
@@ -2796,11 +3025,15 @@ function openLawView(id,page){
    * 잘린 조각만 이어 붙여 흐리게 보여주면 문장이 온전히 읽힌다. */
   function runPage(){
     return withAuthRetry(function(){
-      return sb.from("law_pages").select(lawArtCol?"page,content,article":"page,content")
+      return sb.from("law_pages")
+        .select("page,content"+(lawArtCol?",article":"")+(lawTblCol?",tbl":""))
         .eq("law_id",id).gte("page",page-1).lte("page",page+1).order("page");
     });
   }
   runPage().then(function(res){
+    if(res.error&&lawTblCol&&isNoTblCol(res.error)){ lawTblCol=false; return runPage(); }
+    return res;
+  }).then(function(res){
     if(res.error&&lawArtCol&&isNoArtCol(res.error)){ lawArtCol=false; return runPage(); }
     return res;
   }).then(function(res){
@@ -2817,6 +3050,7 @@ function openLawView(id,page){
        * (머리글의 법령 이름은 문서 전체를 봐야 알 수 있어 여기선 못 지운다) */
       lawView.content=here?cleanPdfText(here.content||""):"";
       lawView.article=here?(here.article||""):"";
+      lawView.tbl=(here&&here.tbl!=null)?!!here.tbl:null;
       var e=edgeBits(before&&cleanPdfText(before.content||""),lawView.content,
                      after&&cleanPdfText(after.content||""));
       lawView.pre=e.pre; lawView.post=e.post;
@@ -3392,8 +3626,15 @@ function openLawArticle(artId,lawId){
   lawView={mode:"art",lawId:lawId,artId:artId,art:"",text:"",
            page:0,pageEnd:0,loading:true,err:""};
   renderLawModal();
-  withAuthRetry(function(){
-    return sb.from("law_articles").select("id,law_id,label,page,page_end,content").eq("id",artId);
+  function runArt(){
+    return withAuthRetry(function(){
+      return sb.from("law_articles")
+        .select("id,law_id,label,page,page_end,content"+(lawTblCol?",tbl":"")).eq("id",artId);
+    });
+  }
+  runArt().then(function(res){
+    if(res.error&&lawTblCol&&isNoTblCol(res.error)){ lawTblCol=false; return runArt(); }
+    return res;
   }).then(function(res){
     if(lawViewSeq!==seq) return;
     if(res.error) throw new Error("조문을 읽지 못했어요: "+res.error.message);
@@ -3401,6 +3642,7 @@ function openLawArticle(artId,lawId){
     if(!d) throw new Error("조문을 찾지 못했어요. 「조문 다시 만들기」를 눌러보세요.");
     lawView.loading=false; lawView.lawId=d.law_id; lawView.art=d.label;
     lawView.text=cleanPdfText(d.content||""); lawView.page=d.page; lawView.pageEnd=d.page_end||d.page;
+    lawView.tbl=(d.tbl==null?null:!!d.tbl);
     renderLawModal();
   }).catch(function(err){
     if(lawViewSeq!==seq) return;
@@ -3457,6 +3699,13 @@ function looksLikeTable(t){
 /* 재는 것은 「표인가」가 아니라 **「읽을 수 있는가」**다. 별지 제80호서식처럼
  * 오른쪽 칸이 비어 있는 표(체크 서식)는 글자만 뽑아도 안 섞여서 그냥 보여준다.
  * 별표 8처럼 칸마다 값이 차 있는 표만 뒤엉킨다 — 그때만 PDF로 보낸다. */
+/* PDF의 선으로 짚어 둔 것이 있으면 그걸 믿고, 없으면(옛 자료) 글자로 짐작한다 */
+function lvIsTable(){
+  if(!lawView) return false;
+  if(lawView.tbl!=null) return !!lawView.tbl;
+  return looksLikeTable(lawView.mode==="art"?lawView.text:lawView.content);
+}
+
 function lvTableHtml(){
   return '<div class="lv-tblmsg">'
     + '<div class="lv-tblmsg-i">▤</div>'
@@ -3480,9 +3729,9 @@ function renderLawModal(){
   var body, artBar="", foot;
   if(lawView.loading) body='<p class="empty">불러오는 중...</p>';
   else if(lawView.err) body='<p class="empty">'+esc(lawView.err)+'</p>';
-  else if(art) body=(looksLikeTable(lawView.text)&&!lawView.raw)?lvTableHtml():lawArtBodyHtml();
+  else if(art) body=(lvIsTable()&&!lawView.raw)?lvTableHtml():lawArtBodyHtml();
   else if(!lawView.content) body='<p class="empty">이 쪽에는 글자가 없어요.<br />표나 그림만 있는 쪽일 수 있어요 — 아래 PDF 원문에서 확인해 주세요.</p>';
-  else if(looksLikeTable(lawView.content)&&!lawView.raw) body=lvTableHtml();
+  else if(lvIsTable()&&!lawView.raw) body=lvTableHtml();
   else body='<div class="lv-text">'
     + (lawView.pre?'<div class="lv-edge lv-edge-pre">'+lawSegHtml(lawView.pre,lawTermList,0)+'</div>':"")
     + formatLawText(lawView.content,lawTermList)

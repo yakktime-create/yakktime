@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v104";
+var APP_VER="v105";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1735,14 +1735,37 @@ function pickBody(tally){
   return n<=3?set:null;
 }
 
+/* 글꼴 이름을 못 믿는 문서에서도 **글자 크기**는 믿을 수 있다.
+ * 한글(hwp)에서 만든 지침서는 글꼴이 68~85가지로 쪼개지지만, 큰 제목은
+ * 언제나 본문보다 크고 **아주 드물다**. 문서 전체 글자의 2%도 안 쓰면서
+ * 줄이 짧은 크기 — 그것이 제목 크기다.
+ * 실측(문서 10개): 07 사전GMP평가 h18 = 「1 목적」「3 평가 개요」 등 32줄뿐,
+ * 08 적합판정 h16 = 「1 목적」…「6 행정사항」 17줄, 10 전문수탁 h16 = 22줄.
+ * 본문(h15·h12)은 14~39%를 차지하므로 걸리지 않는다. */
+function headHeights(hc,hn){
+  var hs=Object.keys(hc).map(Number), all=0, dom=0;
+  hs.forEach(function(h){ all+=hc[h]; if(!dom||hc[h]>hc[dom]) dom=h; });
+  if(!all) return null;
+  var set={}, n=0;
+  hs.forEach(function(h){
+    if(h<=dom) return;                 /* 본문보다 커야 제목이다 */
+    if(hc[h]/all>=0.02) return;        /* 흔하면 본문이다 */
+    if(hc[h]/hn[h]>24) return;         /* 줄이 길면 제목이 아니다 */
+    set[h]=1; n++;
+  });
+  return n?set:null;
+}
+
 /* 본문 무리에 없는 글꼴로 쓰인 줄은 제목이다. 앞뒤로 줄을 바꿔 둔다 —
  * 화면과 복사가 그 줄바꿈을 그대로 절 경계로 읽는다. */
-function linesToText(lines,bodySet,bodyH){
-  if(!bodySet) return lines.map(function(l){ return l.text; }).join(" ").replace(/\s+/g," ").trim();
+function linesToText(lines,bodySet,bodyH,headSet){
+  if(!bodySet&&!headSet) return lines.map(function(l){ return l.text; }).join(" ").replace(/\s+/g," ").trim();
   var out=[];
   lines.forEach(function(l){
     if(!l.text) return;
-    if(bodySet[l.font]){ out.push(l.text); return; }
+    /* 글꼴 무리를 못 믿는 문서는 **크기만** 본다 — 제목 크기인 줄만 떼어 낸다. */
+    var isHead=bodySet?!bodySet[l.font]:!!headSet[+(String(l.font).split("|")[1]||0)];
+    if(!isHead){ out.push(l.text); return; }
     /* 제목 중에서도 **본문보다 큰 것**이 큰 제목이다(큰 제목 h14 · 소제목 h12).
      * 원문의 「③ 유전자변형생물체의 보관」처럼 번호가 심볼 글꼴이면 글자로는
      * 소제목과 구분이 안 된다.
@@ -1818,7 +1841,7 @@ function extractPdfPages(buf,onProgress){
       });
     });
   }).then(function(doc){
-    var total=doc.numPages, raw=[], tally={}, lib=window.pdfjsLib;
+    var total=doc.numPages, raw=[], tally={}, hc={}, hn={}, lib=window.pdfjsLib;
     function step(i){
       if(i>total) return Promise.resolve();
       var page;
@@ -1827,7 +1850,12 @@ function extractPdfPages(buf,onProgress){
       }).then(function(tc){
         var H=page.getViewport({scale:1}).height;
         var lines=pdfLines(tc,H);
-        lines.forEach(function(l){ if(l.font) tally[l.font]=(tally[l.font]||0)+l.text.length; });
+        lines.forEach(function(l){
+          if(!l.font) return;
+          tally[l.font]=(tally[l.font]||0)+l.text.length;
+          var lh=+(l.font.split("|")[1]||0);
+          if(lh){ hc[lh]=(hc[lh]||0)+l.text.length; hn[lh]=(hn[lh]||0)+1; }
+        });
         /* 선을 읽어 표가 있는 쪽을 짚는다. 글자로 짐작하던 것을 확실하게 한다. */
         return page.getOperatorList().then(function(ops){
           var tbl=false;
@@ -1844,6 +1872,8 @@ function extractPdfPages(buf,onProgress){
     }
     return step(1).then(function(){
       var bodySet=pickBody(tally);
+      /* 글꼴을 못 믿으면 크기로 제목만 짚는다 — 없는 것보다 낫다 */
+      var headSet=bodySet?null:headHeights(hc,hn);
       /* 본문 글자 높이 — 이보다 큰 제목이 큰 제목이다 */
       var bodyH=0;
       if(bodySet){
@@ -1852,7 +1882,7 @@ function extractPdfPages(buf,onProgress){
       }
       var pages=[];
       raw.forEach(function(r){
-        var txt=linesToText(r.lines,bodySet,bodyH);
+        var txt=linesToText(r.lines,bodySet,bodyH,headSet);
         if(txt) pages.push({page:r.page,content:txt,tbl:r.tbl});
       });
       return pages;
@@ -2166,27 +2196,49 @@ function isCutTitle(t){
 /* 큰 제목만 — 쪽마다 물려주려면 소제목은 빼야 한다.
  * 「· 교차오염방지」는 그 쪽 안의 한 대목일 뿐이고, 그 쪽이 어느 대목에
  * 속하는지는 앞에서 이어진 큰 제목이 말해 준다. */
-function headLineBig(t){
-  var ls=String(t||"").split("\n");
+/* half 를 주면 **그 쪽의 절반 넘게 차지하는** 큰 제목만 돌려준다.
+ * 9월 4일에 본 8쪽이 그 경우다 — 위 4분의 1은 앞 절(「실태조사 경비」)의
+ * 꼬리고 아래 4분의 3이 새 절(「5 평가방법」)이었는데, 첫 줄만 보니
+ * 꼬리를 쪽 이름으로 삼았다. 거꾸로 22쪽처럼 새 절이 맨 끝에서야 시작하면
+ * 그 쪽은 여전히 앞에서 이어진 제목의 것이다. */
+function headLineBig(t,half){
+  var s=String(t||""), ls=s.split("\n"), at=0;
   for(var i=0;i<ls.length;i++){
     var L=ls[i].replace(/\s+/g," ").trim();
-    if(!L||L.length>30||/[.?!]$/.test(L)) continue;
-    if(/^[-–—]?\s*\d{1,4}\s*[-–—]?$/.test(L)) continue;
-    if(!isBigHead(L)||L.length<2||isCutTitle(L)) continue;
-    return L.length>24?L.slice(0,24):L;
+    var ok=!(!L||L.length>30||/[.?!]$/.test(L))
+        && !/^[-–—]?\s*\d{1,4}\s*[-–—]?$/.test(L)
+        && isBigHead(L)&&L.length>=2&&!isCutTitle(L);
+    if(ok){
+      /* 뒤쪽에서야 나온 제목이면 이 쪽의 이름이 아니다 */
+      if(half&&(s.length-at)<=at) return "";
+      return tidyTitle(L);
+    }
+    at+=ls[i].length+1;
   }
   return "";
 }
 
-/* 그 쪽 첫 줄이 새 큰 제목이면 그것이 이 쪽의 이름이다 —
- * 앞 쪽에서 이어진 제목보다 이쪽이 앞선다. */
-/* 제목 줄인데 글머리표(·)가 없으면 큰 제목이다 — 추출할 때 떼어 두었다. */
-function isBigHead(L){ return !!L&&!/^[·ㆍ•▪○]/.test(L); }
-function firstLineBig(t){
-  var L=(String(t||"").split("\n")[0]||"").replace(/\s+/g," ").trim();
-  if(!L||L.length>30||/[.?!]$/.test(L)) return "";
-  if(!isBigHead(L)||L.length<2||isCutTitle(L)) return "";
-  return L.length>24?L.slice(0,24):L;
+/* 제목 줄인데 글머리표가 없으면 큰 제목이다 — 추출할 때 떼어 두었다.
+ * 글머리표는 문서마다 다르다. 09 생균치료제는 ○ 자리에 **로마자 O**를,
+ * 그 아래 층에는 줄표(-)를 쓴다. 그걸 안 걸러 「O 취급 병원체에 따른
+ * 전용시설」이 쪽 이름으로 올라왔다. */
+function isBigHead(L){
+  if(!L) return false;
+  if(/^[·ㆍ•▪○◦●□■◆▶⦁‧∙※*\-–—]/.test(L)) return false;
+  if(/^[OoＯ]\s/.test(L)) return false;
+  return true;
+}
+
+/* 제목 끝에 매달린 여는 괄호를 턴다 — 24자에서 자르면 「… 평가 결과 (서류 및
+ * 증명서」처럼 괄호가 열린 채 끝난다. */
+function tidyTitle(L){
+  L=String(L||"").replace(/\s*[(（\[「『]\s*[)）]?\s*$/,"").trim();
+  if(L.length>24){
+    L=L.slice(0,24);
+    var o=L.lastIndexOf("(");
+    if(o>0&&L.indexOf(")",o)<0) L=L.slice(0,o).trim();
+  }
+  return L;
 }
 
 function headLineTitle(t){
@@ -2200,8 +2252,7 @@ function headLineTitle(t){
     if(!big&&/^\d/.test(bare)) big=bare;
     if(!small&&!/^\d/.test(bare)) small=bare;
   }
-  var ti=big||small;
-  return ti&&ti.length>24?ti.slice(0,24):ti;
+  return tidyTitle(big||small);
 }
 
 function pageTitle(t){
@@ -2384,8 +2435,10 @@ function buildLawArticles(pages,docName,docKind){
       if(!t) return;
       t=cleanPdfText(t,hre);        /* 조문 쪽과 같은 손질을 여기에도 */
       var big=headLineBig(t);
-      var ti=firstLineBig(t)||carryBig||big||pageTitle(t);
-      if(big) carryBig=big;
+      var ti=headLineBig(t,true)||carryBig||big||pageTitle(t);
+      /* 「목 차」는 그 쪽만 목차다. 물려주면 붙임 보고서 열 쪽이 죄다
+       * 「목 차」가 된다 — 이름은 없는 것이 틀린 것보다 낫다. */
+      if(big) carryBig=/^(목\s*차|차\s*례)$/.test(big)?"":big;
       out.push({ seq:out.length+1, label:p.page+"쪽"+(ti?" · "+ti:""), num:p.page+"쪽",
                  page:p.page, page_end:p.page, content:t });
     });

@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v102";
+var APP_VER="v103";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2992,6 +2992,10 @@ function buildLawHits(rows,terms){
       /* 덩어리 바로 앞이 제목 줄이면 그 제목부터 보여준다 — 미리보기에서
        * 「· 교차오염방지」가 빠지면 어느 대목인지 알 수 없다. */
       if(idx>0&&pts[idx].lv===1&&pts[idx-1].lv===0&&!pts[idx-1].soft) st=pts[idx-1].at;
+      /* 다만 조 제목(len이 있는 지점)은 배지에 이미 있으므로 건너뛴다 —
+       * 「제3조(약사 자격과 면허)」가 배지에도 발췌에도 나와 같은 말이 두 번이었다. */
+      for(var k=0;k<pts.length;k++)
+        if(pts[k].at===st&&pts[k].len>0){ st=pts[k].at+pts[k].len; break; }
       return st;
     }
     /* 조 제목 안의 낱말로는 발췌를 만들지 않는다 — 「제3조(약사 자격과 면허)」가
@@ -3044,6 +3048,9 @@ function buildLawHits(rows,terms){
         var mk=/^\s*([가-힣]|\d{1,2})\s*[.)]\s+/.exec(body);
         if(mk&&where.indexOf(mk[1])>=0) body=body.slice(mk[0].length);
       }
+      /* 항 표시(①)도 배지에 있으면 뗀다 — 「① ①약사(藥師)가 …」가 됐다 */
+      var mh=/^\s*([\u2460-\u2473])\s*/.exec(body);
+      if(mh&&where.indexOf(mh[1])>=0) body=body.slice(mh[0].length);
       g.snips.push({ where:where, full:full,
         text:(w.st>(w.bs==null?0:w.bs)?"…":"")+body+(w.en<c.length?"…":"") });
     });

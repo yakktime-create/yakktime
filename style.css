@@ -1006,6 +1006,17 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 @keyframes askdot{0%,70%,100%{opacity:.25;transform:translateY(0);}
                   35%{opacity:1;transform:translateY(-2px);}}
 @media (prefers-reduced-motion:reduce){ .ask-dots i{animation:none;opacity:.6;} }
+/* 기다리는 화면. 막대가 흐르고 점이 켜지고 글자가 바뀐다 —
+   셋 다 없으면 「멈춘 건지 되는 건지」를 알 수가 없다. */
+.ask-wait{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);
+  padding:20px var(--sp-4);box-shadow:var(--sh-1);}
+.ask-wait-bar{height:3px;border-radius:99px;background:var(--paper);overflow:hidden;margin-bottom:14px;}
+.ask-wait-bar i{display:block;height:100%;width:34%;border-radius:99px;background:var(--brass);
+  animation:askflow 1.5s ease-in-out infinite;}
+@keyframes askflow{0%{transform:translateX(-110%);}100%{transform:translateX(320%);}}
+.ask-wait-t{font-weight:650;font-size:var(--fs-md);}
+.ask-wait-s{margin-top:6px;font-size:var(--fs-sm);color:var(--muted);}
+@media (prefers-reduced-motion:reduce){ .ask-wait-bar i{animation:none;width:100%;opacity:.45;} }
 /* 기다리는 동안 테두리가 천천히 숨쉰다 — 점 셋만으로는 멀리서 안 보인다 */
 .ask-bar.busy{animation:askwait 1.6s ease-in-out infinite;}
 @keyframes askwait{0%,100%{border-color:var(--brass-bd);}50%{border-color:var(--brass);}}

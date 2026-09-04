@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v111";
+var APP_VER="v112";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2810,6 +2810,21 @@ function lawOnlyLabel(){
   return ids.length===1?first:(first+" 등 "+ids.length+"개");
 }
 
+/* **기다리는 동안 화면이 죽어 있으면 멈춘 줄 안다.** 5~15초가 걸리는 일이라
+ * ① 막대가 흐르고 ② 점 셋이 켜지고 ③ 지금 무슨 일을 하는지 글자가 바뀐다.
+ * 단계는 실제 진행이 아니라 **대략의 차례**다 — 서버가 알려주지 않기 때문에
+ * 시간으로 넘긴다. 그래서 「몇 %」처럼 잰 척하는 표시는 쓰지 않는다. */
+var ASK_STEPS=["조 제목을 훑어 후보를 고르는 중","고른 조문의 본문을 읽는 중","근거를 원문과 대조하는 중"];
+var lawAskStep=0, lawAskTimer=null;
+function lawWaitHtml(){
+  return '<div class="ask-wait">'
+    + '<div class="ask-wait-bar"><i></i></div>'
+    + '<div class="ask-wait-t">'+esc(ASK_STEPS[Math.min(lawAskStep,ASK_STEPS.length-1)])
+    +   '<span class="ask-dots"><i></i><i></i><i></i></span></div>'
+    + '<div class="ask-wait-s">보통 5~15초 걸려요.</div></div>';
+}
+function lawAskStop(){ if(lawAskTimer){ clearInterval(lawAskTimer); lawAskTimer=null; } }
+
 function lawAskRun(){
   var q=nfc(val("law-q")||"").trim();
   if(q.length<5){ showToast("질문을 문장으로 적어주세요. 민원 글을 그대로 붙여넣어도 돼요."); return; }
@@ -2818,8 +2833,19 @@ function lawAskRun(){
   /* 옛 검색어 형광펜을 지운다. 안 지우면 원문 창이 노란 범벅이 되어 못 읽는다 —
    * AI 결과에서는 **근거 문장 하나만** 칠한다(창을 열 때 정한다). */
   lawTermList=[];
-  lawAsking=true; lawAsk=null; renderLawResults();
-  function done(){ lawAsking=false; renderLawResults(); }
+  /* renderLawResults() 만 부르면 결과 자리만 바뀌고 **버튼은 그대로**다 —
+   * 눌러도 아무 일도 안 일어난 것처럼 보였다. 화면 전체를 다시 그린다. */
+  lawAsking=true; lawAsk=null; lawAskStep=0;
+  /* 사용법·법령 목록을 접어 **결과가 뜰 자리를 미리 비운다** — 안 접으면
+   * 기다리는 표시가 사용법 아래로 밀려나 화면 밖에 있다. */
+  lawHelpOpen=false; lawListOpen=false;
+  lawAskStop();
+  lawAskTimer=setInterval(function(){
+    if(!lawAsking){ lawAskStop(); return; }
+    lawAskStep++; renderLawResults();
+  },4200);
+  render();
+  function done(){ lawAskStop(); lawAsking=false; render(); }
   var only=lawOnlyIds();
   sb.functions.invoke("law-pick",{body:{q:q,lawIds:(only.length&&only.length<S.laws.length)?only:null}}).then(function(r){
     var d=r&&r.data;
@@ -4404,7 +4430,7 @@ function renderLawResults(){
 
   /* AI가 고른 조문이 있으면 그걸 보여준다. 낱말 검색과 한 자리를 나눠 쓴다 —
    * 둘이 같이 떠 있으면 무엇을 보고 있는지 헷갈린다. */
-  if(lawAsking){ el.innerHTML='<p class="empty">질문을 읽고 관련 조문을 고르는 중이에요...</p>'; return; }
+  if(lawAsking){ el.innerHTML=lawWaitHtml(); return; }
   if(lawAsk){ el.innerHTML=lawAskHtml(); return; }
   if(lawSearching){ el.innerHTML='<p class="empty">찾는 중...</p>'; return; }
   if(lawHits===null){

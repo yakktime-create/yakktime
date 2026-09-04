@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v75";
+var APP_VER="v76";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1794,8 +1794,11 @@ function lawMeta(pages){
     eff=m[1]+("0"+m[2]).slice(-2)+("0"+m[3]).slice(-2);
   /* 지침서 발행 연월 — 표지에 적히는 꼴이 여러 가지다.
    *   2025. 9.   ·   2026년 06월   ·   2025-11 */
-  else if((m=/(20\d{2})\s*\.\s*(\d{1,2})\s*\.|(20\d{2})\s*년\s*(\d{1,2})\s*월|(20\d{2})-(\d{1,2})(?!\d)/.exec(head))
-          &&(m=[0,m[1]||m[3]||m[5],m[2]||m[4]||m[6]]))
+  /* 표지 날짜는 꼴이 여러 가지다. 게다가 PDF에서 뽑으면 글자 순서가 뒤엉켜
+   * 「년 월 2026 06」처럼 나오는 문서도 있다(전문수탁 제조업체 평가 절차).
+   *   2025. 9.  ·  2026년 06월  ·  2025-11  ·  년 월 2026 06 */
+  else if((m=/(20\d{2})\s*\.\s*(\d{1,2})\s*\.|(20\d{2})\s*년\s*(\d{1,2})\s*월|(20\d{2})-(\d{1,2})(?!\d)|년\s*월\s*(20\d{2})\s+(1[0-2]|0?[1-9])(?!\d)/.exec(head))
+          &&(m=[0,m[1]||m[3]||m[5]||m[7],m[2]||m[4]||m[6]||m[8]]))
     eff=m[1]+("0"+m[2]).slice(-2)+"00";
   return {kind:kind,eff:eff};
 }
@@ -2016,7 +2019,7 @@ function buildLawArticles(pages,docName,docKind){
   /* PDF에서 뽑은 글자에 「자모가 분리된」 한글이 섞여 있는 문서가 있다
    * (의약품안전규칙 673자). 화면엔 똑같이 보이지만 검색으로는 안 걸리고,
    * AI에게 보낼 때도 토큰이 더 든다. 저장 전에 한 번 맞춘다. */
-  var full=nfc(buf.join("\n"));
+  var full=cleanPdfText(buf.join("\n"));
   /* 쪽 경계 표시가 없으므로, 잘린 위치가 몇 쪽인지는 marks로 되짚는다 */
   function pageAt(at){
     var lo=0, hi=marks.length-1, ans=marks[0].page;
@@ -2132,6 +2135,7 @@ function buildLawArticles(pages,docName,docKind){
     pages.forEach(function(p){
       var t=(p.content||"").trim();
       if(!t) return;
+      t=cleanPdfText(t);            /* 조문 쪽과 같은 손질을 여기에도 (글머리표 m) */
       var ti=pageTitle(t);
       out.push({ seq:out.length+1, label:p.page+"쪽"+(ti?" · "+ti:""), num:p.page+"쪽",
                  page:p.page, page_end:p.page, content:t });
@@ -2233,6 +2237,17 @@ function lawReindex(id){
  * 떨어졌고, 파일 여섯 개를 뜯어보니 전부 NFD였다.
  * 붙여넣는 민원 글도 마찬가지라 검색에도 같은 함정이 있다. 들어오는 글자는
  * 한 군데서 모아 NFC 로 맞춘다. */
+/* PDF에서 뽑으면 글머리표(■)가 심볼 글꼴의 원래 바이트인 「m」으로 나오는
+ * 문서가 있다 — 「… 한다 . m 품질위험관리 …」처럼 문장 사이에 낀다.
+ * 그냥 지우면 「0.5 μm」 「등급 m3」 「200 mg」 같은 진짜 단위가 망가지므로,
+ * 앞이 한글·문장부호이고 뒤에 한글이 두 자 이상 이어질 때만 바꾼다.
+ * 문서 열 개로 확인 — 글머리표 30개를 모두 잡고 단위는 하나도 안 건드린다. */
+var BULLET_M=/(?<=[가-힣.)\]」』\-–—])\s+m\s+(?=[가-힣]{2})/g;
+function cleanPdfText(t){
+  t=nfc(t);
+  try{ return t.replace(BULLET_M," · "); }catch(e){ return t; }   /* 구형 사파리는 뒤돌아보기를 못 쓴다 */
+}
+
 function nfc(t){
   t=String(t==null?"":t);
   try{ return t.normalize?t.normalize("NFC"):t; }catch(e){ return t; }
@@ -2573,7 +2588,13 @@ function buildLawHits(rows,terms){
     });
     out.push(g);
   });
+  /* 법 위계 순으로 세운다 — 지침서가 법률 위에 오면 근거가 약한 것을 먼저
+   * 보게 된다. 목록에서 쓰는 것과 같은 순서라 눈이 헷갈리지 않는다. */
   out.sort(function(a,b){
+    var la=S.laws.find(function(x){ return x.id===a.lawId; });
+    var lb=S.laws.find(function(x){ return x.id===b.lawId; });
+    var ka=la?lawKindOf(la).n:9, kb=lb?lawKindOf(lb).n:9;
+    if(ka!==kb) return ka-kb;
     var na=lawName(a.lawId), nb=lawName(b.lawId);
     if(na!==nb) return na<nb?-1:1;
     return a.page-b.page;
@@ -3566,7 +3587,10 @@ function renderLawResults(){
   var SHOW=3, cur=null, body="";
   lawHits.forEach(function(g){
     var nm=lawName(g.lawId);
-    if(nm!==cur){ cur=nm; body+='<div class="law-group">'+esc(nm)+'</div>'; }
+    if(nm!==cur){ cur=nm;
+      var lo=S.laws.find(function(x){ return x.id===g.lawId; });
+      body+='<div class="law-group g'+(lo?lawKindOf(lo).n:9)+'">'+esc(nm)
+          + (lo?'<span class="law-group-kind">'+esc(lawKindOf(lo).t)+'</span>':'')+'</div>'; }
     var open=!!lawOpen[g.key], list=open?g.snips:g.snips.slice(0,SHOW);
     body+='<div class="law-hit'+(lawSel[g.key]?" on":"")+'">'
       + '<label class="law-pick"><input type="checkbox" class="law-check" data-act="law-pick" data-key="'+esc(g.key)+'"'+(lawSel[g.key]?" checked":"")+' /></label>'

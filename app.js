@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v95";
+var APP_VER="v96";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2925,19 +2925,30 @@ function buildLawHits(rows,terms){
         if(!pts[i].soft&&pts[i].lv<=3&&pts[i].at>a&&pts[i].at<=b) return pts[i].at;
       return -1;
     }
+    /* 발췌는 **그 낱말이 든 덩어리의 첫 글자부터** 보여준다.
+     * 앞 80자에서 무턱대고 자르면 「…나. 생물학적제제등」처럼 문장 한복판에서
+     * 시작해 어디인지 바로 못 찾는다. 덩어리가 너무 길면 앞을 잘라 「…」을 붙인다. */
+    var HEAD_MAX=380;
+    function blockStart(at){
+      var st=0;
+      for(var i=0;i<pts.length;i++){
+        if(pts[i].soft) continue;
+        if(pts[i].at<=at) st=pts[i].at; else break;
+      }
+      return st;
+    }
     var wins=[];
     found.forEach(function(f){
-      var st=Math.max(0,f.at-PAD), en=Math.min(c.length,f.at+f.len+PAD);
+      var bs=blockStart(f.at);
+      var st=Math.max(bs,f.at-HEAD_MAX), en=Math.min(c.length,f.at+f.len+PAD);
       var last=wins.length?wins[wins.length-1]:null;
       var cut=last?crossAt(last.at,f.at):-1;
       if(last&&st<=last.en&&cut<0){ if(en>last.en) last.en=en; return; }
-      /* 경계에서 나눌 때는 서로 겹치지 않게 그 자리에서 자른다 —
-       * 안 그러면 거의 같은 발췌가 둘 생긴다. */
       if(cut>=0){
         if(st<cut) st=cut;
         if(last&&last.en>cut) last.en=cut;
       }
-      wins.push({st:st,en:en,at:f.at});
+      wins.push({st:st,en:en,at:f.at,bs:bs});
     });
     if(wins.length>MAX_SNIP) wins=wins.slice(0,MAX_SNIP);
 
@@ -2956,8 +2967,9 @@ function buildLawHits(rows,terms){
         var bk=rg.st+"-"+rg.en;
         full=seen[bk]?"":(seen[bk]=1,lawPlain(c.slice(rg.st,rg.en)));
       }
+      /* 덩어리 첫 글자부터 시작했으면 앞에 「…」을 붙이지 않는다 */
       g.snips.push({ where:(a&&a.detail)||"", full:full,
-        text:(w.st>0?"…":"")+c.slice(w.st,w.en)+(w.en<c.length?"…":"") });
+        text:(w.st>(w.bs==null?0:w.bs)?"…":"")+c.slice(w.st,w.en)+(w.en<c.length?"…":"") });
     });
     out.push(g);
   });
@@ -3445,6 +3457,21 @@ function lawBreaks(text){
      * 넣어 뒀는데 화면을 그리는 쪽이 그걸 안 봐서, 「· 세척 및 오염제거」가
      * 문단 한복판에 끼어 있었다. 새 절로 끊는다. */
     if(ch==="·"&&(i===0||text.charAt(i-1)==="\n")){ pts.push({at:i,lv:0,len:0}); continue; }
+    /* 제목 줄 **다음**도 새 문단이다 — 「· 교차오염방지」와 「세포은행은 오염 또는…」이
+     * 한 덩어리로 붙어 있으면 제목이 본문에 묻힌다.
+     * 제목은 짧고 마침표로 끝나지 않는다. 쪽 경계의 줄바꿈(문장 한복판)과 그것으로 가른다. */
+    if(ch==="\n"&&i+1<text.length&&!inSkip(i+1)){
+      var ls=text.lastIndexOf("\n",i-1)+1;
+      var prev=text.slice(ls,i).replace(/\s+/g," ").trim();
+      var ne=text.indexOf("\n",i+1); if(ne<0) ne=text.length;
+      var next=text.slice(i+1,ne).replace(/\s+/g," ").trim();
+      function isHead(t){ return !!t&&t.length<=40&&!/[.?!]$/.test(t); }
+      /* 숫자로 시작하면 큰 제목이다 — 「2 보관시설」 「1-2 세포은행 시스템관리」.
+       * 글머리표로 여는 소제목(「· 교차오염방지」)과 크기로 가른다. */
+      if(isHead(next)) pts.push({at:i+1,lv:0,len:0,big:/^\d/.test(next)});
+      else if(isHead(prev)) pts.push({at:i+1,lv:1,len:0});   /* 앞 줄이 제목 → 본문 시작 */
+      continue;
+    }
     if(HANG.indexOf(ch)>=0){ pts.push({at:i,lv:1,len:0}); continue; }
     /* 호(1. 2.) · 목(가. 나.) — 앞이 공백이고 뒤가 공백인 것만.
      * PDF에서 뽑으면 "사 ." 처럼 점 앞에 공백이 끼기도 해서 허용한다.
@@ -3453,6 +3480,9 @@ function lawBreaks(text){
      * **글 맨 앞(i===0)도 받는다** — 쪽을 하나만 보여줄 때 그 쪽이 「다.」로
      * 시작하면 앞 글자가 없어 안 잡혔고, 그래서 「다.」만 맨 왼쪽에 남고
      * 「라.」부터 들여쓰기되어 층이 들쭉날쭉해 보였다. */
+    /* 쪽 경계에서 「…증명하여야 한 / 다 . 또한」처럼 낱말이 잘리면 그 「다 .」가
+     * 목으로 보인다. 줄바꿈 앞이 한글이면 이어지는 낱말이니 목이 아니다. */
+    if(i>1&&text.charAt(i-1)==="\n"&&/[가-힣]/.test(text.charAt(i-2))) continue;
     if(i===0||/\s/.test(text.charAt(i-1))){
       var mm=/^(\d{1,2}|[\uAC00-\uD7A3])\s*\.\s/.exec(text.slice(i,i+6));
       if(mm){
@@ -3640,17 +3670,18 @@ function formatLawSeg(text,q,startLv){
   startLv=startLv||0;
   var pts=lawBreaks(text);
   if(!pts.length) return {html:'<div class="lp '+LP_CLASS[startLv]+'">'+lawSegHtml(text,q,0)+'</div>',lv:startLv};
-  var html="", prev=0, prevLv=startLv, prevArt=0, prevSoft=false;
+  var html="", prev=0, prevLv=startLv, prevArt=0, prevSoft=false, prevBig=false;
   function push(to){
     var seg=text.slice(prev,to);
     /* 긴 글을 문장에서 나눈 자리(soft)는 새 절이 아니다 — 절 사이 가로줄을
      * 문단마다 그으면 답답하다. 소제목이 여는 절에만 긋는다. */
-    if(seg.trim()) html+='<div class="lp '+LP_CLASS[prevLv]+(prevSoft?" lp-soft":"")+'">'
+    if(seg.trim()) html+='<div class="lp '+LP_CLASS[prevLv]
+      +(prevSoft?" lp-soft":"")+(prevBig?" lp-big":"")+'">'
       +lawSegHtml(seg,q,prevArt)+'</div>';
   }
-  if(pts[0].at>0){ prev=0; prevLv=startLv; prevArt=0; prevSoft=false; push(pts[0].at); }
+  if(pts[0].at>0){ prev=0; prevLv=startLv; prevArt=0; prevSoft=false; prevBig=false; push(pts[0].at); }
   pts.forEach(function(p,i){
-    prev=p.at; prevLv=p.lv; prevArt=p.len; prevSoft=!!p.soft;
+    prev=p.at; prevLv=p.lv; prevArt=p.len; prevSoft=!!p.soft; prevBig=!!p.big;
     push(i+1<pts.length?pts[i+1].at:text.length);
   });
   return {html:html,lv:pts[pts.length-1].lv};

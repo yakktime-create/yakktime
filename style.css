@@ -659,6 +659,10 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
 .lp0:first-child{margin-top:0;padding-top:0;border-top:none;}
 /* 긴 글을 문장에서 나눈 자리는 새 절이 아니다 — 가로줄을 긋지 않는다 */
 .lp0.lp-soft{margin-top:0;padding-top:0;border-top:none;}
+/* 큰 제목(「2 보관시설」)은 소제목(「· 교차오염방지」)보다 한 단계 크게.
+   원문에서도 글꼴이 한 치수 크다. */
+.lp0.lp-big{font-size:var(--fs-lg);font-weight:750;color:var(--blue-deep);
+  letter-spacing:-.01em;margin-top:26px;padding-top:18px;}
 .lp1{margin-left:16px;}
 .lp2{margin-left:34px;}
 .lp3{margin-left:52px;}

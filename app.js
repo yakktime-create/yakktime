@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v72";
+var APP_VER="v73";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2333,7 +2333,9 @@ var lawAskSel={};
 function lawOnlyIds(){ return Object.keys(lawOnly).filter(function(k){ return lawOnly[k]; }); }
 function lawOnlyLabel(){
   var ids=lawOnlyIds(); if(!ids.length||ids.length===S.laws.length) return "";
-  var first=lawName(ids[0]);
+  /* 법령 이름이 길어서 그대로 쓰면 배지가 줄을 밀어낸다 */
+  var first=String(lawName(ids[0])||"");
+  if(first.length>16) first=first.slice(0,16)+"…";
   return ids.length===1?first:(first+" 등 "+ids.length+"개");
 }
 
@@ -3428,7 +3430,10 @@ function renderLaws(){
       +   (lawOnlyLabel()?'<span class="law-only-tag">'+esc(lawOnlyLabel())+'만</span>':'')
       +   '<span class="law-toggle-hint">'+(lawListOpen?"":"찾을 범위 고르기 · 삭제")+'</span></button>'
       + (lawListOpen
-          ? '<button class="link-btn" data-act="law-build-all" data-id="all"'+(lawBusy?" disabled":"")+'>'
+          ? '<button class="link-btn" data-act="law-only-all">전체</button>'
+            + '<button class="link-btn quiet-link" data-act="law-only-none">해제</button>'
+            + '<span class="law-head-sep">·</span>'
+            + '<button class="link-btn" data-act="law-build-all" data-id="all"'+(lawBusy?" disabled":"")+'>'
             + (lawBusy?"만드는 중…":"조문 전부 다시 만들기")+'</button>'
             + '<button class="link-btn quiet-link" data-act="law-list">접기</button>'
           : '')
@@ -3442,7 +3447,11 @@ function renderLaws(){
       list+='<div class="law-list grouped">'+lawSorted().map(function(l){
       var onlyOn=!!lawOnly[l.id], kd=lawKindOf(l), head="";
       if(kd.t!==cur){ cur=kd.t;
-        head='<div class="law-kind g'+kd.n+'"><span>'+esc(kd.t)+'</span></div>'; }
+        var kn=lawSorted().filter(function(x){ return lawKindOf(x).n===kd.n; });
+        var kOn=kn.length&&kn.every(function(x){ return lawOnly[x.id]; });
+        head='<button class="law-kind g'+kd.n+(kOn?" on":"")+'" data-act="law-only-kind" data-id="'+kd.n+'"'
+           + ' title="이 묶음만 고르기"><span>'+esc(kd.t)+'</span>'
+           + '<span class="law-kind-n">'+kn.length+'</span></button>'; }
       return head+'<div class="law-row'+(onlyOn?" only":"")+'">'
         /* 하나도 안 고르면 전부 본다. 「고른 것만」은 좁힐 때만 쓰는 장치다. */
         + '<label class="law-only"><input type="checkbox" data-act="law-only" data-id="'+l.id+'"'+(onlyOn?" checked":"")+' title="이 법령에서만 찾기" /></label>'
@@ -3679,6 +3688,15 @@ document.getElementById("app").addEventListener("click",function(e){
     case "law-search": lawSearch(); break;
     case "law-ask": lawAskRun(); break;
     case "law-only": { if(lawOnly[id]) delete lawOnly[id]; else lawOnly[id]=true; render(); break; }
+    case "law-only-all": { lawOnly={}; S.laws.forEach(function(l){ lawOnly[l.id]=true; }); render(); break; }
+    case "law-only-none": { lawOnly={}; render(); break; }
+    /* 묶음 머리말을 누르면 그 묶음만 — 「고시만 보고 싶다」가 흔한 일이다.
+     * 이미 그 묶음이 다 켜져 있으면 끈다 (같은 자리를 두 번 누르면 되돌아온다). */
+    case "law-only-kind": {
+      var kn=S.laws.filter(function(x){ return String(lawKindOf(x).n)===id; });
+      var allOn=kn.length&&kn.every(function(x){ return lawOnly[x.id]; });
+      kn.forEach(function(x){ if(allOn) delete lawOnly[x.id]; else lawOnly[x.id]=true; });
+      render(); break; }
     case "ask-pick": { if(lawAskSel[id]) delete lawAskSel[id]; else lawAskSel[id]=true;
       renderLawResults(); break; }
     case "ask-more": lawAskMore=true; renderLawResults(); break;

@@ -1003,13 +1003,24 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
   margin:var(--sp-2) calc(-1*var(--sp-2)) var(--sp-1);padding:6px var(--sp-3);}
 .law-kind:first-child{margin-top:calc(-1*var(--sp-2));}
 /* 묶음 머리말 — 위계가 한눈에 갈리게 왼쪽에 색 막대를 세운다 */
+/* 묶음 머리말은 이제 누를 수 있다 — 그 묶음만 고르기 */
+.law-kind{display:flex;align-items:center;gap:var(--sp-2);width:100%;
+  border:none;font-family:inherit;text-align:left;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;}
+.law-kind:active{background:var(--accent-soft);}
+.law-kind.on{background:var(--accent-soft);}
+.law-kind.on span:first-of-type{color:var(--accent);}
+.law-kind-n{margin-left:auto;font-size:var(--fs-2xs);font-weight:700;color:var(--muted);}
+.law-kind.on .law-kind-n{color:var(--accent);}
+.law-head-sep{color:var(--line);}
 .law-kind span{display:inline-flex;align-items:center;gap:var(--sp-2);
   font-size:var(--fs-xs);font-weight:800;color:var(--ink);letter-spacing:.04em;}
-.law-kind span::before{content:"";width:3px;height:12px;border-radius:2px;background:var(--muted);}
-.law-kind.g0 span::before{background:var(--accent);}
-.law-kind.g1 span::before,.law-kind.g2 span::before{background:#6F9A8B;}
-.law-kind.g3 span::before{background:var(--blue);}
-.law-kind.g4 span::before{background:var(--brass);}
+/* 색 막대는 제목 앞에만 — 오른쪽 개수에도 붙으면 줄이 어지럽다 */
+.law-kind span:first-of-type::before{content:"";width:3px;height:12px;border-radius:2px;background:var(--muted);}
+.law-kind.g0 span:first-of-type::before{background:var(--accent);}
+.law-kind.g1 span:first-of-type::before,.law-kind.g2 span:first-of-type::before{background:#6F9A8B;}
+.law-kind.g3 span:first-of-type::before{background:var(--blue);}
+.law-kind.g4 span:first-of-type::before{background:var(--brass);}
 .law-list-foot{display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap;
   padding:var(--sp-2) var(--sp-1) 0;}
 .law-list-hint{font-size:var(--fs-xs);color:var(--muted);}

@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v88";
+var APP_VER="v89";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3177,9 +3177,33 @@ function lawBreaks(text){
     }
     return true;                  /* 글 맨 앞 */
   }
+  /* 세부 번호(1) 2) 3))도 차례를 따른다. 문장 속 인용은 그 차례를 어긴다 —
+   * 「3) 2)후단에도 불구하고 …」에서 「2)」를 목록으로 오인해 줄이 끊기고
+   * 「3)」만 덩그러니 남았다. 앞 번호보다 크거나 새 목록의 시작(1)일 때만 받는다. */
+  var seq=0;
+  function afterDot(at){          /* 앞의 빈칸을 건너뛴 실제 글자가 마침표류인가 */
+    for(var k=at-1;k>=0;k--){
+      var c=text.charAt(k);
+      if(/\s/.test(c)) continue;
+      return ".?!".indexOf(c)>=0;
+    }
+    return true;
+  }
   out.forEach(function(p){
-    if(p.lv<3){ expect=-1; keep.push(p); return; }
-    if(p.lv>3){ keep.push(p); return; }
+    if(p.lv<3){ expect=-1; seq=0; keep.push(p); return; }
+    if(p.lv>3){
+      var m4=/^(\d{1,2})\s*\)/.exec(text.slice(p.at,p.at+5));
+      if(m4){
+        var n=+m4[1];
+        /* 앞이 마침표면 새 줄의 시작이니 차례를 어겨도 받는다. 앞 번호가 한 번
+         * 잘못 잡히면(「제5호나목 7) 단서에」) 그 뒤가 통째로 죽기 때문이다.
+         * 닫는 괄호는 문장 끝으로 치지 않는다 — 「3) 2)에 따른」의 「2)」가 통과한다. */
+        if(seq&&n!==1&&n<=seq&&!afterDot(p.at)) return;
+        seq=n; keep.push(p); return;
+      }
+      keep.push(p); return;                  /* 한글형(가) 나))은 그대로 */
+    }
+    seq=0;                                   /* 목이 바뀌면 세부 번호도 다시 센다 */
     var idx=MOK.indexOf(text.charAt(p.at));
     if(idx<0) return;
     /* 차례가 맞거나(가→나→다), 새 목록의 시작(가)이거나,
@@ -3330,7 +3354,7 @@ function openLawArticle(artId,lawId){
   if(!artId){ openLawView(lawId,1); return; }
   var seq=++lawViewSeq;
   lawView={mode:"art",lawId:lawId,artId:artId,art:"",text:"",
-           page:0,pageEnd:0,loading:true,err:"",hitIdx:-1};
+           page:0,pageEnd:0,loading:true,err:""};
   renderLawModal();
   withAuthRetry(function(){
     return sb.from("law_articles").select("id,law_id,label,page,page_end,content").eq("id",artId);
@@ -3341,7 +3365,7 @@ function openLawArticle(artId,lawId){
     if(!d) throw new Error("조문을 찾지 못했어요. 「조문 다시 만들기」를 눌러보세요.");
     lawView.loading=false; lawView.lawId=d.law_id; lawView.art=d.label;
     lawView.text=cleanPdfText(d.content||""); lawView.page=d.page; lawView.pageEnd=d.page_end||d.page;
-    renderLawModal(); lawJump(0);
+    renderLawModal();
   }).catch(function(err){
     if(lawViewSeq!==seq) return;
     lawView.loading=false; lawView.err=(err&&err.message)||"조문을 읽지 못했어요.";
@@ -3368,21 +3392,6 @@ function lawPageToArt(){
 /* 조 본문 HTML — 조문 한 줄을 통째로 그린다 */
 function lawArtBodyHtml(){
   return formatLawSeg(lawView.text||"",lawTermList,0).html;
-}
-
-/* 검색어 사이 이동. DOM의 <mark>가 곧 목록이라 따로 인덱스를 만들 필요가 없다. */
-function lawJump(d){
-  var b=document.getElementById("lv-body"); if(!b||!lawView) return;
-  var ms=b.querySelectorAll("mark"); if(!ms.length) return;
-  var i=(d===0)?0:(lawView.hitIdx||0)+d;
-  if(i<0) i=ms.length-1;
-  if(i>=ms.length) i=0;
-  lawView.hitIdx=i;
-  for(var k=0;k<ms.length;k++) ms[k].className=(k===i?"on":"");
-  /* scrollIntoView는 iOS에서 고정 패널까지 밀어버린다 — 패널 안에서만 움직인다 */
-  b.scrollTop+=ms[i].getBoundingClientRect().top-b.getBoundingClientRect().top-b.clientHeight*0.3;
-  var c=document.getElementById("lv-hit-n");
-  if(c) c.textContent=(i+1)+" / "+ms.length;
 }
 
 /* 표인 쪽 판별.
@@ -3454,9 +3463,6 @@ function renderLawModal(){
     artBar='<div class="lv-arts">'+esc(lawView.art||"")+((lawView.page&&!dup)?'  ·  '+span:"")+'</div>';
 
     foot='<div class="lv-foot">'
-      + '<button class="btn quiet sm" data-act="lv-hit-prev" title="이전 검색어">‹</button>'
-      + '<span class="lv-hit-n" id="lv-hit-n">–</span>'
-      + '<button class="btn quiet sm" data-act="lv-hit-next" title="다음 검색어">›</button>'
       + '<button class="link-btn" data-act="lv-page">쪽 그대로 보기</button>'
       + '<button class="link-btn lv-pdf" data-act="lv-pdf">PDF 원문 열기 ↗</button>'
       + '</div>';
@@ -3942,11 +3948,7 @@ function renderLawResults(){
 /* 쪽 보기 창은 Esc로 닫는다 */
 document.addEventListener("keydown",function(e){
   if(!lawView) return;
-  if(e.key==="Escape"){ e.preventDefault(); closeLawView(); return; }
-  if(lawView.mode==="art"){
-    if(e.key==="ArrowRight"){ e.preventDefault(); lawJump(1); }
-    else if(e.key==="ArrowLeft"){ e.preventDefault(); lawJump(-1); }
-  }
+  if(e.key==="Escape"){ e.preventDefault(); closeLawView(); }
 });
 
 /* ========== 이벤트 위임 ========== */
@@ -4092,8 +4094,6 @@ document.getElementById("app").addEventListener("click",function(e){
     case "board-clear": { var ct=el.getAttribute("data-table"); boardSearch[ct]=""; render(); break; }
     case "lv-art": lawPageToArt(); break;
     case "lv-page": lawArtToPage(); break;
-    case "lv-hit-prev": lawJump(-1); break;
-    case "lv-hit-next": lawJump(1); break;
     case "lv-prev": lawViewStep(-1); break;
     case "lv-next": lawViewStep(1); break;
     case "lv-pdf": if(lawView) openLawPdf(lawView.lawId,lawView.page); break;

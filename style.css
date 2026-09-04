@@ -732,8 +732,6 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
 .lv-edge-post::before{content:"다음 쪽으로 이어짐";}
 
 /* 조 전체 보기 */
-.lv-text mark.on{background:#FFC845;box-shadow:0 0 0 2px #E0A21B;}
-.lv-hit-n{font-size:var(--fs-sm);font-weight:650;color:var(--muted);min-width:46px;text-align:center;}
 /* 카드 자체가 「조 전체 보기」 버튼이다. 오른쪽 끝의 홑화살표만이
    눌린다는 신호다 — 버튼 셋을 늘어놓지 않아도 알아본다. */
 .law-hit-body{cursor:pointer;}

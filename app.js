@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v97";
+var APP_VER="v98";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1743,16 +1743,19 @@ function linesToText(lines,bodySet,bodyH){
   lines.forEach(function(l){
     if(!l.text) return;
     if(bodySet[l.font]){ out.push(l.text); return; }
-    /* 제목 중에서도 **본문보다 큰 것**이 큰 제목이다. 원문의 「③ 유전자변형생물체의
-     * 보관」처럼 번호가 심볼 글꼴이면 글자로는 소제목과 구분이 안 되는데,
-     * 크기로는 갈린다(큰 제목 h14 · 소제목 h12). 빈 줄 하나를 더 두어 표시한다. */
-    var h=+(String(l.font).split("|")[1]||0);
-    out.push((bodyH&&h>bodyH?"\n\n":"\n")+l.text+"\n");
+    /* 제목 중에서도 **본문보다 큰 것**이 큰 제목이다(큰 제목 h14 · 소제목 h12).
+     * 원문의 「③ 유전자변형생물체의 보관」처럼 번호가 심볼 글꼴이면 글자로는
+     * 소제목과 구분이 안 된다.
+     * **빈 줄로 표시하면 안 된다** — 앞 제목의 끝 줄바꿈과 합쳐져 다음 제목이
+     * 큰 제목으로 뒤바뀐다. 개행으로는 앞뒤를 가릴 수 없다.
+     * 대신 **큰 제목은 심볼 글머리표를 떼어** 둔다. 원문에서도 큰 제목엔 번호가
+     * 붙고 소제목(○)엔 안 붙으니, 「글머리표 없는 제목 = 큰 제목」이 된다. */
+    var h=+(String(l.font).split("|")[1]||0), txt=l.text;
+    if(bodyH&&h>bodyH) txt=txt.replace(/^[\uE000-\uF8FF\s]+/,"").replace(/^m\s+(?=[가-힣])/,"");
+    out.push("\n"+txt+"\n");
   });
-  /* 맨 앞의 빈 줄은 「첫 줄이 큰 제목」이라는 표시다 — trim 으로 지우면
-   * 그 표시가 사라져 다음 제목이 큰 제목으로 뒤바뀐다. 뒤쪽만 다듬는다. */
   return out.join(" ").replace(/[ \t]+/g," ").replace(/[ \t]*\n[ \t]*/g,"\n")
-            .replace(/\n{3,}/g,"\n\n").replace(/^[ \t]+/,"").replace(/[ \t\n]+$/,"");
+            .replace(/\n{2,}/g,"\n").trim();
 }
 
 /* 표는 선으로 그린다. 가로줄·세로줄이 여럿이면 그 쪽에 표가 있다.
@@ -2167,27 +2170,21 @@ function headLineBig(t){
     var L=ls[i].replace(/\s+/g," ").trim();
     if(!L||L.length>30||/[.?!]$/.test(L)) continue;
     if(/^[-–—]?\s*\d{1,4}\s*[-–—]?$/.test(L)) continue;
-    /* 숫자로 시작하거나, 앞에 빈 줄이 있어 「큰 제목」으로 표시된 것 */
-    var marked=i>0&&!ls[i-1].trim();
-    var bare=L.replace(/^[·ㆍ•▪○\s]+/,"").trim();
-    if(!(marked||/^\d/.test(L))||bare.length<2||isCutTitle(bare)) continue;
-    return bare.length>24?bare.slice(0,24):bare;
+    if(!isBigHead(L)||L.length<2||isCutTitle(L)) continue;
+    return L.length>24?L.slice(0,24):L;
   }
   return "";
 }
 
 /* 그 쪽 첫 줄이 새 큰 제목이면 그것이 이 쪽의 이름이다 —
  * 앞 쪽에서 이어진 제목보다 이쪽이 앞선다. */
+/* 제목 줄인데 글머리표(·)가 없으면 큰 제목이다 — 추출할 때 떼어 두었다. */
+function isBigHead(L){ return !!L&&!/^[·ㆍ•▪○]/.test(L); }
 function firstLineBig(t){
-  var ls=String(t||"").split("\n"), k=0;
-  while(k<ls.length&&!ls[k].trim()) k++;      /* 맨 앞 빈 줄 = 큰 제목 표시 */
-  if(k>=ls.length) return "";
-  var marked=k>0;
-  var L=ls[k].replace(/\s+/g," ").trim();
-  if(L.length>30||/[.?!]$/.test(L)) return "";
-  var bare=L.replace(/^[·ㆍ•▪○\s]+/,"").trim();
-  if(!(marked||/^\d/.test(L))||bare.length<2||isCutTitle(bare)) return "";
-  return bare.length>24?bare.slice(0,24):bare;
+  var L=(String(t||"").split("\n")[0]||"").replace(/\s+/g," ").trim();
+  if(!L||L.length>30||/[.?!]$/.test(L)) return "";
+  if(!isBigHead(L)||L.length<2||isCutTitle(L)) return "";
+  return L.length>24?L.slice(0,24):L;
 }
 
 function headLineTitle(t){
@@ -2981,11 +2978,14 @@ function buildLawHits(rows,terms){
      * 시작해 어디인지 바로 못 찾는다. 덩어리가 너무 길면 앞을 잘라 「…」을 붙인다. */
     var HEAD_MAX=380;
     function blockStart(at){
-      var st=0;
+      var st=0, idx=-1;
       for(var i=0;i<pts.length;i++){
         if(pts[i].soft) continue;
-        if(pts[i].at<=at) st=pts[i].at; else break;
+        if(pts[i].at<=at){ st=pts[i].at; idx=i; } else break;
       }
+      /* 덩어리 바로 앞이 제목 줄이면 그 제목부터 보여준다 — 미리보기에서
+       * 「· 교차오염방지」가 빠지면 어느 대목인지 알 수 없다. */
+      if(idx>0&&pts[idx].lv===1&&pts[idx-1].lv===0&&!pts[idx-1].soft) st=pts[idx-1].at;
       return st;
     }
     var wins=[];
@@ -3526,8 +3526,7 @@ function lawBreaks(text){
       function isHead(t){ return !!t&&t.length<=40&&!/[.?!]$/.test(t); }
       /* 숫자로 시작하면 큰 제목이다 — 「2 보관시설」 「1-2 세포은행 시스템관리」.
        * 글머리표로 여는 소제목(「· 교차오염방지」)과 크기로 가른다. */
-      if(isHead(next)) pts.push({at:i+1,lv:0,len:0,
-        big:(!prev&&i>0&&text.charAt(i-1)==="\n")||/^\d/.test(next)});
+      if(isHead(next)) pts.push({at:i+1,lv:0,len:0,big:isBigHead(next)});
       else if(isHead(prev)) pts.push({at:i+1,lv:1,len:0});   /* 앞 줄이 제목 → 본문 시작 */
       continue;
     }

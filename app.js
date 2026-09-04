@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v114";
+var APP_VER="v115";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2642,8 +2642,18 @@ function runHeadRe(t){
       if(same) n++;
     }
     var nm=tail[0].slice(0,n).replace(/\S*$/,"").trim();   /* 낱말 한복판에서 끊지 않는다 */
-    if(nm.length>=4)
-      return new RegExp(LAWHEAD_RE.source+reEsc(nm).replace(/\s+/g,"\\s+")+"\\s*","g");
+    if(nm.length>=4){
+      var e=reEsc(nm).replace(/\s+/g,"\\s+");
+      /* **꼬리말과 머리글은 서로 다른 쪽에 있다.** 「법제처 N 국가법령정보센터」는
+       * 앞 쪽 **끝**에 찍히고, 법령 이름은 다음 쪽 **첫머리**에 찍힌다. 둘을 한
+       * 덩어리로만 지우면 쪽마다 손질할 때 이름이 영영 안 지워진다 —
+       * 「…살균 · 살충 및 이와 유사한 용도로 사용되는 제제 **약사법**」처럼
+       * 원문에 없는 글자가 조문 끝에 붙었다.
+       * 그래서 **쪽 첫머리에 이름만 오는 것**도 함께 지운다. 손질은 쪽마다 하므로
+       * ^ 는 곧 쪽의 시작이다. 실측: 약사법 87/87쪽 · 첨단재생 27/27 · 규칙 71 ·
+       * 시설기준령 6/6 · 생물학적제제 45 · GMP규정 5. 지침서는 0쪽(머리글이 없다). */
+      return new RegExp("(?:"+LAWHEAD_RE.source+"(?:"+e+"\\s*)?|^\\s*"+e+"\\s+)","g");
+    }
   }
   return LAWHEAD_RE;
 }
@@ -3162,6 +3172,12 @@ function buildLawHits(rows,terms){
       /* 항 표시(①)도 배지에 있으면 뗀다 — 「① ①약사(藥師)가 …」가 됐다 */
       var mh=/^\s*([\u2460-\u2473])\s*/.exec(body);
       if(mh&&where.indexOf(mh[1])>=0) body=body.slice(mh[0].length);
+      /* **알맹이 없는 발췌는 버린다.** 「6호 나목 …」처럼 배지만 남고 글이 없으면
+       * 화면에 자리만 차지하고 아무것도 알려주지 않는다. 검색어 자체는 남으므로
+       * 「밸리데이션 …」 한 낱말짜리도 버린다 — 그건 같은 조의 다른 조각에 있다. */
+      var bare=body.replace(/[\s…·]/g,"");
+      /* 다만 그 조의 발췌가 전부 짧으면 카드가 통째로 사라지므로 하나는 남긴다 */
+      if(bare.length<8&&g.snips.length) return;
       g.snips.push({ where:where, full:full,
         text:(w.st>(w.bs==null?0:w.bs)?"…":"")+body+(w.en<c.length?"…":"") });
     });

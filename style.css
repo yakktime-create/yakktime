@@ -702,6 +702,15 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
 .ver{font-size:var(--fs-xs);color:#B6C0BA;text-align:center;padding:2px 0 4px;letter-spacing:.04em;}
 @media (max-width:1024px){ .ver{padding:0 6px;align-self:center;} }
 
+/* 표로 된 대목은 글자 대신 「PDF로 보세요」만. 뒤죽박죽인 글로 창을
+   채우느니 안 보여주는 편이 낫다. */
+.lv-tblmsg{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:var(--sp-3);padding:var(--sp-6) var(--sp-4);text-align:center;color:var(--muted);}
+.lv-tblmsg-i{font-size:38px;line-height:1;color:var(--line);}
+.lv-tblmsg p{font-size:var(--fs-base);line-height:var(--lh-loose);margin:0;}
+.lv-tblmsg b{color:var(--ink);font-weight:750;}
+.lv-tblmsg .link-btn{font-size:var(--fs-sm);}
+
 /* 표로 된 대목은 발췌 대신 자리만 알려준다. 읽을 수 없는 글로 화면을
    채우느니, 어느 항목인지 짚어 주고 PDF 원문으로 보내는 편이 낫다. */
 .law-tbl{margin-top:9px;padding:10px 12px;background:var(--warn-bg);

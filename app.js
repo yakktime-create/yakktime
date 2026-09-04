@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v84";
+var APP_VER="v85";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3398,6 +3398,17 @@ function looksLikeTable(t){
   return ends*1000/t.length<2 && repRate(t)>=0.5;
 }
 
+/* 표로 된 대목은 글자만으로는 읽을 수 없다. 뒤죽박죽인 글로 화면을 채우느니
+ * PDF로 보내는 편이 낫다 — 「그래도 글자로 보기」는 접어 둔다. */
+function lvTableHtml(){
+  return '<div class="lv-tblmsg">'
+    + '<div class="lv-tblmsg-i">▤</div>'
+    + '<p><b>표(칸)로 된 대목이에요.</b><br />글자만 도려내면 칸 경계가 사라져 읽을 수가 없어요.<br />'
+    + '아래 <b>「PDF 원문 열기」</b>로 확인해 주세요.</p>'
+    + '<button class="link-btn" data-act="lv-raw">그래도 글자로 보기</button>'
+    + '</div>';
+}
+
 function renderLawModal(){
   var el=document.getElementById("law-modal"); if(!el) return;
   if(!lawView){ el.innerHTML=""; document.body.style.overflow=""; return; }
@@ -3412,8 +3423,9 @@ function renderLawModal(){
   var body, artBar="", foot;
   if(lawView.loading) body='<p class="empty">불러오는 중...</p>';
   else if(lawView.err) body='<p class="empty">'+esc(lawView.err)+'</p>';
-  else if(art) body=lawArtBodyHtml();
+  else if(art) body=(looksLikeTable(lawView.text)&&!lawView.raw)?lvTableHtml():lawArtBodyHtml();
   else if(!lawView.content) body='<p class="empty">이 쪽에는 글자가 없어요.<br />표나 그림만 있는 쪽일 수 있어요 — 아래 PDF 원문에서 확인해 주세요.</p>';
+  else if(looksLikeTable(lawView.content)&&!lawView.raw) body=lvTableHtml();
   else body='<div class="lv-text">'
     + (lawView.pre?'<div class="lv-edge lv-edge-pre">'+lawSegHtml(lawView.pre,lawTermList,0)+'</div>':"")
     + formatLawText(lawView.content,lawTermList)
@@ -3425,8 +3437,7 @@ function renderLawModal(){
     var span=(lawView.page===lawView.pageEnd)?(lawView.page+"쪽")
             :(lawView.page+"~"+lawView.pageEnd+"쪽");
     artBar='<div class="lv-arts">'+esc(lawView.art||"")+(lawView.page?'  ·  '+span:"")+'</div>';
-    if(!lawView.loading&&!lawView.err&&looksLikeTable(lawView.text))
-      artBar+='<div class="lv-hint">이 조문은 <b>표(칸)</b>가 섞여 있어요. 글자만 뽑으면 칸 경계가 사라져 한 줄로 이어져 보입니다. 아래 「PDF 원문 열기」로 확인해 주세요.</div>';
+
     foot='<div class="lv-foot">'
       + '<button class="btn quiet sm" data-act="lv-hit-prev" title="이전 검색어">‹</button>'
       + '<span class="lv-hit-n" id="lv-hit-n">–</span>'
@@ -3439,9 +3450,7 @@ function renderLawModal(){
     var head0=arts.length?arts[0].label:"", tail0=arts.length?arts[arts.length-1].label:"";
     if(lawView.article){ head0=lawView.article+" (이어짐)"; if(!tail0) tail0=head0; }
     if(head0) artBar='<div class="lv-arts">'+esc(head0)+(tail0!==head0?'  ~  '+esc(tail0):'')+'</div>';
-    if(!lawView.loading&&looksLikeTable(lawView.content))
-      artBar+='<div class="lv-hint">이 쪽은 <b>표(칸)</b>로 되어 있어요. 글자만 뽑으면 칸 경계가 사라져 내용이 한 줄로 이어져 보입니다. '
-        + '어느 칸의 값인지 확인하려면 아래 「PDF 원문 열기」를 눌러주세요.</div>';
+
     var max=(l&&l.pages)||1;
     foot='<div class="lv-foot">'
       + '<button class="btn quiet sm" data-act="lv-prev"'+(lawView.page<=1?" disabled":"")+'>‹ 이전 쪽</button>'
@@ -3894,8 +3903,7 @@ function renderLawResults(){
               return '<div class="law-tbl">'
                 + '<b>표(칸)로 된 대목이에요.</b>'
                 + (ws.length?' <span class="law-tbl-w">'+esc(ws.join(" · "))+'</span>에서 찾았어요.':'')
-                + '<br />글자만 도려내면 칸이 섞여 읽을 수가 없어서 발췌는 생략했어요. '
-                + '카드를 누르면 전문이 열리고, 거기서 PDF 원문으로 갈 수 있어요.</div>';
+                + ' PDF 원문에서 확인하세요.</div>';
             })()
           : (function(){ var prev=null;
             return list.map(function(h){
@@ -4045,6 +4053,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "law-pdf": openLawPdf(id,parseInt(el.getAttribute("data-page"),10)||1); break;
     case "lv-close": closeLawView(); break;
     case "law-art": openLawArticle(parseInt(el.getAttribute("data-art-id"),10)||0,id); break;
+    case "lv-raw": if(lawView){ lawView.raw=true; renderLawModal(); } break;
     case "law-build-all": lawBuildAll(id==="all"); break;
     case "law-drop-old": {
       var olds=S.laws.filter(lawIsOld);

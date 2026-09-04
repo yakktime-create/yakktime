@@ -31,12 +31,22 @@ const MAX_PICKS  = 10;     // 2차에서 남길 최종 수
 const ART_MAX    = 4000;   // 조 하나에서 읽을 최대 글자
 const TOTAL_MAX  = 60000;  // 2차에 넣을 글자 총량
 const PREVIEW    = 180;    // 화면에 보여줄 미리보기
+// 1차는 **조 제목만** 본다. 그래서 제목에 그 말이 없는 상위법이 통째로 빠진다 —
+// 「실태조사 생략 기준」을 물었더니 지침서 둘만 나오고 「의약품 등의 안전에 관한
+// 규칙」이 안 딸려왔다. 규칙의 조 제목은 「제4조(제조판매·수입 품목의 허가 신청)」이라
+// 「실태조사」라는 말이 아예 없기 때문이다.
+// 그래서 1차에게 **법령에 실제로 쓰일 낱말**을 같이 내게 하고, 그 낱말로
+// 상위법 본문을 뒤져 후보에 보탠다. AI 를 한 번 더 부르지 않으므로 값이 안 는다.
+const WORDS_MAX  = 6;      // 1차가 낼 낱말 수
+const BOOST_MAX  = 8;      // 낱말로 보탤 상위법 조 수 — 양이 터지지 않게
+const BOOST_ROWS = 60;     // 낱말 하나가 걸러 올 조 수 상한
 const KRW        = 1400;   // 원/달러
 
 // 법 위계 — 이름만 보고 가른다. 같은 내용이면 상위법이 더 센 근거다.
 // 다만 실제 답은 고시·규칙에 적힌 경우가 많으므로 가중치는 작게 준다.
 // 「답이 여기 있나」(45점)를 뒤집을 만큼 주면 엉뚱한 조를 위로 올리게 된다.
-const KINDS: {n:number; t:string; re:RegExp; w:number}[] = [
+type Kind = { n:number; t:string; re:RegExp; w:number };
+const KINDS: Kind[] = [
   { n:0, t:"법률",       re:/\(법률\)|법률\s*제\s*\d/,        w:8 },
   { n:1, t:"시행령",     re:/\(대통령령\)|시행령/,               w:6 },
   { n:2, t:"시행규칙",   re:/\(총리령\)|\(부령\)|규칙/,          w:5 },
@@ -116,15 +126,23 @@ const RULES1 = `${HEAD}
 - 목록에 실제로 있는 번호만 고른다. 없는 번호를 지어내지 않는다.
 - 많아야 ${SHORTLIST}개. 관련 있어 보이는 것부터.
 - 그래도 아무 상관 없는 것을 채워 넣지는 않는다. 세 개뿐이면 세 개만 낸다.
-- note 에는 어느 법령을 훑었는지, 빠진 게 있어 보이면 무엇인지 한두 문장.`;
+- note 에는 어느 법령을 훑었는지, 빠진 게 있어 보이면 무엇인지 한두 문장.
+
+words 에는 이 질문의 답이 적혀 있을 조문을 **본문에서** 찾을 낱말을 낸다.
+민원인의 말이 아니라 <b>법령에 실제로 쓰일 말</b>로 바꿔 적는다.
+  「실태조사 생략」 → 실태조사 · 생략 · 면제 · 갈음
+  「안 가도 되나」  → 현장조사 · 서류평가
+- 두 글자 이상, 많아야 ${WORDS_MAX}개. 조사·어미를 붙이지 않는다(「실태조사를」 ✕).
+- 아무 조문에나 나오는 흔한 말은 넣지 않는다(「의약품」「제조소」「경우」).`;
 
 const SCHEMA1 = {
   type: "object",
   properties: {
-    ns:   { type: "array", items: { type: "integer" } },
-    note: { type: "string" },
+    ns:    { type: "array", items: { type: "integer" } },
+    words: { type: "array", items: { type: "string" } },
+    note:  { type: "string" },
   },
-  required: ["ns", "note"],
+  required: ["ns", "words", "note"],
   additionalProperties: false,
 };
 
@@ -226,8 +244,8 @@ Deno.serve(async (req) => {
     const { data: laws, error: le } = await pg(
       "laws?select=id,name" + (only ? "&id=" + encodeURIComponent(inList(only)) : ""));
     if (le) return json({ error: "법령 목록을 못 읽었어요: " + le.message });
-    const lawName = new Map((laws || []).map((l: any) => [l.id, l.name]));
-    const lawKind = new Map((laws || []).map((l: any) => [l.id, kindOf(l.name)]));
+    const lawName = new Map<string, string>((laws || []).map((l: any) => [String(l.id), String(l.name)]));
+    const lawKind = new Map<string, Kind>((laws || []).map((l: any) => [String(l.id), kindOf(l.name)]));
 
     const { data: arts, error: ae } = await pg(
       "law_articles?select=id,law_id,seq,label&order=law_id.asc,seq.asc&limit=" + MAX_ARTS
@@ -278,9 +296,44 @@ Deno.serve(async (req) => {
     const p1 = readJson(r1);
     if (!p1) return json({ error: "AI 답을 읽지 못했어요. 다시 한 번 눌러주세요." });
 
-    const cand = (p1.ns || [])
+    let cand = (p1.ns || [])
       .map((n: number) => index[n] ? { n, ...index[n] } : null)
       .filter(Boolean).slice(0, SHORTLIST);
+
+    // --- 낱말로 상위법을 보탠다 -------------------------------------------
+    // 지침서는 제목만 봐도 잘 걸리므로 손대지 않는다. 제목에 안 드러나는
+    // 법률·시행령·시행규칙·고시만 본문으로 뒤진다.
+    const upperIds = (laws || [])
+      .filter((l: any) => (lawKind.get(l.id)?.n ?? 9) <= 3)
+      .map((l: any) => l.id);
+    const words: string[] = (p1.words || [])
+      .map((w: any) => String(w || "").trim())
+      .filter((w: string) => w.length >= 2 && w.length <= 20)
+      .slice(0, WORDS_MAX);
+    let boosted = 0;
+    if (upperIds.length && words.length) {
+      const have = new Set(cand.map((c: any) => c.id));
+      const nOf = new Map<string, number>(live.map((a: any, i: number) => [String(a.id), i + 1]));
+      const score = new Map<string, number>();
+      for (const w of words) {
+        const { data: rows } = await pg("law_articles?select=id&limit=" + BOOST_ROWS
+          + "&law_id=" + encodeURIComponent(inList(upperIds))
+          + "&content=" + encodeURIComponent("ilike.*" + w.replace(/[*,()]/g, "") + "*"));
+        (rows || []).forEach((r: any) => score.set(r.id, (score.get(r.id) || 0) + 1));
+      }
+      const extra = [...score.entries()]
+        .filter(([id]) => !have.has(id) && nOf.has(id))
+        // 여러 낱말이 겹쳐 나오는 조가 먼저다. 같으면 위계가 높은 쪽부터.
+        .sort((a, b) => (b[1] - a[1])
+          || ((lawKind.get(index[nOf.get(a[0])!].law_id)?.n ?? 9)
+            - (lawKind.get(index[nOf.get(b[0])!].law_id)?.n ?? 9)))
+        .slice(0, BOOST_MAX)
+        .map(([id]) => { const n = nOf.get(id)!; return { n, ...index[n] }; });
+      boosted = extra.length;
+      // 예산은 뒤에서부터 잘리므로 보탠 것을 앞쪽에 끼워 넣는다 —
+      // 뒤에 붙이면 정작 보태 놓고 못 읽힌다.
+      cand = cand.slice(0, 10).concat(extra, cand.slice(10));
+    }
 
     if (!cand.length) {
       return json({ picks: [], note: String(p1.note || "관련 조문을 찾지 못했어요."),
@@ -291,7 +344,7 @@ Deno.serve(async (req) => {
     // --- 후보의 본문을 읽어 온다 (2차에게 먹이고, 화면 미리보기로도 쓴다) ---
     const { data: bodies } = await pg("law_articles?select=id,content&id="
       + encodeURIComponent(inList(cand.map((c: any) => c.id))));
-    const bodyOf = new Map((bodies || []).map((b: any) => [b.id, String(b.content || "")]));
+    const bodyOf = new Map<string, string>((bodies || []).map((b: any) => [String(b.id), String(b.content || "")]));
     const flat = (t: string) => t.replace(/\s+/g, " ").trim();
 
     // 예산 안에서 위(관련 있어 보이는 것)부터 채운다. 다 못 넣으면 뒤쪽은 버린다 —
@@ -361,6 +414,9 @@ Deno.serve(async (req) => {
       looked: readCount,
       // 조문이 상한에 닿으면 뒤쪽 법령을 아예 못 봤다는 뜻이라 알려준다
       truncated: arts.length >= MAX_ARTS,
+      // 제목에는 안 드러나서 낱말로 찾아 보탠 상위법 조문 수
+      boosted,
+      words,
       krw: Math.round((usdOf(r1.usage) + usdOf(r2.usage)) * KRW),
     });
   } catch (e) {

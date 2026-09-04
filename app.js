@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v106";
+var APP_VER="v107";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2897,7 +2897,8 @@ function lawAskHtml(){
     return '<li class="ask-item'+(on?" on":"")+' r-'+band+'">'
       + '<label class="ask-check"><input type="checkbox" data-act="ask-pick" data-id="'+esc(p.id)+'"'+(on?" checked":"")+' /></label>'
       + '<div class="ask-item-body">'
-      +   '<div class="ask-art"><span class="ask-score">'+esc(p.grade||"중간")+'</span><b>'+esc(p.label)+'</b>'
+      +   '<div class="ask-art"><span class="ask-score n-'+needRank(p.need)+'">'
+      +     esc(p.need||"있으면 좋음")+'</span><b>'+esc(p.label)+'</b>'
       +     '<span class="ask-law">'+esc(p.law)+'</span>'
       +     (p.kind?'<span class="ask-kind">'+esc(p.kind)+'</span>':'')
       +     '<button class="link-btn law-go-art" data-act="law-art" data-art-id="'+esc(p.id)+'" data-id="'+esc(p.lawId)+'">전체 보기</button></div>'
@@ -2905,7 +2906,7 @@ function lawAskHtml(){
       /* 점수가 어디서 나왔는지 같이 적는다. 숫자만 있으면 「87이 무슨 뜻이냐」가 된다.
        * 이 셋을 AI가 고르고, 점수는 서버가 더해서 낸다. */
       +   (p.direct?'<div class="ask-parts">'
-            + '<span>'+esc(p.direct)+'</span><span>'+esc(p.need)+'</span><span>'+esc(p.sure)+'</span>'
+            + '<span>'+esc(p.direct)+'</span><span>'+esc(p.sure)+'</span>'
             + '</div>':'')
       /* 본문 앞부분을 같이 보여준다 — 창을 열었다 닫지 않아도 맞는지 가늠된다 */
       +   (p.head?'<div class="ask-head-txt">'+esc(p.head)+'</div>':'')
@@ -2931,6 +2932,8 @@ function lawAskHtml(){
   return '<div class="ask-box">'+head
     + (d.note?'<p class="ask-note">'+esc(d.note)+'</p>':'')
     + (d.truncated?'<p class="ask-warn">올려둔 조문이 너무 많아 <b>앞쪽 '+d.arts+'개만</b> 봤어요. 위에서 법령을 골라 범위를 좁혀주세요.</p>':'')
+    + (d.boosted?'<p class="ask-note">조 제목에는 안 드러나서 <b>본문을 낱말로 뒤져</b> 상위법 '+d.boosted+'개를 후보에 더 넣었어요'
+        + (d.words&&d.words.length?' (찾은 낱말 — '+esc(d.words.join(' · '))+')':'')+'.</p>':'')
     + (d.skipped?'<p class="ask-note">아직 시행 전인 개정 조문 '+d.skipped+'개는 빼고 봤어요 — 답변 근거는 <b>지금 적용되는 조문</b>이어야 하니까요. 그 조문들은 낱말 검색에서는 그대로 보입니다.</p>':'')
     /* 등급이 무슨 뜻인지 결과 바로 옆에 적어 둔다. 사용법 안에만 있으면
      * 펼쳐 보지 않는 한 「매우 높음이 뭐 기준인데」로 남는다. */
@@ -2948,6 +2951,12 @@ function lawAskHtml(){
 /* 관련도 등급. 서버가 세 가지 판단을 더해 매기고, 여기서는 순서와 색만 쓴다.
  * 숫자(0~100)를 그대로 보여주지 않는 이유 — 잰 값이 아닌데 잰 것처럼 보인다. */
 var ASK_GRADES=["매우 높음","높음","중간","낮음","매우 낮음"];
+/* 배지에는 등급어 대신 **「답변서에 인용해야 하나」**를 띄운다. 이랑님이 카드를
+ * 보고 내리는 판단이 그것 하나이기 때문이다. 「매우 높음」은 무슨 뜻인지 알려면
+ * 사용법을 펼쳐 열 줄을 읽어야 했다 — 그건 진 것이다.
+ * 등급(grade)은 그대로 쓰되 **순서와 접기**에만 쓴다. */
+var ASK_NEEDS=["인용 필수","있으면 좋음","없어도 됨"];
+function needRank(n){ var i=ASK_NEEDS.indexOf(n); return (i<0?1:i)+1; }
 function askRank(g){ var i=ASK_GRADES.indexOf(g); return i<0?2:i; }
 /* 「중간」까지가 펼쳐지고 처음부터 체크된다. 그 아래는 접어 둔다. */
 var ASK_KEEP=2;
@@ -4093,21 +4102,25 @@ function lawHelpHtml(){
     + '<div class="law-help-head"><b>법령 검색 사용법</b>'
     +   '<button class="law-help-x" data-act="law-help" title="접기">접기 ✕</button></div>'
 
-    + '<div class="law-help-sec"><div class="law-help-t">◆ 관련도는 이렇게 나와요</div>'
-    +   '<p>AI는 등급을 직접 매기지 않아요. <b>세 가지만 고르고</b>, 등급은 그걸 합쳐서 나옵니다.</p>'
+    + '<div class="law-help-sec"><div class="law-help-t">◆ 배지는 「이걸 답변에 넣을까」를 말해요</div>'
+    +   '<p>조문마다 앞에 붙는 배지가 <b>답변서에 인용해야 하나</b>입니다. '
+    +     '읽고 바로 정하시라고 등급어 대신 이걸 올렸어요.</p>'
     +   '<ul>'
-    +     '<li><b>답이 이 조에 있나</b><br />답이 여기 &gt; 조건이 여기 &gt; 곁가지<br />'
+    +     '<li><b>인용 필수</b> — 이 조를 안 적으면 답변이 성립하지 않아요</li>'
+    +     '<li><b>있으면 좋음</b> — 근거를 두텁게 하지만 없어도 답은 됩니다</li>'
+    +     '<li><b>없어도 됨</b> — 배경으로만 참고</li>'
+    +   '</ul>'
+    +   '<p>배지 아래 작은 낱말 둘은 <b>왜 그렇게 봤는지</b>예요.</p>'
+    +   '<ul>'
+    +     '<li><b>답이 이 조에 있나</b> — 답이 여기 &gt; 조건이 여기 &gt; 곁가지<br />'
     +       '<span class="law-help-dim">조건이 여기 = 답 자체는 아니지만 몇 개까지·누구에게 같은 <b>조건</b>이 여기 있다<br />'
     +       '곁가지 = 정의·절차·벌칙처럼 답의 <b>둘레</b>에 있는 규정</span></li>'
-    +     '<li><b>답변서에 인용해야 하나</b><br />인용 필수 &gt; 있으면 좋음 &gt; 없어도 됨</li>'
-    +     '<li><b>본문에서 근거를 찾았나</b><br />근거 찾음 &gt; 비슷한 대목만 &gt; 못 찾음<br />'
+    +     '<li><b>본문에서 근거를 찾았나</b> — 근거 찾음 &gt; 비슷한 대목만 &gt; 못 찾음<br />'
     +       '<span class="law-help-dim">「근거 찾음」은 조문 안에서 <b>그 대목을 짚을 수 있을 때만</b> 붙어요. '
     +       '그때는 왼쪽 설명에도 그 대목이 그대로 적힙니다.</span></li>'
     +   '</ul>'
-    +   '<p>셋 다 최고면 <b>매우 높음</b>, 셋 다 최저면 <b>매우 낮음</b>. '
-    +     '고른 세 낱말이 조문마다 같이 적혀 있으니 왜 그 등급인지 바로 보여요.<br />'
-    +     '<b>「낮음」부터는 접어 둡니다.</b> 등급은 정확도가 아니라 '
-    +     '<b>어느 것부터 펴 볼지의 순서</b>로 보세요.</p>'
+    +   '<p><b>차례는 이 셋을 합쳐서 매깁니다</b> — 위에 있는 것부터 펴 보시면 돼요. '
+    +     '아래쪽 관련 낮은 것은 접어 둡니다.</p>'
     +   '<p class="law-help-dim">찾는 순서 — ① 조 <b>제목</b>만 훑어 후보 20개를 추리고 '
     +     '② 그 20개의 <b>조문을 통째로 읽어</b> 최종 10개로 추립니다. '
     +     '한 번에 하려면 조 목록 전체에 본문을 붙여야 해서 값이 몇 배로 뜁니다.<br />'

@@ -1086,11 +1086,13 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .ask-why{margin-top:3px;font-size:var(--fs-md);color:var(--muted);line-height:var(--lh-snug);}
 /* 관련도 등급 — 말로 적고 색으로 한 번 더 갈라 준다.
    폭을 고정해 조 제목이 세로로 줄을 맞춘다 (등급마다 글자 수가 다르다). */
-.ask-score{flex:none;width:62px;text-align:center;font-size:var(--fs-2xs);font-weight:800;
-  border-radius:var(--r-full);padding:3px 0;white-space:nowrap;
+/* 배지는 「답변서에 인용해야 하나」다 — 등급어가 아니라 할 일이 적혀 있다.
+ * 글자 수가 5~6자로 달라 너비는 고정하지 않고 최소값만 준다. */
+.ask-score{flex:none;min-width:62px;text-align:center;font-size:var(--fs-2xs);font-weight:800;
+  border-radius:var(--r-full);padding:3px 9px;white-space:nowrap;
   background:var(--paper);color:var(--muted);}
-.ask-item.r-1 .ask-score{background:var(--accent);color:#fff;}
-.ask-item.r-2 .ask-score{background:var(--accent-soft);color:var(--accent);}
+.ask-score.n-1{background:var(--accent);color:#fff;}
+.ask-score.n-2{background:var(--accent-soft);color:var(--accent);}
 .ask-item.r-1{border-left-color:var(--accent);}
 .ask-item.r-2{border-left-color:var(--accent-soft);}
 /* 점수의 근거 — 「답 · 필수 · 분명」. 숫자 옆에 두면 줄이 복잡해져 아래에 작게 깐다. */

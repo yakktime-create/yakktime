@@ -55,19 +55,22 @@ const K_DEC:  Kind = { n:1, t:"시행령",     w:6 };
 const K_RULE: Kind = { n:2, t:"시행규칙",   w:5 };
 const K_NOTI: Kind = { n:3, t:"고시",       w:3 };
 const K_GUID: Kind = { n:4, t:"지침·안내서", w:0 };
-const K_ETC:  Kind = { n:5, t:"그 밖",      w:0 };
+const K_INTL: Kind = { n:5, t:"국제기준",    w:0 };   // PIC/S·ICH·WHO — 우리 법령이 아니다
+const K_ETC:  Kind = { n:6, t:"그 밖",      w:0 };
 function kindOf(name: string) {
   const raw = String(name || "");
   // 꼬리표를 뗀다. 「약사법(법률)(제21109호)」 「…운영지침[공무원 지침서]」
   const s = raw.replace(/[\[(（].*$/, "").replace(/\.pdf$/i, "").trim();
   // 지침서는 이름 어디에 적혀 있어도 지침서다(꼬리표 안에 있는 일이 많다)
-  if (/지침|안내서|가이드|해설|매뉴얼|업무처리방안|운영방안/.test(raw)) return K_GUID;
+  // 국제기준을 먼저 본다 — 「PIC/S GMP 가이드」가 「가이드」로 지침에 걸리면 안 된다
+  if (/PIC\/?S|\bICH\b|\bWHO\b|\bUSP\b|\bEP\b|\bJP\b|\bISO\b|EU\s*GMP|\bFDA\b/i.test(raw)) return K_INTL;
+  if (/지침|안내서|가이드|해설|매뉴얼|업무처리방안|운영방안|질의응답/.test(raw)) return K_GUID;
   if (/절차$|방안$/.test(s)) return K_GUID;
   // 나머지는 **이름 끝**으로 가른다 — 「약사법」 「…에 관한 법률」 「…규칙」 「…규정」
   if (/규칙$/.test(s)) return K_RULE;
   if (/법률$|법$/.test(s)) return K_LAW;
   if (/시행령$|령$/.test(s)) return K_DEC;
-  if (/고시|규정$|기준$/.test(s)) return K_NOTI;
+  if (/고시|훈령|예규|공고|규정$|기준$|약전/.test(raw)) return K_NOTI;
   return K_ETC;
 }
 
@@ -533,7 +536,7 @@ Deno.serve(async (req) => {
     // 점수 순으로만 자르면 법률·규칙이 통째로 빠지고 지침서만 남는 일이 생긴다.
     // 층 대표를 먼저 세우고, 남은 자리를 점수 순으로 채운다.
     const kindN = (p: any) => {
-      for (const k of [K_LAW, K_DEC, K_RULE, K_NOTI, K_GUID, K_ETC]) if (k.t === p.kind) return k.n;
+      for (const k of [K_LAW, K_DEC, K_RULE, K_NOTI, K_GUID, K_INTL, K_ETC]) if (k.t === p.kind) return k.n;
       return 9;
     };
     const rep: any[] = [], rest: any[] = [], tookTier = new Set<number>();

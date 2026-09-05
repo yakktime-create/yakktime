@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v124";
+var APP_VER="v125";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1981,7 +1981,7 @@ function lawMeta(pages){
   return {kind:kind,eff:eff};
 }
 /* 종류를 정하는 차례 — ① 문서에서 읽은 것 ② 원본 파일 이름 */
-var KIND_BY_TEXT={"법률":0,"대통령령":1,"총리령":2,"부령":2,"고시":3,"훈령":3,"예규":3,"지침":4};
+var KIND_BY_TEXT={"법률":0,"대통령령":1,"총리령":2,"부령":2,"고시":3,"훈령":3,"예규":3,"공고":3,"지침":4,"국제기준":5};
 function lawKindOf(l){
   if(l&&l.kind&&KIND_BY_TEXT[l.kind]!=null)
     return {n:KIND_BY_TEXT[l.kind],t:l.kind==="총리령"||l.kind==="부령"?"시행규칙"
@@ -2745,17 +2745,37 @@ function nfc(t){
   try{ return t.normalize?t.normalize("NFC"):t; }catch(e){ return t; }
 }
 
+/* 법 위계. 숫자가 작을수록 위다.
+ * **파일 이름의 괄호 묶음에만 기대면 이름을 바꿔 올린 문서가 죄다 「그 밖」이 된다**
+ * (「외품허신」이 그랬다). 괄호를 떼고 **이름 끝말**로도 가른다.
+ *   …법 / …법률          → 법률
+ *   …시행령 / …령         → 시행령       (시설기준령)
+ *   …규칙                → 시행규칙
+ *   고시·훈령·예규·공고 / …규정 / …기준 / 약전 → 행정규칙(고시)
+ *   지침·안내서·절차·가이드·해설·질의응답    → 지침·안내서
+ *   PIC/S·ICH·WHO·USP·EP·JP·ISO·EU GMP   → 국제기준 (우리 법령이 아니다)
+ * 국제기준은 지침보다 아래에 둔다 — 민원 답변의 근거로는 국내 법령이 먼저다.
+ * 「그 밖」은 이 중 어느 것도 아닌 문서다. 되도록 안 생기게 하는 것이 목표. */
 var LAW_KINDS=[
-  {n:0,t:"법률",   re:/\(법률\)|법률\s*제\s*\d|「[^」]*법」\s*$/},
-  {n:1,t:"시행령", re:/\(대통령령\)|시행령/},
-  {n:2,t:"시행규칙",re:/\(총리령\)|\(부령\)|규칙/},
-  {n:3,t:"고시",   re:/고시|규정\s*\(/},
-  {n:4,t:"지침·안내서",re:/지침|안내서|절차|가이드|해설/}
+  {n:0,t:"법률",   re:/\(법률\)|법률\s*제\s*\d|(?:^|\s)[^\s]*법$|법률$/},
+  {n:1,t:"시행령", re:/\(대통령령\)|시행령$|령$/},
+  {n:2,t:"시행규칙",re:/\(총리령\)|\(부령\)|규칙$/},
+  {n:5,t:"국제기준",re:/PIC\/?S|\bICH\b|\bWHO\b|\bUSP\b|\bEP\b|\bJP\b|\bISO\b|EU\s*GMP|\bFDA\b/i},
+  {n:3,t:"고시",   re:/고시|훈령|예규|공고|규정$|기준$|약전/},
+  {n:4,t:"지침·안내서",re:/지침|안내서|절차|가이드|해설|매뉴얼|업무처리방안|질의응답|Q\s*&\s*A/i}
 ];
 function lawKind(name){
-  var s=nfc(name);
-  for(var i=0;i<LAW_KINDS.length;i++) if(LAW_KINDS[i].re.test(s)) return LAW_KINDS[i];
-  return {n:5,t:"그 밖"};
+  var s=nfc(name).replace(/\.(pdf|docx?)$/i,"").trim();
+  /* 괄호 묶음을 떼고 이름만 남긴다 — 「약사법(법률)(제21109호)(20260621)」 */
+  var bare=s;
+  for(var k=0;k<6;k++){
+    var b2=bare.replace(/\s*[\[(（][^\[\]()（）]*[\])）]\s*$/,"").trim();
+    if(b2===bare) break; bare=b2;
+  }
+  for(var i=0;i<LAW_KINDS.length;i++){
+    if(LAW_KINDS[i].re.test(s)||LAW_KINDS[i].re.test(bare)) return LAW_KINDS[i];
+  }
+  return {n:6,t:"그 밖"};
 }
 /* 위계 → 이름 순. 같은 종류끼리 모이고, 상위법이 위로 온다.
  * 반드시 <b>원본 파일 이름</b>으로 가른다 — 화면 이름은 「(식품의약품안전처고시)」
@@ -3008,7 +3028,7 @@ function lawAskHtml(){
    * 죽 늘어놓는 것보다 「법률 → 시행규칙 → 고시 → 지침」으로 층이 보이는 편이
    * 읽기 쉽다. 낱말 검색 결과와 같은 부품(.law-group)을 쓴다 —
    * 한쪽만 다르게 생기면 매번 다시 배워야 한다. */
-  var KIND_ORDER=["법률","시행령","시행규칙","고시","지침·안내서","그 밖"];
+  var KIND_ORDER=["법률","시행령","시행규칙","고시","지침·안내서","국제기준","그 밖"];
   function askGrouped(list){
     var by={}, order=[];
     list.forEach(function(p){

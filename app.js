@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v126";
+var APP_VER="v127";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3491,6 +3491,16 @@ var ART_RE=/제\s*(\d+)\s*조(?:\s*의\s*(\d+))?\s*\(\s*([^()]{1,40}?)\s*\)/g;
 var BP_RE=/\[\s*별\s*(표|지)\s*(?:제\s*)?(\d+)(?:\s*의\s*(\d+))?\s*(?:호\s*서\s*식)?\s*\]\s*(?:<[^<>]{0,40}>\s*)?(?:([^()\[\]<>]{0,40}?)\s*(?=\(|\[|<|$))?/g;
 /* 「[별표 N]」 뒤에 이것이 오면 머리말이 아니라 인용이다 */
 var BP_CITE=/^(?:[,·、]|(?:및|또는|참조|이하)(?=\s|$)|(?:에|의|을|를|은|는|이|가|와|과|에서|에는|부터|까지)(?=\s|[,·]|$))/;
+/* 「말한 다.」 — 줄이 낱말 한복판에서 접히면 「다.」가 목처럼 보인다.
+ * **「다」는 목 글자이면서 동시에 서술어 어미**라 유독 위험하다. 다른 목 글자는
+ * 앞이 「리·료·것·우」처럼 명사 끝이라 진짜 목이지만, 「다」 앞은 어간이 온다.
+ * 실측: 「다.」가 한글 뒤에 오는 461곳 중 255곳이 어간 꼴(한 200 · 있 36 …).
+ * 어간 뒤의 「다.」는 목으로 보지 않는다. */
+var STEM_DA="한하되된있없인는운준논친킨린았었였웠";
+function prevCh(t,i){
+  for(var k=i-1;k>=0;k--){ if(!/\s/.test(t.charAt(k))) return t.charAt(k); }
+  return "";
+}
 var HANG="①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";
 /* 지침서가 쓰는 글머리표. 07 사전GMP평가는 「ㅇ」(홑자음)를, 09·10은 「○」를 쓴다.
  * **네모(□ ■ ◇ ◆)는 뺀다** — 그건 글머리표가 아니라 점검표의 **체크칸**이다.
@@ -3866,7 +3876,11 @@ function lawBreaks(text){
       var mm=/^(\d{1,2}|[\uAC00-\uD7A3])\s*\.\s/.exec(text.slice(i,i+6));
       if(mm){
         if(/^\d+$/.test(mm[1])) pts.push({at:i,lv:2,len:0});
-        else if(MOK.indexOf(mm[1])>=0&&!afterNum(text,i)) pts.push({at:i,lv:3,len:0});
+        else if(MOK.indexOf(mm[1])>=0&&!afterNum(text,i)){
+          /* 「…을 말한 다.」의 「다.」는 목이 아니라 잘린 낱말이다 */
+          if(mm[1]==="다"&&STEM_DA.indexOf(prevCh(text,i))>=0){}
+          else pts.push({at:i,lv:3,len:0});
+        }
       } else {
         /* 목 아래 세부는 "1)" "가)" 꼴을 쓴다 */
         var m2=/^(\d{1,2}|[\uAC00-\uD7A3])\s*\)\s/.exec(text.slice(i,i+6));

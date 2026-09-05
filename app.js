@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v125";
+var APP_VER="v126";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1705,7 +1705,7 @@ function pdfLines(tc,H){
   var it=[];
   (tc.items||[]).forEach(function(x){
     if(!x.str||!x.str.trim()) return;
-    it.push({s:x.str,y:H-x.transform[5],x:x.transform[4],
+    it.push({s:x.str,y:H-x.transform[5],x:x.transform[4],w:x.width||0,h:x.height||0,
              f:x.fontName+"|"+Math.round(x.height||0)});
   });
   it.sort(function(a,b){ return (a.y-b.y)||(a.x-b.x); });
@@ -1716,7 +1716,57 @@ function pdfLines(tc,H){
   });
   lines.forEach(function(l){
     l.items.sort(function(a,b){ return a.x-b.x; });
-    l.text=l.items.map(function(z){ return z.s; }).join(" ").replace(/\s+/g," ").trim();
+    /* **조각을 무조건 공백으로 잇고 있었다.** 자간을 벌려 조판한 문서는 글자
+     * 하나가 조각 하나로 나오는데, 그러면 「제 품 명」 「효 능ㆍ효 과」가 되어
+     * 「제품명」으로 검색해도 하나도 안 걸린다(외품허신 34쪽 전부가 그랬다).
+     * PDF에는 조각의 x와 너비가 들어 있으니 **사이가 벌어졌을 때만** 공백을 넣는다.
+     * 실측: 낱말 사이 6.0 · 글자 사이 0.0 (12pt 기준). 문턱은 글자 높이의 0.22배.
+     * 줄이 접히면 x가 크게 뒤로 가는데(음수), 그건 새 낱말이니 공백을 넣는다. */
+    /* **줄마다 잣대를 새로 잰다.** 자간을 벌려 조판한 줄은 낱말 사이도 좁아서
+     * 한 잣대로 재면 「상기 사항 중」이 「상기사항중」이 된다. 그 줄에서 실제로
+     * 나타난 **작은 간격들의 가운뎃값**을 글자 사이로 보고, 그보다 확실히 넓을
+     * 때만 낱말 사이로 친다. 보통 줄은 글자 사이가 0이라 예전과 같이 동작한다. */
+    var hh0=l.items[0].h||10;
+    /* 이 줄이 「글자마다 쪼개진 줄」인가 — 조각의 절반 넘게 한 글자면 그렇다.
+     * 그런 줄만 잣대를 다시 잰다. 보통 줄은 조각이 낱말째라 예전 그대로 둔다
+     * (여기서 잣대를 바꿨더니 「상기 사항 중」이 「상기사항중」이 됐다). */
+    /* **한글 한 글자짜리 조각만 센다.** 문장부호(☞ ‘ ’ .)까지 세면 「☞ 상기 사항 중
+     * 어느 하나라도」처럼 조각이 낱말째인 줄도 「글자마다 쪼개진 줄」로 잘못 본다. */
+    var one=0, han=0;
+    l.items.forEach(function(z){
+      var t=String(z.s).trim();
+      if(!/[가-힣]/.test(t)) return;
+      han++; if(t.length===1) one++;
+    });
+    var cut=Math.max(1.2,hh0*0.22);
+    if(han>=6&&one>=han*0.7){
+      var gaps=[];
+      for(var gi=1;gi<l.items.length;gi++){
+        var g=l.items[gi].x-(l.items[gi-1].x+l.items[gi-1].w);
+        if(g>=0&&g<hh0*0.8) gaps.push(g);
+      }
+      gaps.sort(function(x,y){ return x-y; });
+      /* 이 줄 안에서 **글자 사이(좁은 쪽)와 낱말 사이(넓은 쪽)의 중간**을 자른다.
+       * 아래 4분의 1 지점을 글자 사이로, 가운뎃값을 낱말 사이로 보고 그 사이를 문턱으로.
+       * 낱말이 없어 온통 글자 사이뿐인 줄(「지 침 서 ㆍ 안 내 서」)은 둘이 같아
+       * 문턱이 그 값이 되고, 간격이 그보다 크지 않으니 전부 붙는다. */
+      var q=gaps.length?gaps[Math.floor(gaps.length*0.25)]:0;
+      var md=gaps.length?gaps[Math.floor(gaps.length*0.5)]:0;
+      cut=Math.max(cut,q+(md-q)*0.5);
+    }
+    var buf="";
+    l.items.forEach(function(z,i){
+      if(i){
+        var pv=l.items[i-1], gap=z.x-(pv.x+pv.w), hh=pv.h||z.h||10;
+        /* **양쪽이 다 여러 글자면 그 사이는 낱말 사이다** — 붙일 이유가 없다.
+         * 표의 한 줄에 「지 침 서」 칸과 보통 글 칸이 함께 있으면 줄 전체가
+         * 「글자마다 쪼개진 줄」로 잡혀 멀쩡한 낱말까지 붙어 버렸다. */
+        var both=String(pv.s).trim().length>1&&String(z.s).trim().length>1;
+        if(gap>(both?Math.max(1.2,hh*0.22):cut)||gap<-hh) buf+=" ";
+      }
+      buf+=z.s;
+    });
+    l.text=buf.replace(/\s+/g," ").trim();
     var c={}, best=null;
     l.items.forEach(function(z){ c[z.f]=(c[z.f]||0)+z.s.length; if(!best||c[z.f]>c[best]) best=z.f; });
     l.font=best||"";

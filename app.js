@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v120";
+var APP_VER="v121";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2109,8 +2109,12 @@ function lawUpload(f){
 /* 쪽 글자도 저장 전에 손질한다. 예전에는 조문만 손질해서, 「쪽 그대로 보기」에는
  * 「법제처 2 국가법령정보센터」와 쪽 번호가 그대로 남아 있었다.
  * 머리글 패턴은 문서 전체를 봐야 알 수 있으므로 한 번 구해 쪽마다 쓴다. */
-function cleanPages(rows){
-  var hre=runHeadRe(nfc(rows.map(function(r){ return r.content||""; }).join("\n")));
+/* **쪽 손질에도 법령 이름을 넘겨야 한다.** 조문을 자르는 findArticles 는 여기서
+ * 손질한 글자를 보는데, 이름을 안 넘기면 식약처 고시의 머리글이 남아
+ * 「…품목허가ㆍ심사 규정 제7조(심사자료의 요건)」이 인용으로 오인된다. */
+function cleanPages(rows,name){
+  var hre=[runHeadRe(nfc(rows.map(function(r){ return r.content||""; }).join("\n"))),
+           nameHeadRe(name)];
   rows.forEach(function(r){ r.content=cleanPdfText(r.content||"",hre); });
   return rows;
 }
@@ -2570,7 +2574,7 @@ function lawReindex(id){
       rows=fresh.map(function(p){ return {law_id:id,page:p.page,content:p.content,tbl:!!p.tbl}; });
     } else rows=(res&&res.data)||[];
     if(!rows.length) throw new Error("저장된 쪽이 없어요. PDF를 다시 올려주세요.");
-    cleanPages(rows);   /* 먼저 손질하고 저장한다 — 그래야 쪽 보기도 깨끗해진다 */
+    cleanPages(rows,lawSrc(l));   /* 먼저 손질하고 저장한다 — 그래야 쪽 보기도 깨끗해진다 */
     /* 쪽마다 "시작 시점에 유효한 조"도 같이 갱신한다 — 쪽 보기에서 쓴다 */
     var carry="";
     rows.forEach(function(r){
@@ -2798,7 +2802,7 @@ function lawReindexOne(l){
     if(isNew) rows=fresh.map(function(p){ return {law_id:l.id,page:p.page,content:p.content,tbl:!!p.tbl}; });
     else rows=(res&&res.data)||[];
     if(!rows.length) throw new Error("쪽 없음");
-    cleanPages(rows);
+    cleanPages(rows,lawSrc(l));
     var carry="";
     rows.forEach(function(r){
       r.article=carry||null;

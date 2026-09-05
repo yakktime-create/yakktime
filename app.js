@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v123";
+var APP_VER="v124";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2988,7 +2988,8 @@ function lawAskHtml(){
       +   '<div class="ask-art"><span class="ask-score n-'+needRank(p.need)+'">'
       +     esc(p.need||"있으면 좋음")+'</span><b>'+esc(p.label)+'</b>'
       +     '<span class="ask-law">'+esc(p.law)+'</span>'
-      +     (p.kind?'<span class="ask-kind">'+esc(p.kind)+'</span>':'')
+      /* 종류 배지는 뺐다 — 바로 위 묶음 머리말과 같은 말이다.
+       * (법령 목록에서 뺀 것과 같은 이유) */
       +     '<button class="link-btn law-go-art" data-act="law-art" data-art-id="'+esc(p.id)+'" data-id="'+esc(p.lawId)+'">전체 보기</button></div>'
       +   '<div class="ask-why">'+esc(p.why)+'</div>'
       /* 점수가 어디서 나왔는지 같이 적는다. 숫자만 있으면 「87이 무슨 뜻이냐」가 된다.

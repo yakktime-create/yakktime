@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v127";
+var APP_VER="v128";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2293,11 +2293,14 @@ function isBigHead(L){
  * 증명서」처럼 괄호가 열린 채 끝난다. */
 function tidyTitle(L){
   L=String(L||"").replace(/\s*[(（\[「『]\s*[)）]?\s*$/,"").trim();
-  if(L.length>24){
-    L=L.slice(0,24);
-    var o=L.lastIndexOf("(");
-    if(o>0&&L.indexOf(")",o)<0) L=L.slice(0,o).trim();
+  /* **낱말 한복판에서 자르면 뜻이 상한다** — 「…시설 운영 관리 방」(침이 잘림).
+   * 조금(네 글자) 넘치는 것은 그대로 두고, 많이 넘치면 빈칸에서 끊는다. */
+  if(L.length>28){
+    var cut=L.slice(0,28), sp=cut.lastIndexOf(" ");
+    L=(sp>=12?cut.slice(0,sp):cut).trim();
   }
+  var o=L.lastIndexOf("(");
+  if(o>0&&L.indexOf(")",o)<0) L=L.slice(0,o).trim();
   return L;
 }
 
@@ -2335,7 +2338,7 @@ function pageTitle(t){
    * 그냥 끝 글자로 보면 「우선 GMP 평가」의 「가」까지 조사로 오인한다. */
   if(/(?:^|\s)(은|는|이|가|을|를|에|의|와|과|로|으로|및)$/.test(ti)) return "";
   if(isCutTitle(ti)) return "";
-  return ti.length>24?ti.slice(0,24):ti;
+  return tidyTitle(ti);
 }
 
 function buildLawArticles(pages,docName,docKind){
@@ -3681,7 +3684,12 @@ function secHeadLen(text,at){
   if(!m) return 0;
   var pos=at+m[0].length, len=m[0].length, title=0;
   while(pos<text.length&&title<12){
-    var sp=text.indexOf(" ",pos);
+    /* **낱말을 빈칸으로만 끊으면 줄바꿈에서 뚫린다.** 이 함수는 손질 전 원문
+     * (subHeads 가 넘기는 raw)에도 도는데, 거기엔 \n 이 들어 있다.
+     * 그러면 「방지\n가.」가 한 낱말이 되어 「한 글자 목」 검사를 통과하고,
+     * 라벨이 「5.2 제조 시 교차오염의 방지 가.」처럼 목까지 물고 나온다. */
+    var mm2=/\s/.exec(text.slice(pos));
+    var sp=mm2?pos+mm2.index:-1;
     var tok=(sp<0?text.slice(pos):text.slice(pos,sp));
     if(!tok||!/^[가-힣()ㆍ·]/.test(tok)) break;   /* "품질 ( 보증 ) 부서" 처럼 괄호가 낀 제목 */
     /* 다음이 목·호 표시면 제목 끝.
@@ -3750,8 +3758,10 @@ function tblChunks(text){
     out=[];
     for(var c=TBL_CHUNK;c<text.length;c+=TBL_CHUNK){
       /* 가까운 공백에서 끊어 낱말이 반 토막 나지 않게 */
-      var sp=text.indexOf(" ",c);
-      out.push(sp>=0&&sp-c<200?sp+1:c);
+      /* 줄바꿈도 끊을 자리다 — 빈칸만 찾으면 원문(raw)에서 못 찾고 그냥 자른다 */
+      var mws=/\s/.exec(text.slice(c,c+200));
+      var sp=mws?c+mws.index:-1;
+      out.push(sp>=0?sp+1:c);
     }
   }
   if(!out.length) return [];

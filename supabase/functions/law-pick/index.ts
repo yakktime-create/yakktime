@@ -38,8 +38,12 @@ const PREVIEW    = 180;    // 화면에 보여줄 미리보기
 // 그래서 1차에게 **법령에 실제로 쓰일 낱말**을 같이 내게 하고, 그 낱말로
 // 상위법 본문을 뒤져 후보에 보탠다. AI 를 한 번 더 부르지 않으므로 값이 안 는다.
 const WORDS_MAX  = 6;      // 1차가 낼 낱말 수
-const BOOST_MAX  = 8;      // 낱말로 보탤 상위법 조 수 — 양이 터지지 않게
-const BOOST_ROWS = 60;     // 낱말 하나가 걸러 올 조 수 상한
+const BOOST_MAX  = 12;     // 낱말로 보탤 조 수 — 양이 터지지 않게
+const PER_WORD   = 1;      // 낱말 하나가 **위계 층마다** 챙겨 오는 조 수
+// **순서를 안 정하고 60줄만 가져오면 뽑히는 조가 그때그때 달라진다.**
+// 「제품명」이 100곳에서 걸리는데 그중 60개만 임의로 와서, 정작 답인 규칙 제11조가
+// 밖으로 밀렸다. 차례를 정하고 넉넉히 가져온다.
+const BOOST_ROWS = 300;    // 낱말 하나가 걸러 올 조 수 상한
 const KRW        = 1400;   // 원/달러
 
 // 법 위계 — 이름만 보고 가른다. 같은 내용이면 상위법이 더 센 근거다.
@@ -158,7 +162,10 @@ words 에는 이 질문의 답이 적혀 있을 조문을 **본문에서** 찾�
   「실태조사 생략」 → 실태조사 · 생략 · 면제 · 갈음
   「안 가도 되나」  → 현장조사 · 서류평가
 - 두 글자 이상, 많아야 ${WORDS_MAX}개. 조사·어미를 붙이지 않는다(「실태조사를」 ✕).
-- 아무 조문에나 나오는 흔한 말은 넣지 않는다(「의약품」「제조소」「경우」).`;
+- 아무 조문에나 나오는 흔한 말은 넣지 않는다(「의약품」「제조소」「경우」).
+- <b>되도록 길고 드문 말을 고른다.</b> 「제품명」보다 「제품명칭」, 「생략」보다
+  「생략기간」처럼. 짧은 말은 백 곳에서 걸려 아무것도 못 가린다. 다만 확신이
+  없으면 긴 말과 짧은 말을 **둘 다** 넣는다.`;
 
 const SCHEMA1 = {
   type: "object",
@@ -211,6 +218,8 @@ const RULES2 = `${HEAD}
   (예: 「1회 1개 품목 포장단위로 판매할 것」이 여기 있습니다).
   본문에서 못 찾았으면 그렇다고 적는다.
 - note 는 한두 문장. 무엇을 보고 골랐는지, 빠진 게 있어 보이면 무엇인지.
+- <b>「상위법은 없다」고 단정하지 않는다.</b> 후보에 안 보이는 것은 못 찾은 것일 뿐
+  없는 것이 아니다. 그런 때는 「이 후보에서는 못 찾았다」고 적는다.
 - <b>번호를 글에 적지 않는다.</b> 목록의 번호(509, 835 …)는 이쪽에서 붙인 것이라
   읽는 사람에게는 아무 뜻이 없다. why·note 에는 <b>조 이름</b>으로 적는다
   (「바이오의약품 사전 GMP 평가 지침 8쪽」처럼).
@@ -358,26 +367,51 @@ Deno.serve(async (req) => {
       // 열쇠는 한 가지 꼴로 통일해서 쓴다.
       const have = new Set(cand.map((c: any) => String(c.id)));
       const nOf = new Map<string, number>(live.map((a: any, i: number) => [String(a.id), i + 1]));
+      // 낱말마다 「어느 조에서 걸렸나」를 따로 들고 있는다.
       const score = new Map<string, number>();
+      const perWord: string[][] = [];
       for (const w of words) {
-        const { data: rows } = await pg("law_articles?select=id&limit=" + BOOST_ROWS
+        const { data: rows } = await pg("law_articles?select=id&order=law_id.asc,seq.asc&limit=" + BOOST_ROWS
           + "&law_id=" + encodeURIComponent(inList(upperIds))
           + "&content=" + encodeURIComponent("ilike.*" + w.replace(/[*,()]/g, "") + "*"));
+        const ids: string[] = [];
         (rows || []).forEach((r: any) => {
           const k = String(r.id);
           score.set(k, (score.get(k) || 0) + 1);
+          ids.push(k);
         });
+        perWord.push(ids);
       }
-      const extra = [...score.entries()]
-        // 낱말 하나만 걸린 것은 잡음이다. 둘 이상 겹칠 때만 —
-        // 다만 낱말이 하나뿐이면 그것이라도 본다.
-        .filter(([id, c]) => !have.has(id) && nOf.has(id) && (words.length < 2 || c >= 2))
-        // 여러 낱말이 겹쳐 나오는 조가 먼저다. 같으면 위계가 높은 쪽부터.
-        .sort((a, b) => (b[1] - a[1])
-          || ((lawKind.get(index[nOf.get(a[0])!].law_id)?.n ?? 9)
-            - (lawKind.get(index[nOf.get(b[0])!].law_id)?.n ?? 9)))
-        .slice(0, BOOST_MAX)
-        .map(([id]) => { const n = nOf.get(id)!; return { n, ...index[n] }; });
+      // **「둘 이상 겹칠 때만」이 정답을 떨어뜨렸다.** 「제품명 부적합 요건」을
+      // 물었을 때 답은 규칙 제11조인데, 그 조에는 「제품명」 하나만 있어서 빠졌다.
+      // AI 가 내는 낱말은 대개 흔한 말(제품명 100곳·부적합 75곳·요건 132곳)이라
+      // 겹침만으로는 못 고른다.
+      // 그래서 **낱말마다 위계 높은 것 몇 개씩**을 따로 챙기고, 겹치는 것을 위에 둔다.
+      const rank = (id: string) => lawKind.get(index[nOf.get(id)!].law_id)?.n ?? 9;
+      const ok = (id: string) => !have.has(id) && nOf.has(id);
+      const pick: string[] = [];
+      const seen = new Set<string>();
+      const push = (id: string) => { if (!seen.has(id)) { seen.add(id); pick.push(id); } };
+      // ① 여러 낱말이 겹치는 조부터 — **다만 절반까지만.** 다 넣으면 열두 자리를
+      //    겹침만으로 채워, 아래 ②의 층별 몫이 잘려 나간다(규칙 제11조가 그랬다).
+      const over = [...score.entries()].filter(([id, c]) => ok(id) && c >= 2)
+        .sort((a, b) => (b[1] - a[1]) || (rank(a[0]) - rank(b[0])))
+        .map(([id]) => id);
+      over.slice(0, Math.floor(BOOST_MAX / 2)).forEach(push);
+      // ② 낱말마다 **위계 층별로 하나씩** — 위계 순으로만 뽑으면 법률이 자리를
+      //    다 차지해 정작 답이 있는 규칙·고시가 밀린다. 「제품명 부적합 요건」에서
+      //    규칙 제11조(제품명칭)가 그렇게 밀렸다.
+      perWord.forEach((ids) => {
+        const bag = ids.filter(ok);
+        for (let lv = 0; lv <= 5; lv++) {
+          const one = bag.filter((id) => rank(id) === lv).slice(0, PER_WORD);
+          one.forEach(push);
+        }
+      });
+      // ③ 자리가 남으면 겹침 나머지로 채운다
+      over.forEach(push);
+      const extra = pick.slice(0, BOOST_MAX)
+        .map((id) => { const n = nOf.get(id)!; return { n, ...index[n] }; });
       boosted = extra.length;
       dbg.upper = upperIds.length; dbg.words = words.length;
       dbg.hit = score.size; dbg.two = [...score.values()].filter((c) => c >= 2).length;
@@ -493,6 +527,23 @@ Deno.serve(async (req) => {
     picks = picks
       .map((p: any, i: number) => ({ p, i }))
       .sort((a: any, b: any) => (b.p.score - a.p.score) || (a.i - b.i))
+      .map((x: any) => x.p);
+
+    // **위계 층마다 적어도 하나는 남긴다.** 민원 답변은 상위법부터 인용해야 하는데,
+    // 점수 순으로만 자르면 법률·규칙이 통째로 빠지고 지침서만 남는 일이 생긴다.
+    // 층 대표를 먼저 세우고, 남은 자리를 점수 순으로 채운다.
+    const kindN = (p: any) => {
+      for (const k of [K_LAW, K_DEC, K_RULE, K_NOTI, K_GUID, K_ETC]) if (k.t === p.kind) return k.n;
+      return 9;
+    };
+    const rep: any[] = [], rest: any[] = [], tookTier = new Set<number>();
+    picks.forEach((p: any) => {
+      const n = kindN(p);
+      if (!tookTier.has(n)) { tookTier.add(n); rep.push(p); } else rest.push(p);
+    });
+    picks = rep.concat(rest).slice(0, MAX_PICKS)
+      .map((p: any, i: number) => ({ p, i }))
+      .sort((a: any, b: any) => (kindN(a.p) - kindN(b.p)) || (b.p.score - a.p.score) || (a.i - b.i))
       .map((x: any) => x.p);
 
     return json({

@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v122";
+var APP_VER="v123";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3003,7 +3003,28 @@ function lawAskHtml(){
             + (p.quote?'<span class="ask-quote-tag">근거</span>':'')+esc(p.head)+'</div>':'')
       + '</div></li>';
   }
-  var items=shown.map(askItem).join("")
+  /* **위계로 묶어 보여준다.** 민원 답변은 상위법부터 인용해야 하므로, 점수 순으로
+   * 죽 늘어놓는 것보다 「법률 → 시행규칙 → 고시 → 지침」으로 층이 보이는 편이
+   * 읽기 쉽다. 낱말 검색 결과와 같은 부품(.law-group)을 쓴다 —
+   * 한쪽만 다르게 생기면 매번 다시 배워야 한다. */
+  var KIND_ORDER=["법률","시행령","시행규칙","고시","지침·안내서","그 밖"];
+  function askGrouped(list){
+    var by={}, order=[];
+    list.forEach(function(p){
+      var k=p.kind||"그 밖";
+      if(!by[k]){ by[k]=[]; order.push(k); }
+      by[k].push(p);
+    });
+    order.sort(function(x,y){
+      var i=KIND_ORDER.indexOf(x), j=KIND_ORDER.indexOf(y);
+      return (i<0?9:i)-(j<0?9:j);
+    });
+    return order.map(function(k){
+      return '<li class="ask-kindhead"><span>'+esc(k)+'</span><i>'+by[k].length+'</i></li>'
+           + by[k].map(askItem).join("");
+    }).join("");
+  }
+  var items=askGrouped(shown)
     + (maybe.length&&!lawAskMore
         ? '<li class="ask-more"><button class="link-btn" data-act="ask-more">'
           + '관련도 낮은 '+maybe.length+'개 더 보기</button></li>' : '');

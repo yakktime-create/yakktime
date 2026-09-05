@@ -1143,6 +1143,13 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .ask-head-txt.is-quote{color:var(--ink);border-left:3px solid var(--accent-soft);}
 .ask-quote-tag{display:inline-block;margin-right:7px;font-size:var(--fs-2xs);
   font-weight:800;color:var(--accent);vertical-align:1px;}
+/* 위계 머리말 — 낱말 검색의 법령 묶음 머리말과 같은 결로 */
+.ask-kindhead{list-style:none;display:flex;align-items:baseline;gap:var(--sp-2);
+  margin:var(--sp-3) 0 6px;padding:5px 11px;border-radius:var(--r-sm);
+  background:var(--blue-soft);color:var(--blue-deep);
+  font-size:var(--fs-xs);font-weight:750;letter-spacing:.02em;}
+.ask-kindhead:first-child{margin-top:0;}
+.ask-kindhead i{margin-left:auto;font-style:normal;font-weight:650;opacity:.6;}
 .ask-more{list-style:none;padding-left:var(--sp-3);}
 .ask-foot{margin:var(--sp-4) 0 0;padding-top:var(--sp-3);border-top:1px solid var(--line);
   font-size:var(--fs-sm);color:var(--muted);}

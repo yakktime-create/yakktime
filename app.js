@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v128";
+var APP_VER="v129";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2318,6 +2318,25 @@ function headLineTitle(t){
   return tidyTitle(big||small);
 }
 
+/* 「【붙임 2】실사 이력표 …」처럼 붙임·참고로 시작하는 쪽은 **그것이 이 쪽의 이름**이다.
+ * 앞 쪽에서 이어진 큰 제목(「6 행정사항」)을 물려받으면 아주 엉뚱해진다.
+ * 제목이 표 내용으로 이어지는 일이 많아 낱말 두 개까지만 쓴다. */
+var ATTACH_RE=/^[\s·]*[【\[]?\s*(붙임|참고|별첨|부록)\s*(\d{1,2})?\s*[】\]]?\s*/;
+function attachTitle(t){
+  var s=nfc(String(t||"")).replace(/^\s+/,"");
+  var m=ATTACH_RE.exec(s);
+  if(!m) return "";
+  var head=m[1]+(m[2]?" "+m[2]:"");
+  var rest=s.slice(m[0].length).split(/[\n]/)[0].split(/\s+/).filter(Boolean);
+  var add=[];
+  for(var i=0;i<rest.length&&add.length<2;i++){
+    var w=rest[i];
+    if(!/^[가-힣A-Za-z0-9]/.test(w)||w.length>8) break;
+    add.push(w);
+  }
+  return (head+" "+add.join(" ")).trim();
+}
+
 function pageTitle(t){
   var byLine=headLineTitle(t);
   if(byLine) return byLine;
@@ -2501,12 +2520,17 @@ function buildLawArticles(pages,docName,docKind){
       if(!t) return;
       t=cleanPdfText(t,hre);        /* 조문 쪽과 같은 손질을 여기에도 */
       var big=headLineBig(t);
-      var ti=headLineBig(t,true)||carryBig||big||pageTitle(t);
+      /* 붙임·참고로 시작하는 쪽이면 그것이 먼저다 — 물려받은 제목보다 앞선다 */
+      var ti=attachTitle(t)||headLineBig(t,true)||carryBig||big||pageTitle(t);
       /* 「목 차」는 그 쪽만 목차다. 물려주면 붙임 보고서 열 쪽이 죄다
        * 「목 차」가 된다 — 이름은 없는 것이 틀린 것보다 낫다. */
       if(big) carryBig=/^(목\s*차|차\s*례)$/.test(big)?"":big;
+      /* **표 여부를 안 넘기고 있었다.** 쪽에는 tbl 이 제대로 붙는데(선으로 판정)
+       * 조문 행으로 옮기지 않아, 지침서의 표 쪽이 「칸이 뒤섞여 읽기 어려운
+       * 대목이에요」로 안 바뀌고 뒤엉킨 글자가 그대로 나왔다.
+       * 조 단위 문서는 findArticles 쪽에서 이미 넘기고 있다. */
       out.push({ seq:out.length+1, label:p.page+"쪽"+(ti?" · "+ti:""), num:p.page+"쪽",
-                 page:p.page, page_end:p.page, content:t });
+                 page:p.page, page_end:p.page, content:t, tbl:!!p.tbl });
     });
   }
   return out;

@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v121";
+var APP_VER="v122";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2716,7 +2716,10 @@ function tidyPunct(t){
 function nameHeadRe(name){
   /* 파일 이름은 「약사법(법률)(제21109호)(20260621).pdf」꼴이라 괄호 묶음이
    * 여럿 붙는다. 하나만 떼면 「약사법(법률)(제21109호)」가 남는다 — 다 뗀다. */
-  var nm=String(name||"").replace(/\.(pdf|docx?)$/i,"").trim();
+  /* **파일 이름은 NFD(자모 분리)다.** 맥·아이패드가 그렇게 만든다. 쪽 글자는
+   * nfc() 로 맞춰 두었으므로 이름도 맞춰야 글자 비교가 된다 — 안 그러면
+   * 눈에는 똑같은데 하나도 안 맞아 머리글이 그대로 남는다. */
+  var nm=nfc(String(name||"")).replace(/\.(pdf|docx?)$/i,"").trim();
   for(var k=0;k<6;k++){
     var m2=nm.replace(/\s*[\[(（][^\[\]()（）]*[\])）]\s*$/,"").trim();
     if(m2===nm) break; nm=m2;

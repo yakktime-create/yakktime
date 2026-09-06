@@ -40,7 +40,9 @@
   --sh-3:0 24px 60px rgba(30,42,36,.28);
 
   /* 주의(노랑) — 안내 띠 · 힌트 · 배지가 제각각이던 것을 하나로 */
-  --warn-bg:var(--warn-bg); --warn-bd:var(--warn-bd); --warn-fg:var(--warn-fg);
+  /* 자기 자신을 가리키고 있어서 값이 없었다 — 안내 띠·「표」 안내·배지가
+     색 없이 나왔다. 584줄의 폴백(#FBF0E6)이 원래 의도한 값이다. */
+  --warn-bg:#FBF0E6; --warn-bd:#EBDCC0; --warn-fg:#7A5A1E;
 
   /* 터치 목표 최소 크기 */
   --tap:44px;
@@ -1234,3 +1236,105 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .upload-bar.slim{padding-top:8px;padding-bottom:8px;}
 .upload-bar.slim .import-bar-sub{display:none;}
 .upload-bar.slim .upload-ic{font-size:var(--fs-base);}
+
+/* ========== 민원 답변 초안 ==========================================
+ * 창을 나가지 않고 조문을 빼고 더할 수 있게 한다 — 잘못 골랐다고
+ * 창을 닫았다 다시 여는 건 품이 든다. 조문은 칩으로 창 안에 들고 온다.
+ * ------------------------------------------------------------------ */
+.ans-back{position:fixed;inset:0;background:rgba(30,42,36,.45);z-index:900;animation:lvFade .15s ease;}
+.ans-win{position:fixed;z-index:901;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(940px,94vw);height:min(88vh,900px);background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r-lg);display:flex;flex-direction:column;
+  box-shadow:var(--sh-3);overflow:hidden;}
+.ans-top{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-4) var(--sp-4) var(--sp-3);
+  border-bottom:1px solid var(--line);flex-shrink:0;font-size:var(--fs-base);}
+.ans-top b{flex:1;min-width:0;font-weight:650;}
+.ans-krw{font-size:var(--fs-xs);color:var(--muted);flex-shrink:0;}
+.ans-scroll{flex:1;overflow-y:auto;padding:var(--sp-4);-webkit-overflow-scrolling:touch;}
+
+.ans-lab{display:block;font-size:var(--fs-sm);font-weight:650;color:var(--muted);
+  margin:var(--sp-4) 0 var(--sp-2);}
+.ans-scroll > .ans-lab:first-child{margin-top:0;}
+.ans-lab-n{font-weight:400;color:var(--muted);}
+textarea.ans-q,textarea.ans-final{width:100%;resize:vertical;line-height:var(--lh-snug);
+  font-size:var(--fs-md);font-family:inherit;}
+
+/* 근거 조문 — 칩으로 들고 다닌다. ✕ 로 빼면 AI 를 다시 안 불러도 된다 */
+.ans-chips{display:flex;flex-wrap:wrap;gap:var(--sp-2);}
+.ans-chip{display:inline-flex;align-items:center;gap:var(--sp-2);max-width:100%;
+  background:var(--accent-soft);border:1px solid var(--line);border-radius:var(--r-full);
+  padding:5px 5px 5px var(--sp-3);font-size:var(--fs-sm);line-height:var(--lh-tight);}
+.ans-chip b{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ans-chip.miss{background:var(--brick-soft);}
+.ans-chip-tag{font-size:var(--fs-xs);color:var(--muted);}
+.ans-chip-tag.warn{color:var(--brick);}
+.ans-chip-x{width:22px;height:22px;flex-shrink:0;border:none;background:none;border-radius:var(--r-full);
+  color:var(--muted);font-size:var(--fs-xs);cursor:pointer;display:grid;place-items:center;}
+@media (hover:hover){.ans-chip-x:hover{background:var(--brick);color:#fff;}}
+
+.ans-go{display:flex;align-items:center;gap:var(--sp-3);margin-top:var(--sp-4);}
+.ans-fmt-btn{flex:1;min-width:0;}
+.ans-go .btn{flex-shrink:0;}
+
+/* 형식 — 늘 쓰는 게 아니니 접어 둔다 */
+.ans-fmt{margin-top:var(--sp-3);padding:var(--sp-3);background:var(--paper);
+  border:1px solid var(--line);border-radius:var(--r-md);}
+.ans-fmt-row{display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-2);}
+.ans-fmt-row:last-of-type{margin-bottom:0;}
+.ans-fmt-k{flex:0 0 62px;font-size:var(--fs-sm);color:var(--muted);}
+.ans-fmt-row .input{flex:1;min-width:0;font-size:var(--fs-md);}
+.ans-fmt-hint{font-size:var(--fs-xs);opacity:.7;margin-left:var(--sp-1);}
+.ans-fmt-chk{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-sm);
+  min-height:var(--tap);}
+.ans-fmt-note{font-size:var(--fs-xs);color:var(--muted);margin:var(--sp-2) 0 0;
+  line-height:var(--lh-snug);}
+
+/* 두 판을 나란히 — 좁으면 하나만 보이고 좌우로 넘긴다 */
+.ans-panes{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-3);margin-top:var(--sp-4);}
+.ans-pane{border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;
+  display:flex;flex-direction:column;background:var(--surface);}
+.ans-pane-head{padding:var(--sp-2) var(--sp-3);background:var(--paper);
+  border-bottom:1px solid var(--line);font-size:var(--fs-sm);font-weight:650;}
+.ans-pane-note{font-weight:400;color:var(--muted);}
+.ans-pane-plus{font-weight:650;color:var(--warn-fg);background:var(--warn-bg);
+  border-radius:var(--r-full);padding:1px 8px;margin-left:var(--sp-2);font-size:var(--fs-xs);}
+.ans-body{margin:0;padding:var(--sp-3);font-size:var(--fs-md);line-height:var(--lh-body);
+  white-space:pre-wrap;word-break:break-word;font-family:inherit;flex:1;
+  max-height:38vh;overflow-y:auto;}
+.ans-body.sm{font-size:var(--fs-sm);max-height:14vh;color:var(--muted);}
+.ans-pane-foot{display:flex;flex-wrap:wrap;gap:var(--sp-2);padding:var(--sp-2) var(--sp-3);
+  border-top:1px solid var(--line);}
+.ans-pane-foot .btn{flex:0 0 auto;}
+.ans-seg{display:none;}
+.ans-warn{margin:var(--sp-4) 0 0;font-size:var(--fs-sm);color:var(--brick);
+  line-height:var(--lh-snug);}
+
+/* 좁은 화면 — 한 판씩 좌우로 */
+@media (max-width:820px){
+  .ans-panes{grid-template-columns:1fr;}
+  .ans-pane{display:none;}
+  .ans-pane.on{display:flex;}
+  .ans-seg{display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-3);flex-wrap:wrap;}
+  .ans-seg-hint{font-size:var(--fs-xs);color:var(--muted);}
+  .ans-win{width:100vw;height:100vh;border-radius:0;border:none;}
+}
+
+/* ---- 「민원 답변」 탭 목록 ---- */
+.ans-list{display:flex;flex-direction:column;gap:var(--sp-2);margin-top:var(--sp-4);}
+.ans-row{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);
+  overflow:hidden;}
+.ans-row.on{border-color:var(--accent);}
+.ans-row-head{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3);
+  cursor:pointer;min-height:var(--tap);}
+.ans-row-body{flex:1;min-width:0;}
+.ans-row-t{font-size:var(--fs-base);font-weight:650;line-height:var(--lh-tight);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ans-row-s{font-size:var(--fs-sm);color:var(--muted);margin-top:2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ans-row-go{flex-shrink:0;color:var(--muted);font-size:var(--fs-base);}
+.ans-row-open{padding:0 var(--sp-3) var(--sp-3);border-top:1px solid var(--line);}
+.ans-sec{margin-top:var(--sp-3);}
+.ans-sec-k{display:block;font-size:var(--fs-xs);font-weight:650;color:var(--muted);
+  margin-bottom:var(--sp-1);}
+.ans-sec .ans-body{border:1px solid var(--line);border-radius:var(--r-sm);background:var(--paper);}
+.ans-row-acts{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-top:var(--sp-3);}

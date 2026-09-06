@@ -30,7 +30,7 @@ Promise Array Object String Number Boolean Date Math JSON RegExp Error Map Set
 parseInt parseFloat isNaN isFinite encodeURIComponent decodeURIComponent
 setTimeout clearTimeout setInterval clearInterval requestAnimationFrame cancelAnimationFrame
 document window navigator localStorage console alert confirm prompt fetch
-Blob FileReader URL Uint8Array DataView ArrayBuffer TextDecoder TextEncoder
+Blob FileReader URL Uint8Array Uint32Array DataView ArrayBuffer TextDecoder TextEncoder
 DOMParser Response DecompressionStream XMLHttpRequest Intl Symbol
 supabase sb S""".split())
 

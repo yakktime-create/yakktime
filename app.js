@@ -157,7 +157,7 @@ document.getElementById("login-email").addEventListener("keydown",function(e){ i
 
 /* ========== DB 레이어 (Supabase) — OPUS SQL 스키마 ========== */
 /* archive·docs 는 화면이 없어졌지만 표는 남겨 둔다 — 데이터와 백업이 보존된다 */
-var TABLES=["schedule","events","articles","mfds","archive","docs","laws","refs"];
+var TABLES=["schedule","events","articles","mfds","archive","docs","laws","refs","answers"];
 
 /*
  * OPUS SQL 컬럼명 매핑:
@@ -264,7 +264,7 @@ function dbDelete(table,id){
 }
 
 /* ========== 전역 상태 ========== */
-var S={ schedule:[], events:[], articles:[], mfds:[], archive:[], docs:[], laws:[], refs:[] };
+var S={ schedule:[], events:[], articles:[], mfds:[], archive:[], docs:[], laws:[], refs:[], answers:[] };
 var active="today";
 var now0=new Date(), calYear=now0.getFullYear(), calMonth=now0.getMonth(), calSel=keyOf(now0);
 var ARTICLE_STATUS=["기획","작성중","기고완료"], MFDS_STATUS=["대기","진행중","완료"];
@@ -278,8 +278,8 @@ var TAB_LIST=[
   {id:"articles",label:"기고글",sub:"서울시약사회"},
   {id:"mfds",label:"식약처 업무"},
   {group:"자료"},
-  {id:"archive",label:"민원 자료"},
-  {id:"laws",label:"법령"}
+  {id:"laws",label:"법령"},
+  {id:"answers",label:"민원 답변"}
 ];
 var WD=["일","월","화","수","목","금","토"];
 
@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v129";
+var APP_VER="v130";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -576,7 +576,6 @@ function renderToday(){
   var open=todayItems.filter(function(i){return !i.done;});
   var inProg=S.articles.filter(function(a){return a.status==="작성중";}).length;
   var mfdsOpen=S.mfds.filter(function(m){return m.status!=="완료";}).length;
-  var refParts=0; S.refs.forEach(function(r){ refParts+=(r.parts||0); });
   var todayEv=S.events.filter(function(e){return e.key===todayKey;}).sort(evSort);
   var upcoming=S.events.filter(function(e){return e.key>todayKey;}).sort(evSort).slice(0,4);
   var evHtml="";
@@ -622,8 +621,8 @@ function renderToday(){
     + '<section class="stat-row">'
     +   statTile("articles","brass",inProg,"작성 중 기고글")
     +   statTile("mfds","blue",mfdsOpen,"진행 중 식약처 업무")
-    +   statTile("archive","accent",S.refs.length,"민원 자료"+(refParts?" · 절 "+refParts:""))
     +   statTile("laws","slate",S.laws.length,"올려둔 법령")
+    +   statTile("answers","accent",(S.answers||[]).length,"담아둔 민원 답변")
     + '</section>'+evHtml
     + '<section class="card"><div class="card-head"><h2>오늘 할 일</h2><span class="muted">별표는 위로 · 항목을 누르면 수정</span></div>'
     +   '<div class="add-row quick"><input class="input" id="new-s" placeholder="할 일을 적고 Enter" /><button class="btn" data-act="s-add" data-id="'+todayKey+'" data-input="new-s">+ 추가</button></div>'+rows
@@ -1380,7 +1379,7 @@ function addMfds(){ var t=(val("m-title")||"").trim(); if(!t) return;
  * 예전엔 ✕ 를 누르면 바로 사라지고 되돌릴 길이 없었다. ✕ 가 ☆ 바로 옆에
  * 붙어 있어서 손가락으로는 잘못 누르기 쉽다 — 확인창 대신 되돌리기를 준다. */
 var UNDO_LABEL={schedule:"할 일",articles:"기고글",mfds:"업무",
-                archive:"자료",events:"일정",docs:"문서"};
+                archive:"자료",events:"일정",docs:"문서",answers:"답변"};
 function del(name,id,quiet){
   var it=S[name].find(function(x){ return x.id===id; });
   S[name]=S[name].filter(function(x){ return x.id!==id; });
@@ -3137,7 +3136,8 @@ function lawAskHtml(){
           ? (nSel?'<button class="link-btn quiet-link" data-act="ask-none">☐ 선택 지우기</button>'
                  :'<button class="link-btn" data-act="ask-all">☑ 모두 고르기</button>'):'')
     +   '<button class="btn quiet sm" data-act="ask-copy">'+askWhat+' 복사</button>'
-    +   '<button class="btn sm" data-act="ask-save">텍스트로 저장</button>'
+    +   '<button class="btn quiet sm" data-act="ask-save">텍스트로 저장</button>'
+    +   '<button class="btn sm" data-act="ans-start-ask">✎ 답변 초안</button>'
     + '</div></div>';
   return '<div class="ask-box">'+head
     + (d.note?'<p class="ask-note">'+esc(d.note)+'</p>':'')
@@ -4537,6 +4537,587 @@ function renderRefResults(){
   el.innerHTML=head+body;
 }
 
+
+/* ========== 민원 답변 초안 ==========================================
+ * 법령 탭에서 고른 조문으로 답변 초안을 만들고, 「민원 답변」 탭에 쌓는다.
+ *
+ * **AI 는 답변을 쓰지 않는다.** 요지 한 문장(summary)과 실무 참고(help)만
+ * 만들고, 조문 원문과 형식(1./가. · 머리말 · 맺음말)은 여기서 붙인다.
+ * 그래서 답변의 몸통은 통째로 원문 복사라 AI 가 법을 고쳐 쓸 자리가 없다.
+ * 형식을 바꿔도 AI 를 다시 부르지 않는다 — 돈만 나가고 결과는 같다.
+ * ------------------------------------------------------------------ */
+
+var ansDraft=null;    /* 열려 있는 초안 창 {q,cites,summary,help,mode,busy,err,krw,id} */
+var ansFmtOpen=false; /* 형식 설정을 펼쳤나 */
+var ansOpenId=null;   /* 「민원 답변」 탭에서 펼친 기록 */
+
+/* 한글 항목 기호 — 「하」 다음은 단모음 순(편람 59쪽) */
+var ANS_HAN="가나다라마바사아자차카타파하거너더러머버서어저처커터퍼허".split("");
+function ansMark(i){
+  if(!ansFmt.hangul) return (i+1)+".";
+  return (ANS_HAN[i]||String(i+1))+".";
+}
+
+/* 형식은 고칠 수 있게 둔다. 기관·과마다 쓰는 말이 다르고, 쓰다 보면
+ * 바꾸고 싶어진다. 기본값은 「2025 행정업무운영 편람」 기준이다. */
+var ANS_FMT0={
+  hangul:false,   /* false = 1. 2. 3. (편람 기준) · true = 가. 나. 다. */
+  end:true,       /* 끝. 표시 (규칙 제4조제5항) */
+  head:"귀하께서 주신 내용은 {요지}(으)로 이해되며, 이에 대한 답변입니다.",
+  cite:"「{법령명}」 {조항}에 따라",
+  /* 「따라야 함을 알려드리니」는 위압적으로 읽힌다 — 편람 76쪽이 그런 문구를
+   * 쓰지 말라고 한다. 「이러한 규정이 있다」는 사실만 전하고 판단은 넣지 않는다. */
+  tail:"따라서 문의하신 사항은 위 조항에 규정되어 있음을 알려드리며, 업무에 참고하시기 바랍니다."
+};
+var ansFmt=(function(){
+  var f={}, k;
+  for(k in ANS_FMT0) f[k]=ANS_FMT0[k];
+  try{
+    var raw=localStorage.getItem("ansFmt");
+    if(raw){ var got=JSON.parse(raw); for(k in ANS_FMT0) if(got[k]!=null) f[k]=got[k]; }
+  }catch(e){}
+  return f;
+})();
+function ansFmtSave(){ try{ localStorage.setItem("ansFmt",JSON.stringify(ansFmt)); }catch(e){} }
+
+/* ---------- 고른 조문 모으기 ---------- */
+/* 저장에는 id 를 안 쓴다 — 「조문 전부 다시 만들기」를 누르면 id 가 새로 생겨
+ * 쌓아둔 기록이 통째로 미아가 된다. 이름과 조 번호는 안 바뀐다. */
+function ansNumOf(label){
+  var m=/^(제\s*\d+\s*조(?:\s*의\s*\d+)?)/.exec(nfc(label||""));
+  return m?m[1].replace(/\s+/g,""):nfc(label||"");
+}
+/* 낱말 검색 결과에서 — 검색어가 든 항 전문을 담는다 (「전부 복사」와 같은 규칙) */
+function ansCitesFromLaw(){
+  var picked=lawPicked(), out=[];
+  picked.forEach(function(g){
+    var lo=S.laws.find(function(x){ return x.id===g.lawId; });
+    var txt=[];
+    g.snips.forEach(function(h){ if(h.full) txt.push(h.full); });
+    if(!txt.length) g.snips.forEach(function(h){ if(h.text) txt.push(h.text); });
+    out.push({ law:lawName(g.lawId), kind:lo?lawKindOf(lo).t:"", num:ansNumOf(g.art),
+               label:nfc(g.art||""), text:txt.join("\n").trim(), table:!!g.table });
+  });
+  return out;
+}
+/* AI 결과에서 — 조문 원문은 표에서 새로 가져온다 */
+function ansCitesFromAsk(then){
+  var ids=Object.keys(lawAskSel).filter(function(k){ return lawAskSel[k]; });
+  if(!ids.length) ids=(lawAsk&&lawAsk.picks||[]).map(function(p){ return p.id; });
+  if(!ids.length){ showToast("담아 갈 조문이 없어요."); return; }
+  showToast("조문 원문을 불러오는 중...");
+  withAuthRetry(function(){
+    return sb.from("law_articles").select("id,law_id,label,content,tbl").in("id",ids);
+  }).then(function(res){
+    if(res.error){ showToast("불러오지 못했어요: "+res.error.message,true); return; }
+    var by={}; (res.data||[]).forEach(function(a){ by[String(a.id)]=a; });
+    var out=[];
+    (lawAsk.picks||[]).forEach(function(p){
+      if(ids.indexOf(String(p.id))<0&&ids.indexOf(p.id)<0) return;
+      var a=by[String(p.id)]; if(!a) return;
+      out.push({ law:nfc(p.law||""), kind:nfc(p.kind||""), num:ansNumOf(a.label),
+                 label:nfc(a.label||""), text:lawPlain(cleanPdfText(nfc(a.content||""))),
+                 table:!!a.tbl });
+    });
+    then(out);
+  });
+}
+
+/* ---------- 초안 창 열기 ---------- */
+function ansStart(cites,q){
+  if(!cites||!cites.length){ showToast("근거 조문을 하나 이상 골라주세요."); return; }
+  ansDraft={ q:q||"", cites:cites, summary:"", help:"", mode:"plain",
+             busy:false, err:"", krw:0, id:null, made:false };
+  render();
+}
+
+/* ---------- 초안 만들기 (AI 는 요지·참고만) ---------- */
+function ansMake(){
+  var d=ansDraft; if(!d||d.busy) return;
+  var q=(document.getElementById("ans-q")||{}).value;
+  if(q!=null) d.q=q;
+  if(!String(d.q||"").trim()){ showToast("민원 내용을 적어주세요."); return; }
+  d.busy=true; d.err=""; render();
+  sb.functions.invoke("law-draft",{body:{
+    q:d.q, mode:"help",     /* 늘 둘 다 만든다 — 나란히 보여주기로 했다 */
+    cites:d.cites.map(function(c){ return {law:c.law,num:c.num,text:c.text}; })
+  }}).then(function(r){
+    d.busy=false;
+    var v=r&&r.data;
+    if(r&&r.error){ d.err=String(r.error.message||r.error); render(); return; }
+    if(!v||v.error){ d.err=(v&&v.error)||"응답이 비어 있어요."; render(); return; }
+    d.summary=v.summary||""; d.help=v.help||""; d.krw=v.krw||0; d.made=true;
+    render();
+  },function(e){ d.busy=false; d.err=String(e&&e.message||e); render(); });
+}
+
+/* ---------- 조립 ---------- */
+/* {t:글, lv:층} 목록으로 만든다. lv 는 화면·복사·한글 파일이 함께 쓴다.
+ * lv 9 는 여백·구분선처럼 층이 없는 줄이다. */
+function ansCiteLines(text){
+  var out=[];
+  String(text||"").split("\n").forEach(function(L){
+    var pad=/^\s*/.exec(L)[0].length;
+    var t=L.trim(); if(!t) return;
+    /* lawPlain 이 넣은 들여쓰기(4·6·8칸)를 층으로 되읽는다 */
+    out.push({ t:t, lv: pad>=8?3 : pad>=6?2 : 1 });
+  });
+  return out;
+}
+function ansBlocks(mode){
+  var d=ansDraft; if(!d) return [];
+  var out=[], n=0;
+  out.push({t:ansMark(n++)+" "+ansFmt.head.replace("{요지}",d.summary||"(요지)"),lv:0});
+  d.cites.forEach(function(c){
+    out.push({t:"",lv:9});
+    out.push({t:ansMark(n++)+" "+ansFmt.cite.replace("{법령명}",c.law).replace("{조항}",c.num),lv:0});
+    out.push({t:"",lv:9});
+    if(c.table){
+      /* 표로 된 대목은 글자를 안 보여준다 — 칸이 뒤섞여 읽을 수 없다 */
+      out.push({t:"(칸이 뒤섞여 읽기 어려운 대목입니다. PDF 원문에서 확인해 붙여 넣어주세요.)",lv:1});
+    } else ansCiteLines(c.text).forEach(function(x){ out.push(x); });
+  });
+  out.push({t:"",lv:9});
+  out.push({t:ansMark(n++)+" "+ansFmt.tail+(ansFmt.end?"  끝.":""),lv:0});
+  if(mode==="help"&&d.help){
+    out.push({t:"",lv:9});
+    out.push({t:"────────────────────────────────",lv:9});
+    out.push({t:"⚠ 아래는 AI가 만든 참고 의견입니다. 검토 후 지우거나 고쳐 쓰세요.",lv:9});
+    out.push({t:"────────────────────────────────",lv:9});
+    out.push({t:"",lv:9});
+    String(d.help).split(/\n+/).forEach(function(h){
+      if(h.trim()) out.push({t:h.trim(),lv:1});
+    });
+  }
+  return out;
+}
+var ANS_PAD=["","  ","    ","      ",""];
+function ansText(mode){
+  return ansBlocks(mode).map(function(b){
+    return b.lv>=9?b.t:(ANS_PAD[Math.min(b.lv,3)]+b.t);
+  }).join("\n");
+}
+
+/* ---------- 내보내기 ---------- */
+function ansCopy(mode){
+  var t=ansText(mode);
+  var done=function(){ showToast("✓ 초안을 복사했어요"); };
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(t).then(done,function(){ lawCopyFallback(t,done); });
+  else lawCopyFallback(t,done);
+}
+function ansFileName(ext){
+  var d=ansDraft, base=(d&&d.summary?d.summary:(d&&d.q)||"민원답변").slice(0,24);
+  return "민원답변_"+base.replace(/[^가-힣a-zA-Z0-9]/g,"")+"_"+keyOf(new Date())+"."+ext;
+}
+function ansTxt(mode){
+  var blob=new Blob([ansText(mode)],{type:"text/plain;charset=utf-8"});
+  var a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=ansFileName("txt"); a.click();
+}
+function ansHwpx(mode){
+  try{
+    var buf=hwpxMake(ansBlocks(mode),(ansDraft&&ansDraft.summary)||"민원 답변 초안");
+    var a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([buf],{type:"application/hwp+zip"}));
+    a.download=ansFileName("hwpx"); a.click();
+    showToast("✓ 한글 파일로 받았어요");
+  }catch(e){ showToast("한글 파일을 만들지 못했어요: "+(e&&e.message||e),true); }
+}
+
+/* ---------- 저장 ---------- */
+function ansSave(mode){
+  var d=ansDraft; if(!d) return;
+  var fin=(document.getElementById("ans-final")||{}).value;
+  var item={
+    title:(d.summary||String(d.q||"").slice(0,40)||"민원 답변").slice(0,80),
+    question:String(d.q||""),
+    cites:d.cites.map(function(c){ return {law:c.law,kind:c.kind,num:c.num,label:c.label}; }),
+    mode:mode||d.mode||"plain",
+    draft:ansText(mode||d.mode||"plain"),
+    final:(fin!=null&&String(fin).trim())?String(fin):null
+  };
+  if(d.id){
+    var i=S.answers.findIndex(function(x){ return x.id===d.id; });
+    if(i>=0){ var k; for(k in item) S.answers[i][k]=item[k]; }
+    dbUpdate("answers",d.id,item);
+    showToast("✓ 저장했어요");
+    ansDraft=null; render(); return;
+  }
+  dbInsert("answers",item).then(function(row){
+    if(row){ S.answers.unshift(row); }
+    showToast("✓ 「민원 답변」에 담았어요");
+    ansDraft=null; render();
+  },function(e){ showToast("저장하지 못했어요: "+(e&&e.message||e),true); });
+}
+/* 지우기는 기존 del() 을 그대로 쓴다 — 되돌리기까지 이미 들어 있다 */
+function ansDel(id){ if(ansOpenId===id) ansOpenId=null; del("answers",id); }
+
+/* 저장해 둔 기록을 다시 초안 창으로 — 고치거나 다시 뽑을 때 */
+function ansReopen(id){
+  var a=S.answers.find(function(x){ return x.id===id; }); if(!a) return;
+  showToast("조문 원문을 불러오는 중...");
+  var want=(a.cites||[]);
+  if(!want.length){ showToast("담긴 조문이 없어요."); return; }
+  var laws={}; want.forEach(function(c){ laws[c.law]=1; });
+  withAuthRetry(function(){
+    return sb.from("law_articles").select("id,law_id,label,content,tbl").in("law_id",
+      S.laws.filter(function(l){ return laws[nfc(l.name)]; }).map(function(l){ return l.id; }));
+  }).then(function(res){
+    var by={};
+    if(!res.error) (res.data||[]).forEach(function(r){
+      var nm=lawName(r.law_id);
+      by[nm+"|"+ansNumOf(r.label)]={label:nfc(r.label||""),text:lawPlain(cleanPdfText(nfc(r.content||""))),table:!!r.tbl};
+    });
+    var cites=want.map(function(c){
+      var hit=by[c.law+"|"+c.num];
+      return { law:c.law, kind:c.kind||"", num:c.num,
+               label:hit?hit.label:(c.label||c.num),
+               text:hit?hit.text:"", table:hit?hit.table:false,
+               missing:!hit };
+    });
+    ansDraft={ q:a.question||"", cites:cites, summary:a.title||"", help:"",
+               mode:a.mode||"plain", busy:false, err:"", krw:0, id:a.id,
+               made:true, final:a.final||"" };
+    var lost=cites.filter(function(c){ return c.missing; }).length;
+    if(lost) showToast("조문 "+lost+"건은 지금 올려둔 법령에서 못 찾았어요 — 글자가 빈 채로 열립니다.");
+    render();
+  });
+}
+
+/* ---------- 초안 창 그리기 ---------- */
+function ansModalHtml(){
+  var d=ansDraft; if(!d) return "";
+  var chips=d.cites.map(function(c,i){
+    return '<span class="ans-chip'+(c.missing?" miss":"")+'">'
+      + '<b>'+esc(c.law)+'</b> '+esc(c.num)
+      + (c.table?' <span class="ans-chip-tag">표</span>':'')
+      + (c.missing?' <span class="ans-chip-tag warn">글자 없음</span>':'')
+      + '<button class="ans-chip-x" data-act="ans-drop" data-id="'+i+'" title="빼기">✕</button></span>';
+  }).join("");
+
+  var fmt=ansFmtOpen
+    ? '<div class="ans-fmt">'
+      + '<div class="ans-fmt-row"><span class="ans-fmt-k">항목 기호</span>'
+      +   '<button class="chip '+(ansFmt.hangul?"":"on")+'" data-act="ans-mark" data-id="num">1. 2. 3.<span class="ans-fmt-hint">편람 기준</span></button>'
+      +   '<button class="chip '+(ansFmt.hangul?"on":"")+'" data-act="ans-mark" data-id="han">가. 나. 다.</button></div>'
+      + '<label class="ans-fmt-row"><span class="ans-fmt-k">머리말</span>'
+      +   '<input class="input" id="ans-f-head" value="'+esc(ansFmt.head)+'" /></label>'
+      + '<label class="ans-fmt-row"><span class="ans-fmt-k">조문</span>'
+      +   '<input class="input" id="ans-f-cite" value="'+esc(ansFmt.cite)+'" /></label>'
+      + '<label class="ans-fmt-row"><span class="ans-fmt-k">맺음말</span>'
+      +   '<input class="input" id="ans-f-tail" value="'+esc(ansFmt.tail)+'" /></label>'
+      + '<div class="ans-fmt-row"><span class="ans-fmt-k"></span>'
+      +   '<label class="ans-fmt-chk"><input type="checkbox" data-act="ans-end"'+(ansFmt.end?" checked":"")+' /> 「끝.」 표시 붙이기</label>'
+      +   '<button class="link-btn" data-act="ans-fmt-reset">되돌리기</button></div>'
+      + '<p class="ans-fmt-note">{요지}·{법령명}·{조항} 자리에 값이 들어갑니다. 나머지 글자는 그대로 나갑니다.</p>'
+      + '</div>'
+    : "";
+
+  var panes="";
+  if(d.made){
+    panes='<div class="ans-panes" id="ans-panes">'
+      + ["plain","help"].map(function(m){
+          var on=(d.mode===m);
+          return '<div class="ans-pane'+(on?" on":"")+'" data-mode="'+m+'">'
+            /* 두 판은 「같은 글 + 꼬리」 관계라 위만 보면 똑같아 보인다.
+             * 무엇이 다른지 머리말에서 바로 알린다. */
+            + '<div class="ans-pane-head">'+(m==="plain"?"조문만":"조문 + 도움말")
+            +   (m==="help"
+                  ? (d.help
+                      ? ' <span class="ans-pane-plus">아래에 참고 '+d.help.split(/\n+/).filter(function(x){return x.trim();}).length+'줄</span>'
+                      : ' <span class="ans-pane-note">참고할 것이 없다고 판단했어요</span>')
+                  : ' <span class="ans-pane-note">공문에 그대로</span>')+'</div>'
+            + '<pre class="ans-body">'+esc(ansText(m))+'</pre>'
+            + '<div class="ans-pane-foot">'
+            +   '<button class="btn quiet sm" data-act="ans-copy" data-id="'+m+'">복사</button>'
+            +   '<button class="btn quiet sm" data-act="ans-txt" data-id="'+m+'">텍스트</button>'
+            +   '<button class="btn quiet sm" data-act="ans-hwpx" data-id="'+m+'">한글</button>'
+            +   '<button class="btn sm" data-act="ans-save" data-id="'+m+'">이걸로 담기</button>'
+            + '</div></div>';
+        }).join("")
+      + '</div>'
+      + '<div class="ans-seg"><button class="chip '+(d.mode==="plain"?"on":"")+'" data-act="ans-mode" data-id="plain">조문만</button>'
+      +   '<button class="chip '+(d.mode==="help"?"on":"")+'" data-act="ans-mode" data-id="help">조문 + 도움말</button>'
+      +   '<span class="ans-seg-hint">← 옆으로 쓸어넘겨도 됩니다</span></div>';
+  }
+
+  return '<div class="ans-back" data-act="ans-close"></div>'
+    + '<div class="ans-win" role="dialog">'
+    + '<div class="ans-top"><b>답변 초안</b>'
+    +   (d.krw?'<span class="ans-krw">약 '+d.krw+'원</span>':'')
+    +   '<button class="lv-x" data-act="ans-close">✕</button></div>'
+    + '<div class="ans-scroll">'
+    +   '<label class="ans-lab">민원 내용</label>'
+    +   '<textarea class="input ans-q" id="ans-q" rows="3" placeholder="민원 원문을 붙여넣거나 요약해서 적어주세요.">'+esc(d.q)+'</textarea>'
+    +   '<label class="ans-lab">근거 조문 <span class="ans-lab-n">'+d.cites.length+'건</span></label>'
+    +   '<div class="ans-chips">'+chips+'</div>'
+    +   '<div class="ans-go">'
+    +     '<button class="law-toggle ans-fmt-btn" data-act="ans-fmt">'+(ansFmtOpen?"▾":"▸")+' 답변 형식</button>'
+    +     '<button class="btn'+(d.busy?" busy":"")+'" data-act="ans-make"'+(d.busy?" disabled":"")+'>'
+    +       (d.busy?"만드는 중...":(d.made?"다시 만들기":"만들기"))+'</button>'
+    +   '</div>'
+    +   fmt
+    +   (d.err?'<p class="ask-warn">'+esc(d.err)+'</p>':"")
+    +   panes
+    +   (d.made?'<label class="ans-lab">최종본 <span class="ans-lab-n">고쳐서 담고 싶을 때만</span></label>'
+        + '<textarea class="input ans-final" id="ans-final" rows="4" placeholder="비워 두면 위 초안이 그대로 담깁니다.">'+esc(d.final||"")+'</textarea>':"")
+    +   '<p class="ans-warn">⚠ 초안입니다. 보내시기 전에 반드시 확인하세요.</p>'
+    + '</div></div>';
+}
+function renderAnsModal(){
+  var el=document.getElementById("ans-modal"); if(!el) return;
+  if(!ansDraft){ el.innerHTML=""; document.body.style.overflow=""; return; }
+  document.body.style.overflow="hidden";
+  el.innerHTML=ansModalHtml();
+  var q=document.getElementById("ans-q");
+  if(q) q.addEventListener("input",function(){ if(ansDraft) ansDraft.q=q.value; });
+  var f=document.getElementById("ans-final");
+  if(f) f.addEventListener("input",function(){ if(ansDraft) ansDraft.final=f.value; });
+  ["head","cite","tail"].forEach(function(k){
+    var i=document.getElementById("ans-f-"+k);
+    if(i) i.addEventListener("input",function(){ ansFmt[k]=i.value; ansFmtSave(); renderAnsModal(); });
+  });
+  ansSwipeWire();
+}
+/* 좁은 화면에서 두 판을 좌우로 넘긴다 — 버튼을 늘리지 않는다 */
+function ansSwipeWire(){
+  var el=document.getElementById("ans-panes"); if(!el) return;
+  var x0=null;
+  el.addEventListener("touchstart",function(e){ x0=e.touches[0].clientX; },{passive:true});
+  el.addEventListener("touchend",function(e){
+    if(x0==null||!ansDraft) return;
+    var dx=e.changedTouches[0].clientX-x0; x0=null;
+    if(Math.abs(dx)<60) return;
+    ansDraft.mode=(dx<0)?"help":"plain";
+    renderAnsModal();
+  },{passive:true});
+}
+
+/* ---------- 「민원 답변」 탭 ---------- */
+function ansDateOf(a){
+  var t=a&&(a.created_at||a.createdAt); if(!t) return "";
+  var d=new Date(t); return isNaN(d)?"":keyOf(d);
+}
+function renderAnswers(){
+  var items=(S.answers||[]).slice().sort(function(a,b){
+    return String(b.created_at||"").localeCompare(String(a.created_at||""));
+  });
+  var pills=items.length?[pill("답변 "+items.length+"건")]:null;
+
+  var list=items.map(function(a){
+    var open=(ansOpenId===a.id);
+    var cites=(a.cites||[]).map(function(c){ return c.law+" "+c.num; }).join(" · ");
+    return '<div class="ans-row'+(open?" on":"")+'">'
+      + '<div class="ans-row-head" data-act="ans-open" data-id="'+esc(a.id)+'">'
+      +   '<span class="doc-ic file">▤</span>'
+      +   '<div class="ans-row-body">'
+      +     '<div class="ans-row-t">'+esc(a.title||"(제목 없음)")+'</div>'
+      +     '<div class="ans-row-s">'+esc(ansDateOf(a))+(cites?' · '+esc(cites):'')
+      +       (a.mode==="help"?' · 도움말 포함':'')+(a.final?' · <b>최종본 있음</b>':'')+'</div>'
+      +   '</div>'
+      +   '<span class="ans-row-go">'+(open?"▾":"›")+'</span>'
+      +   '<button class="del doc-del" data-act="ans-del" data-id="'+esc(a.id)+'" title="삭제">✕</button>'
+      + '</div>'
+      + (open?'<div class="ans-row-open">'
+      +   (a.question?'<div class="ans-sec"><span class="ans-sec-k">민원 내용</span><pre class="ans-body sm">'+esc(a.question)+'</pre></div>':'')
+      +   '<div class="ans-sec"><span class="ans-sec-k">'+(a.final?"초안":"답변")+'</span><pre class="ans-body">'+esc(a.draft||"")+'</pre></div>'
+      +   (a.final?'<div class="ans-sec"><span class="ans-sec-k">최종본</span><pre class="ans-body">'+esc(a.final)+'</pre></div>':'')
+      +   '<div class="ans-row-acts">'
+      +     '<button class="btn quiet sm" data-act="ans-rcopy" data-id="'+esc(a.id)+'">복사</button>'
+      +     '<button class="btn quiet sm" data-act="ans-rtxt" data-id="'+esc(a.id)+'">텍스트</button>'
+      +     '<button class="btn quiet sm" data-act="ans-rhwpx" data-id="'+esc(a.id)+'">한글</button>'
+      +     '<button class="btn sm" data-act="ans-edit" data-id="'+esc(a.id)+'">다시 열어 고치기</button>'
+      +   '</div></div>':'')
+      + '</div>';
+  }).join("");
+
+  view().innerHTML='<div class="page">'
+    + pageHead2("민원 답변","법령 탭에서 조문을 고르고 「답변 초안」을 누르면 여기에 쌓여요.",pills)
+    + (items.length?('<div class="ans-list">'+list+'</div>')
+        :'<div class="empty-box"><div class="empty-ic">✎</div><p>아직 담아둔 답변이 없어요.<br /><b>법령</b> 탭에서 조문을 찾아 고른 뒤<br />「<b>답변 초안</b>」을 누르면 여기로 옵니다.</p></div>')
+    + '<div id="ans-modal"></div></div>';
+  renderAnsModal();
+}
+/* 저장된 기록에서 바로 꺼내 쓰기 — 최종본이 있으면 그것이 먼저다 */
+function ansRowText(id){
+  var a=(S.answers||[]).find(function(x){ return x.id===id; });
+  return a?String(a.final||a.draft||""):"";
+}
+function ansRowBlocks(id){
+  return ansRowText(id).split("\n").map(function(L){
+    var pad=/^\s*/.exec(L)[0].length, t=L.trim();
+    if(!t) return {t:"",lv:9};
+    return {t:t, lv: pad>=6?3 : pad>=4?2 : pad>=2?1 : 0};
+  });
+}
+
+/* ========== 한글 파일(hwpx) 만들기 ================================
+ * hwpx 는 「압축 안에 XML」이라 브라우저에서도 만들 수 있다.
+ * 꾸러미(라이브러리)를 안 쓴다 — 압축은 「압축 안 함(STORE)」으로 넣으면
+ * 표를 계산할 일이 없어 80줄이면 되고, 외부 파일을 안 불러오므로
+ * 앱 규칙(프레임워크 안 넣기)도 안 어긴다.
+ *
+ * 함정 셋 — 실제로 다 밟았다.
+ *  1) <hp:linesegarray> 를 넣으면 안 된다. 한글은 파일에 적힌 줄 배치를
+ *     그대로 믿고 그려서, 값이 틀리면 여러 줄이 한 자리에 겹친다. 빼면
+ *     한글이 스스로 계산한다.
+ *  2) 들여쓰기를 공백으로 밀면 둘째 줄이 왼쪽 끝으로 돌아간다.
+ *     문단 여백의 **내어쓰기**(left 양수 + intent 음수)로 해야
+ *     둘째 줄이 번호 뒤 글자에 맞는다 (한글의 Shift+Tab · 편람 60쪽).
+ *  3) mimetype 은 **압축 안 함 + 맨 앞**이어야 한다.
+ * ---------------------------------------------------------------- */
+var HWPX_PT=13, HWPX_LS=160, HWPX_CD=10, HWPX_FACE="함초롬바탕";
+/* 층별 「기호폭 + 1타」 배수 — 1.=1.5자 가.=2자 (편람 59~60쪽) */
+var HWPX_LV=[1.5,2.0,1.5,2.0,1.5];
+
+var _crcT=null;
+function crc32(u8){
+  if(!_crcT){ _crcT=new Uint32Array(256);
+    for(var n=0;n<256;n++){ var c=n;
+      for(var k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);
+      _crcT[n]=c>>>0; } }
+  var crc=0xFFFFFFFF;
+  for(var i=0;i<u8.length;i++) crc=(_crcT[(crc^u8[i])&0xFF]^(crc>>>8))>>>0;
+  return (crc^0xFFFFFFFF)>>>0;
+}
+function zipMake(files){   /* files: [{name, data:Uint8Array}] */
+  var parts=[], cd=[], off=0;
+  function u8(n){ return new Uint8Array(n); }
+  function put(a,i,v,len){ for(var k=0;k<len;k++){ a[i+k]=v&0xFF; v=Math.floor(v/256); } }
+  files.forEach(function(f){
+    var nm=new TextEncoder().encode(f.name), d=f.data, c=crc32(d);
+    var h=u8(30+nm.length);
+    put(h,0,0x04034b50,4); put(h,4,20,2); put(h,6,0x0800,2); put(h,8,0,2);
+    put(h,10,0,2); put(h,12,0,2); put(h,14,c,4); put(h,18,d.length,4); put(h,22,d.length,4);
+    put(h,26,nm.length,2); put(h,28,0,2); h.set(nm,30);
+    parts.push(h); parts.push(d);
+    var e=u8(46+nm.length);
+    put(e,0,0x02014b50,4); put(e,4,20,2); put(e,6,20,2); put(e,8,0x0800,2); put(e,10,0,2);
+    put(e,12,0,2); put(e,14,0,2); put(e,16,c,4); put(e,20,d.length,4); put(e,24,d.length,4);
+    put(e,28,nm.length,2); put(e,30,0,2); put(e,32,0,2); put(e,34,0,2); put(e,36,0,2);
+    put(e,38,0,4); put(e,42,off,4); e.set(nm,46);
+    cd.push(e);
+    off+=h.length+d.length;
+  });
+  var cdLen=0; cd.forEach(function(e){ cdLen+=e.length; });
+  var end=new Uint8Array(22);
+  put(end,0,0x06054b50,4); put(end,4,0,2); put(end,6,0,2);
+  put(end,8,files.length,2); put(end,10,files.length,2);
+  put(end,12,cdLen,4); put(end,16,off,4); put(end,20,0,2);
+  var total=off+cdLen+22, out=new Uint8Array(total), at=0;
+  parts.forEach(function(p){ out.set(p,at); at+=p.length; });
+  cd.forEach(function(p){ out.set(p,at); at+=p.length; });
+  out.set(end,at);
+  return out;
+}
+function xesc(s){
+  return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+function hwpxParaPr(){
+  var ch=Math.round(HWPX_PT*100), out="", n=HWPX_LV.length+1;
+  function one(id,left,intent){
+    return '<hh:paraPr id="'+id+'" tabPrIDRef="0" condense="'+HWPX_CD+'" fontLineHeight="0" snapToGrid="1" suppressLineNumbers="0" checked="0">'
+      + '<hh:align horizontal="JUSTIFY" vertical="BASELINE"/><hh:heading type="NONE" idRef="0" level="0"/>'
+      + '<hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="KEEP_WORD" widowOrphan="0" keepWithNext="0" keepLines="0" pageBreakBefore="0" lineWrap="BREAK"/>'
+      + '<hh:autoSpacing eAsianEng="1" eAsianNum="1"/>'
+      + '<hp:switch><hp:case hp:required-namespace="http://www.hancom.co.kr/hwpml/2016/HwpUnitChar">'
+      +   '<hh:margin><hc:intent value="'+intent+'" unit="HWPUNIT"/><hc:left value="'+left+'" unit="HWPUNIT"/>'
+      +   '<hc:right value="0" unit="HWPUNIT"/><hc:prev value="0" unit="HWPUNIT"/><hc:next value="0" unit="HWPUNIT"/></hh:margin>'
+      +   '<hh:lineSpacing type="PERCENT" value="'+HWPX_LS+'" unit="HWPUNIT"/></hp:case>'
+      + '<hp:default><hh:margin><hc:intent value="'+intent+'" unit="HWPUNIT"/><hc:left value="'+left+'" unit="HWPUNIT"/>'
+      +   '<hc:right value="0" unit="HWPUNIT"/><hc:prev value="0" unit="HWPUNIT"/><hc:next value="0" unit="HWPUNIT"/></hh:margin>'
+      +   '<hh:lineSpacing type="PERCENT" value="'+HWPX_LS+'" unit="HWPUNIT"/></hp:default></hp:switch>'
+      + '<hh:border borderFillIDRef="1" offsetLeft="0" offsetRight="0" offsetTop="0" offsetBottom="0" connect="0" ignoreMargin="0"/></hh:paraPr>';
+  }
+  HWPX_LV.forEach(function(mul,lv){
+    var head=Math.round(ch*mul);
+    out+=one(lv, ch*lv+head, -head);
+  });
+  out+=one(HWPX_LV.length,0,0);   /* 층 없는 줄 (여백·구분선) */
+  return {xml:out,n:n};
+}
+function hwpxHeader(){
+  var langs=["HANGUL","LATIN","HANJA","JAPANESE","OTHER","SYMBOL","USER"], ff="";
+  langs.forEach(function(l){
+    ff+='<hh:fontface lang="'+l+'" fontCnt="1"><hh:font id="0" face="'+xesc(HWPX_FACE)+'" type="TTF" isEmbedded="0">'
+      + '<hh:typeInfo familyType="FCAT_MYUNGJO" weight="6" proportion="0" contrast="0" strokeVariation="1" armStyle="1" letterform="1" midline="1" xHeight="1"/></hh:font></hh:fontface>';
+  });
+  var pp=hwpxParaPr();
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
+    + '<hh:head xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head" xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" version="1.4" secCnt="1">'
+    + '<hh:beginNum page="1" footnote="1" endnote="1" pic="1" tbl="1" equation="1"/><hh:refList>'
+    + '<hh:fontfaces itemCnt="7">'+ff+'</hh:fontfaces>'
+    + '<hh:borderFills itemCnt="1"><hh:borderFill id="1" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">'
+    +   '<hh:slash type="NONE" Crooked="0" isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/>'
+    +   '<hh:leftBorder type="NONE" width="0.1 mm" color="#000000"/><hh:rightBorder type="NONE" width="0.1 mm" color="#000000"/>'
+    +   '<hh:topBorder type="NONE" width="0.1 mm" color="#000000"/><hh:bottomBorder type="NONE" width="0.1 mm" color="#000000"/>'
+    +   '<hh:diagonal type="SOLID" width="0.1 mm" color="#000000"/></hh:borderFill></hh:borderFills>'
+    + '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="'+Math.round(HWPX_PT*100)+'" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="1">'
+    +   '<hh:fontRef hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>'
+    +   '<hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>'
+    +   '<hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>'
+    +   '<hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>'
+    +   '<hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/></hh:charPr></hh:charProperties>'
+    + '<hh:tabProperties itemCnt="1"><hh:tabPr id="0" autoTabLeft="0" autoTabRight="0"/></hh:tabProperties>'
+    + '<hh:numberings itemCnt="1"><hh:numbering id="1" start="0"><hh:paraHead start="1" level="1" align="LEFT" useInstWidth="1" autoIndent="1" widthAdjust="0" textOffsetType="PERCENT" textOffset="50" numFormat="DIGIT" charPrIDRef="4294967295" checkable="0">^1.</hh:paraHead></hh:numbering></hh:numberings>'
+    + '<hh:paraProperties itemCnt="'+pp.n+'">'+pp.xml+'</hh:paraProperties>'
+    + '<hh:styles itemCnt="1"><hh:style id="0" type="PARA" name="바탕글" engName="Normal" paraPrIDRef="0" charPrIDRef="0" nextStyleIDRef="0" langID="1042" lockForm="0"/></hh:styles>'
+    + '</hh:refList><hh:compatibleDocument targetProgram="HWP201X"><hh:layoutCompatibility/></hh:compatibleDocument></hh:head>';
+}
+var HWPX_SECPR='<hp:secPr id="" textDirection="HORIZONTAL" spaceColumns="1134" tabStop="8000" tabStopVal="4000" tabStopUnit="HWPUNIT" outlineShapeIDRef="1" memoShapeIDRef="0" textVerticalWidthHead="0" masterPageCnt="0">'
+ + '<hp:grid lineGrid="0" charGrid="0" wonggojiFormat="0"/><hp:startNum pageStartsOn="BOTH" page="0" pic="0" tbl="0" equation="0"/>'
+ + '<hp:visibility hideFirstHeader="0" hideFirstFooter="0" hideFirstMasterPage="0" border="SHOW_ALL" fill="SHOW_ALL" hideFirstPageNum="0" hideFirstEmptyLine="0" showLineNumber="0"/>'
+ + '<hp:lineNumberShape restartType="0" countBy="0" distance="0" startNumber="0"/>'
+ + '<hp:pagePr landscape="WIDELY" width="59528" height="84189" gutterType="LEFT_ONLY">'
+ +   '<hp:margin header="4252" footer="4252" gutter="0" left="8504" right="8504" top="5668" bottom="4252"/></hp:pagePr>'
+ + '<hp:footNotePr><hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" suffixChar=")" supscript="0"/>'
+ +   '<hp:noteLine length="-1" type="SOLID" width="0.12 mm" color="#000000"/>'
+ +   '<hp:noteSpacing betweenNotes="850" belowLine="567" aboveLine="850"/>'
+ +   '<hp:numbering type="CONTINUOUS" newNum="1"/><hp:placement place="EACH_COLUMN" beneathText="0"/></hp:footNotePr>'
+ + '<hp:endNotePr><hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" suffixChar=")" supscript="0"/>'
+ +   '<hp:noteLine length="14692344" type="SOLID" width="0.12 mm" color="#000000"/>'
+ +   '<hp:noteSpacing betweenNotes="0" belowLine="567" aboveLine="850"/>'
+ +   '<hp:numbering type="CONTINUOUS" newNum="1"/><hp:placement place="END_OF_DOCUMENT" beneathText="0"/></hp:endNotePr>'
+ + ["BOTH","EVEN","ODD"].map(function(t){
+     return '<hp:pageBorderFill type="'+t+'" borderFillIDRef="1" textBorder="PAPER" headerInside="0" footerInside="0" fillArea="PAPER">'
+          + '<hp:offset left="1417" right="1417" top="1417" bottom="1417"/></hp:pageBorderFill>'; }).join("")
+ + '</hp:secPr><hp:ctrl><hp:colPr id="" type="NEWSPAPER" layout="LEFT" colCount="1" sameSz="1" sameGap="0"/></hp:ctrl>';
+
+function hwpxMake(blocks,title){
+  var plain=HWPX_LV.length;   /* 층 없는 문단 */
+  var body=blocks.map(function(b,i){
+    var lv=(b.lv==null||b.lv>=9)?plain:Math.min(b.lv,HWPX_LV.length-1);
+    var run='<hp:run charPrIDRef="0">'+(i===0?HWPX_SECPR:"")
+      + (b.t?('<hp:t>'+xesc(b.t)+'</hp:t>'):'<hp:t/>')+'</hp:run>';
+    return '<hp:p id="'+i+'" paraPrIDRef="'+lv+'" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'+run+'</hp:p>';
+  }).join("");
+  var sec='<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
+    + '<hs:sec xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" '
+    + 'xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core" xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head">'+body+'</hs:sec>';
+  var hpf='<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
+    + '<opf:package xmlns:opf="http://www.idpf.org/2007/opf/" xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app" version="" unique-identifier="" id="">'
+    + '<opf:metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf/">'
+    + '<opf:title>'+xesc(title||"민원 답변")+'</opf:title><opf:language>ko</opf:language>'
+    + '<opf:meta name="CreatedDate" content=""/><opf:meta name="ModifiedDate" content=""/></opf:metadata>'
+    + '<opf:manifest><opf:item id="header" href="Contents/header.xml" media-type="application/xml"/>'
+    + '<opf:item id="section0" href="Contents/section0.xml" media-type="application/xml"/>'
+    + '<opf:item id="settings" href="settings.xml" media-type="application/xml"/></opf:manifest>'
+    + '<opf:spine><opf:itemref idref="header" linear="yes"/><opf:itemref idref="section0" linear="yes"/></opf:spine></opf:package>';
+  var enc=new TextEncoder();
+  var prv=blocks.map(function(b){ return b.t||""; }).join("\n").slice(0,2000);
+  return zipMake([
+    {name:"mimetype",data:enc.encode("application/hwp+zip")},
+    {name:"version.xml",data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes" ?><hv:HCFVersion xmlns:hv="http://www.hancom.co.kr/hwpml/2011/version" tagetApplication="WORDPROCESSOR" major="5" minor="1" micro="0" buildNumber="0" os="1" xmlVersion="1.4" application="yakktime" appVersion="1.0"/>')},
+    {name:"settings.xml",data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes" ?><ha:HWPApplicationSetting xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app"><ha:CaretPosition listIDRef="0" paraIDRef="0" pos="0"/></ha:HWPApplicationSetting>')},
+    {name:"Contents/header.xml",data:enc.encode(hwpxHeader())},
+    {name:"Contents/section0.xml",data:enc.encode(sec)},
+    {name:"Contents/content.hpf",data:enc.encode(hpf)},
+    {name:"META-INF/container.xml",data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes" ?><ocf:container xmlns:ocf="urn:oasis:names:tc:opendocument:xmlns:container" xmlns:hpf="http://www.hancom.co.kr/schema/2011/hpf"><ocf:rootfiles><ocf:rootfile full-path="Contents/content.hpf" media-type="application/hwpml-package+xml"/></ocf:rootfiles></ocf:container>')},
+    {name:"META-INF/manifest.xml",data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes" ?><odf:manifest xmlns:odf="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"/>')},
+    {name:"Preview/PrvText.txt",data:enc.encode(prv)}
+  ]);
+}
+
 /* ---------- 화면 ---------- */
 function renderLaws(){
   var items=S.laws;
@@ -4633,8 +5214,11 @@ function renderLaws(){
     +   '<div class="import-bar-sub">'+(lawBusy?"창을 닫지 마세요":"글자가 들어 있는 PDF만 (스캔본은 아직 안 돼요)")+'</div></div>'
     +   '<span class="import-bar-go">→</span></button>'
     + list
-    + '<div id="law-results"></div><div id="law-modal"></div></div>';
+    /* 초안 창은 법령 탭에서 열리므로 여기에도 자리를 둔다 —
+     * 없으면 renderAnsModal() 이 조용히 아무것도 안 해서 「눌러도 안 열린다」가 된다. */
+    + '<div id="law-results"></div><div id="law-modal"></div><div id="ans-modal"></div></div>';
 
+  renderAnsModal();
   renderLawResults();
   renderLawModal();
   var q=document.getElementById("law-q");
@@ -4685,7 +5269,8 @@ function renderLawResults(){
           ? (picked?'<button class="link-btn quiet-link" data-act="law-none">☐ 해제</button>'
                    :'<button class="link-btn" data-act="law-all">☑ 모두</button>'):'')
     +   '<button class="btn quiet sm" data-act="law-copy">'+what+' 복사</button>'
-    +   '<button class="btn sm" data-act="law-save">텍스트로 저장</button>'
+    +   '<button class="btn quiet sm" data-act="law-save">텍스트로 저장</button>'
+    +   '<button class="btn sm" data-act="ans-start">✎ 답변 초안</button>'
     + '</div></div>';
 
   var SHOW=3, cur=null, body="";
@@ -4924,6 +5509,41 @@ document.getElementById("app").addEventListener("click",function(e){
     case "law-none": lawSelAll(false); break;
     case "law-copy": lawCopy(); break;
     case "law-save": lawDownload(); break;
+    /* ---- 민원 답변 초안 ---- */
+    case "ans-start": ansStart(ansCitesFromLaw(),lawTermList.join(" ")); break;
+    case "ans-start-ask": ansCitesFromAsk(function(cs){ ansStart(cs,(lawAsk&&lawAsk.q)||""); }); break;
+    case "ans-close": ansDraft=null; render(); break;
+    case "ans-make": ansMake(); break;
+    case "ans-mode": if(ansDraft){ ansDraft.mode=id; renderAnsModal(); } break;
+    case "ans-drop": if(ansDraft){ ansDraft.cites.splice(parseInt(id,10),1); renderAnsModal(); } break;
+    case "ans-fmt": ansFmtOpen=!ansFmtOpen; renderAnsModal(); break;
+    case "ans-mark": ansFmt.hangul=(id==="han"); ansFmtSave(); renderAnsModal(); break;
+    case "ans-end": ansFmt.end=!ansFmt.end; ansFmtSave(); renderAnsModal(); break;
+    case "ans-fmt-reset": { var fk; for(fk in ANS_FMT0) ansFmt[fk]=ANS_FMT0[fk];
+      ansFmtSave(); renderAnsModal(); break; }
+    case "ans-copy": ansCopy(id); break;
+    case "ans-txt": ansTxt(id); break;
+    case "ans-hwpx": ansHwpx(id); break;
+    case "ans-save": ansSave(id); break;
+    case "ans-open": ansOpenId=(ansOpenId===id)?null:id; render(); break;
+    case "ans-del": ansDel(id); break;
+    case "ans-edit": ansReopen(id); break;
+    case "ans-rcopy": { var rt=ansRowText(id);
+      if(navigator.clipboard&&navigator.clipboard.writeText)
+        navigator.clipboard.writeText(rt).then(function(){ showToast("✓ 복사했어요"); },
+          function(){ lawCopyFallback(rt,function(){ showToast("✓ 복사했어요"); }); });
+      else lawCopyFallback(rt,function(){ showToast("✓ 복사했어요"); });
+      break; }
+    case "ans-rtxt": { var b1=new Blob([ansRowText(id)],{type:"text/plain;charset=utf-8"});
+      var a1=document.createElement("a"); a1.href=URL.createObjectURL(b1);
+      a1.download="민원답변_"+keyOf(new Date())+".txt"; a1.click(); break; }
+    case "ans-rhwpx": { try{
+        var bf=hwpxMake(ansRowBlocks(id),"민원 답변");
+        var a2=document.createElement("a");
+        a2.href=URL.createObjectURL(new Blob([bf],{type:"application/hwp+zip"}));
+        a2.download="민원답변_"+keyOf(new Date())+".hwpx"; a2.click();
+        showToast("✓ 한글 파일로 받았어요");
+      }catch(e2){ showToast("한글 파일을 만들지 못했어요",true); } break; }
     case "export": exportData(); break;
     case "import": importData(); break;
     case "logout": doLogout(); break;
@@ -4937,8 +5557,8 @@ function render(){
   else if(active==="calendar") renderCalendar();
   else if(active==="articles") renderArticles();
   else if(active==="mfds") renderMfds();
-  else if(active==="archive") renderRefs();
   else if(active==="laws") renderLaws();
+  else if(active==="answers") renderAnswers();
 }
 
 /* 앱 시작 (로그인 후 호출) */

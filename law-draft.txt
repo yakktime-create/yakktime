@@ -81,18 +81,17 @@ const RULES = `${HEAD}
     · 조문에 없는 조 번호·법령 이름을 지어내지 마라.
     · 민원인을 평가하거나 훈계하지 마라.`;
 
+// **모양을 law-pick 과 똑같이 맞춘다.** 처음에 name·strict 를 함께 넣었더니
+// API 가 `output_config.format.name: Extra inputs are not permitted` 로 물리쳤다.
+// deno check 는 통과하는 종류라 실제로 불러 봐야만 걸린다.
 const SCHEMA = {
-  name: "draft",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      summary: { type: "string", description: "민원 요지 명사구 (…에 관한 것)" },
-      help:    { type: "string", description: "실무 참고. mode!=help 이면 빈 문자열" },
-    },
-    required: ["summary", "help"],
+  type: "object",
+  properties: {
+    summary: { type: "string", description: "민원 요지 명사구 (…에 관한 것)" },
+    help:    { type: "string", description: "실무 참고. mode!=help 이면 빈 문자열" },
   },
+  required: ["summary", "help"],
+  additionalProperties: false,
 };
 
 function readJson(res: any) {
@@ -137,7 +136,7 @@ Deno.serve(async (req) => {
       model: MODEL,
       max_tokens: 900,
       system: RULES,
-      output_config: { format: { type: "json_schema", ...SCHEMA } },
+      output_config: { format: { type: "json_schema", schema: SCHEMA } },
       messages: [{
         role: "user",
         content:

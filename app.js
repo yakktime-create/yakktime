@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v131";
+var APP_VER="v132";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -4647,6 +4647,7 @@ function ansMake(){
     if(r&&r.error){ d.err=String(r.error.message||r.error); render(); return; }
     if(!v||v.error){ d.err=(v&&v.error)||"응답이 비어 있어요."; render(); return; }
     d.summary=v.summary||""; d.help=v.help||""; d.krw=v.krw||0; d.made=true;
+    d.dropped=!!v.dropped;
     render();
   },function(e){ d.busy=false; d.err=String(e&&e.message||e); render(); });
 }
@@ -4826,7 +4827,10 @@ function ansModalHtml(){
                   ? (d.help
                       ? ' <span class="ans-pane-plus">아래에 참고 '+d.help.split(/\n+/).filter(function(x){return x.trim();}).length+'줄</span>'
                       : ' <span class="ans-pane-note">참고할 것이 없다고 판단했어요</span>')
-                  : ' <span class="ans-pane-note">공문에 그대로</span>')+'</div>'
+                  : ' <span class="ans-pane-note">공문에 그대로</span>')
+            /* 없는 법령 이름을 든 문장은 서버가 버린다. 조용히 지우면
+             * 왜 짧아졌는지 알 수가 없으므로 여기서 알린다. */
+            +   ((m==="help"&&d.dropped)?' <span class="ans-pane-note">· 근거에 없는 법령을 든 문장은 뺐어요</span>':'')+'</div>'
             + '<pre class="ans-body">'+esc(ansText(m))+'</pre>'
             + '<div class="ans-pane-foot">'
             +   '<button class="btn quiet sm" data-act="ans-copy" data-id="'+m+'">복사</button>'

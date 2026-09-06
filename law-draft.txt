@@ -70,11 +70,16 @@ const RULES = `${HEAD}
     · 40~90자.
 
 [2] help — 실무 참고. **mode 가 "help" 일 때만** 쓴다. 아니면 빈 문자열.
-    · 조문에 이미 적힌 말을 되풀이하지 않는다. 조문을 읽으면 아는 것은 빼라.
-    · **절차·순서·함께 챙길 서류**처럼 담당자가 알려주면 도움이 되는 것만.
-    · 1~3문장. 각 문장은 「○ 」로 시작한다.
+    · **법령 이름은 아래 「담당자가 고른 근거 조문」에 나온 것만 쓸 수 있다.**
+      거기 없는 법령·규칙·고시 이름은 **한 글자도 쓰지 마라.** 「총리령으로 정하는 바에 따라」처럼
+      조문에 그렇게 적혀 있어도, 그 총리령이 무엇인지 네가 짐작해 이름을 붙이지 마라.
+      실제로 없는 「의약품 등의 제조·수입 및 판매에 관한 규칙」을 지어낸 적이 있다.
+    · **조문에 이미 적힌 말을 되풀이하지 않는다.** 조문을 읽으면 아는 것은 통째로 빼라.
+      「신고를 하여야 하며 품목허가를 받아야 합니다」는 조문 그 자체다 — 쓸 말이 아니다.
+    · 쓸 것은 **조문에 안 적힌 실무**뿐이다 — 순서(무엇을 먼저 하는지), 함께 챙길 것,
+      흔히 놓치는 대목. 그런 게 떠오르지 않으면 **빈 문자열로 두라. 그게 정답이다.**
+    · 1~3문장. **각 문장은 「○ 」로 시작하고 문장마다 줄을 바꾼다(\n).**
     · **단정하지 않는다.** 「…하시면 절차가 빠릅니다」처럼 안내하는 말투.
-    · 조문에서 확실히 읽히지 않는 것은 아예 쓰지 마라. 빈 문자열이 낫다.
     · 법령 해석을 새로 만들지 마라. 처분·판단·가부(可否)를 단정하지 마라.
 
 공통
@@ -147,9 +152,36 @@ Deno.serve(async (req) => {
     });
 
     const out = readJson(res);
+
+    // **말로 시켜도 샌다 — 서버가 한 번 더 거른다.**
+    // 실측: 「총리령(의약품 등의 제조·수입 및 판매에 관한 규칙)」이라는
+    // 있지도 않은 법령을 지어냈다. 근거 조문에 없는 법령 이름이 든 문장은 버린다.
+    const known: string[] = cites.map((c: any) => nfc(String(c?.law || "")).replace(/\s+/g, ""));
+    const LAWNAME = /[가-힣A-Za-z0-9ㆍ·\s]{4,40}?(?:법|법률|시행령|시행규칙|규칙|규정|고시|예규|지침)(?=[」\)\s,.]|$)/g;
+    function clean(t: string) {
+      // 「○ 」로 시작하는 문장 단위로 자른다. 줄바꿈이 없어도 갈린다.
+      const parts = t.split(/(?=○\s)/).map((x) => x.trim()).filter(Boolean);
+      const kept = parts.filter((p) => {
+        const ms = p.match(LAWNAME) || [];
+        for (const m of ms) {
+          const nm = m.replace(/\s+/g, "");
+          if (nm.length < 4) continue;
+          // 근거 조문의 법령 이름 안에 들어 있으면 통과 (약칭·부분 인용 허용)
+          if (known.some((k: string) => k.includes(nm) || nm.includes(k))) continue;
+          return false;   // 모르는 법령 이름이 있다 → 버린다
+        }
+        return true;
+      });
+      return kept.join("\n");
+    }
+    const helpRaw = mode === "help" ? nfc(String(out?.help || "")).trim() : "";
+    const help = helpRaw ? clean(helpRaw) : "";
+
     return json({
       summary: nfc(String(out?.summary || "")).trim(),
-      help: mode === "help" ? nfc(String(out?.help || "")).trim() : "",
+      help,
+      // 걸러낸 게 있으면 화면에서 알린다 — 조용히 지우면 왜 짧아졌는지 모른다
+      dropped: helpRaw && helpRaw !== help,
       krw: Math.round(usdOf(res?.usage) * KRW),
     });
   } catch (e) {

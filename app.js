@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v134";
+var APP_VER="v135";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3009,12 +3009,14 @@ function lawAskRun(){
     d.q=q; lawAsk=d; lawAskSel={}; lawAskMore=false;
     if((d.picks||[]).length){ lawHelpOpen=false; lawListOpen=false; }
     if(d.krw!=null) lawAskLast=d.krw;
-    /* 전에 답변에 쓴 조문은 등급이 낮아도 처음부터 체크한다 — 접힌 곳에 두면
-     * 「지난번엔 이걸 인용했는데」를 놓친다. 아니면 빼면 된다. */
+    /* 처음부터 체크되는 것은 **등급(중간 이상)으로만** 정한다. 전에 답변에 쓴 조문은
+     * 위로 올리고 펼쳐 둘 뿐 체크하지 않는다 — 「답변에 씀」은 「비슷한 질문에 썼다」가
+     * 아니라 「어느 답변엔가 인용한 적 있다」는 뜻이라, 이번 질문에 맞는지는 이랑님이
+     * 본다(2026-09-08 「애매한 것도 다 차용하게 하는 게 좋나」 → 아니다). */
     var usedOf=ansUsedMap();
     (d.picks||[]).forEach(function(p){
       p.used=usedOf[ansUsedKey(p.law,p.label)]||0;
-      if(askRank(p.grade)<=ASK_KEEP||p.used) lawAskSel[p.id]=true;
+      if(askRank(p.grade)<=ASK_KEEP) lawAskSel[p.id]=true;
     });
     done();
   }).catch(function(e){ showToast("물어보지 못했어요: "+e.message,true); done(); });

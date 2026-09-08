@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v144";
+var APP_VER="v145";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2275,18 +2275,23 @@ function saveLawArticles(lawId,arts,localItem){
  * 조문마다 「뜻 지문」을 두면 낱말이 달라도 뜻이 닿는 조문을 찾는다(law-pick 이 쓴다).
  * 조문을 새로 만들면 지문도 새로 만든다. 한 번에 100개씩, 다 될 때까지 되풀이.
  * 열쇠(VOYAGE_API_KEY)가 없으면 한 번만 알리고 조용히 넘어간다 — 검색은 예전처럼 된다. */
-var lawEmbedWarned=false;
-function lawEmbedRun(lawId,total){
-  return sb.functions.invoke("law-embed",{body:{op:"run",lawId:lawId||null}}).then(function(r){
+var lawEmbedWarned=false, lawEmbedSlow=false;
+function lawEmbedRun(lawId){
+  var wait=function(sec){ return new Promise(function(res){ setTimeout(res,sec*1000); }); };
+  return sb.functions.invoke("law-embed",{body:{op:"run",lawId:lawId||null,slow:lawEmbedSlow}}).then(function(r){
     var d=r&&r.data;
     if(!d){ showToast("뜻 지문을 만들지 못했어요: "+((r&&r.error&&r.error.message)||"응답 없음"),true); return; }
     if(d.noKey){ if(!lawEmbedWarned){ lawEmbedWarned=true; showToast("뜻 검색 열쇠(VOYAGE_API_KEY)가 아직 없어요 — 낱말로만 찾아요.",true); } return; }
     if(d.error&&d.retryAfter){
-      showToast("뜻 지문 만드는 중… 잠시 쉬었다 이어가요 ("+d.retryAfter+"초)");
-      return new Promise(function(res){ setTimeout(res,(d.retryAfter+2)*1000); }).then(function(){ return lawEmbedRun(lawId,total); });
+      /* 결제수단 없는 Voyage 계정은 분당 3회·1만 토큰뿐 — 3개씩 21초마다 보낸다 */
+      if(d.slow&&!lawEmbedSlow){ lawEmbedSlow=true; showToast("Voyage 에 결제수단이 없어 느리게 만들어요 (분당 3개씩). 결제수단을 넣으면 1분이면 끝나요."); }
+      return wait(d.retryAfter+1).then(function(){ return lawEmbedRun(lawId); });
     }
     if(d.error){ showToast(d.error,true); return; }
-    if(d.remaining>0){ showToast("뜻 지문 만드는 중 · 남은 조문 "+d.remaining+"개"); return lawEmbedRun(lawId,total); }
+    if(d.remaining>0){
+      showToast("뜻 지문 만드는 중 · 남은 조문 "+d.remaining+"개"+(lawEmbedSlow?" (약 "+Math.ceil(d.remaining/3*21/60)+"분)":""));
+      return (lawEmbedSlow?wait(21):Promise.resolve()).then(function(){ return lawEmbedRun(lawId); });
+    }
     if(d.done) showToast("✓ 뜻 지문을 만들었어요");
   },function(e){ showToast("뜻 지문을 만들지 못했어요: "+(e&&e.message),true); });
 }

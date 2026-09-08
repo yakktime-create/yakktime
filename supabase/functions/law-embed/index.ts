@@ -29,6 +29,9 @@ const MODEL = "voyage-4-large";
 const DOC_CHARS = 6000;      // 조 하나에서 지문에 넣을 최대 글자 (별표 토막은 5천 자 안팎)
 const REQ_CHARS = 140000;    // Voyage 한 요청의 글자 예산 (voyage-4-large 는 12만 토큰까지)
 const REQ_DOCS = 100;
+// 결제수단을 안 넣은 Voyage 계정은 **분당 3회 · 1만 토큰**뿐이다(429 본문에 그렇게 적혀 온다).
+// 그때는 한 번에 3개·7천 자만 보내고, 부르는 쪽이 21초씩 쉬며 되풀이한다. 1,349개면 한 시간쯤.
+const SLOW_CHARS = 7000, SLOW_DOCS = 3;
 
 async function pg(method: string, path: string, body?: unknown, prefer?: string) {
   const h: Record<string, string> = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json" };
@@ -47,7 +50,7 @@ async function voyage(key: string, input: string[], type: "document" | "query") 
     body: JSON.stringify({ input, model: MODEL, input_type: type, truncation: true }),
   });
   const t = await r.text();
-  if (r.status === 429) { const e = new Error("RATE"); (e as any).retry = Number(r.headers.get("retry-after") || 20); throw e; }
+  if (r.status === 429) { const e = new Error("RATE"); (e as any).retry = Number(r.headers.get("retry-after") || 20); (e as any).why = t.slice(0, 200); throw e; }
   if (!r.ok) throw new Error(`Voyage ${r.status}: ${t.slice(0, 200)}`);
   const j = JSON.parse(t);
   const out: number[][] = [];
@@ -73,7 +76,9 @@ Deno.serve(async (req) => {
     if (op === "run") {
       const key = Deno.env.get("VOYAGE_API_KEY");
       if (!key) return json({ error: "뜻 검색 열쇠(VOYAGE_API_KEY)가 Secrets 에 없어요.", noKey: true });
-      const max = Math.min(Number(b.max || REQ_DOCS), 300);
+      const slow = !!b.slow;
+      const reqChars = slow ? SLOW_CHARS : REQ_CHARS, reqDocs = slow ? SLOW_DOCS : REQ_DOCS;
+      const max = slow ? SLOW_DOCS : Math.min(Number(b.max || REQ_DOCS), 300);
       const rows: any[] = await pg("GET", `law_articles?select=id,law_id,label,content&emb=is.null&order=law_id.asc,seq.asc&limit=${max}${scope}`);
       if (!rows.length) return json({ done: 0, remaining: 0, tokens: 0 });
       const laws: any[] = await pg("GET", "laws?select=id,name&id=" + encodeURIComponent(inList([...new Set(rows.map((r) => r.law_id))])));
@@ -85,15 +90,19 @@ Deno.serve(async (req) => {
       while (i < rows.length) {
         // 글자 예산 안에서 묶는다 — 별표 토막은 크고 조는 작다
         const batch: any[] = []; let chars = 0;
-        while (i < rows.length && batch.length < REQ_DOCS) {
+        while (i < rows.length && batch.length < reqDocs) {
           const t = textOf(rows[i]);
-          if (batch.length && chars + t.length > REQ_CHARS) break;
+          if (batch.length && chars + t.length > reqChars) break;
           batch.push({ id: rows[i].id, text: t }); chars += t.length; i++;
         }
         let res;
         try { res = await voyage(key, batch.map((x) => x.text), "document"); }
         catch (e) {
-          if ((e as Error).message === "RATE") return json({ done, remaining: -1, tokens, error: "Voyage 요청 한도에 닿았어요. 잠시 뒤 다시 이어가요.", retryAfter: (e as any).retry || 20 });
+          if ((e as Error).message === "RATE") {
+            const why = String((e as any).why || "");
+            return json({ done, remaining: -1, tokens, error: "Voyage 요청 한도에 닿았어요. 잠시 뒤 다시 이어가요.",
+                          retryAfter: (e as any).retry || 20, slow: /payment method/i.test(why), why, batch: batch.length, chars });
+          }
           throw e;
         }
         tokens += res.tokens;

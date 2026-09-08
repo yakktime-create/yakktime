@@ -58,17 +58,22 @@ const TOTAL_MAX  = 60000;  // 2차에 넣을 글자 총량
 const PREVIEW    = 180;    // 화면에 보여줄 미리보기
 // 뜻으로 찾기 — 질문의 지문과 가까운 조문(law_match). 낱말이 안 맞아도 찾는다.
 // 「같이 2차 포장」→ 법령의 「구획」을 낱말로는 못 찾았다(2026-09-08). 맨 앞에 끼워 넣는다.
-const SEM_K      = 24;     // pgvector 에서 받아올 수
+const SEM_K      = 40;     // pgvector 에서 받아올 수 (질문·요지 각각)
 const SEM_MAX    = 12;     // 후보에 보탤 최대 수
 const SEM_MIN    = 0.35;   // 이보다 먼 것은 안 보탠다 (코사인 유사도)
-async function voyageQuery(key: string, q: string): Promise<number[] | null> {
+// 질문 원문과 1차가 고쳐 쓴 요지(gist)를 **둘 다** 지문 내서 합친다. 민원 원문은 업체 사정·층수
+// 같은 군더더기가 많아 지문이 흐려진다 — 실측: 원문으로는 「별표 1 8.2 포장공정관리」가 10위,
+// 「별표 17 5.7 포장작업」이 36위였는데, 요지 한 문장으로는 1위·7위였다(2026-09-09).
+async function voyageQuery(key: string, qs: string[]): Promise<number[][]> {
   const r = await fetch("https://api.voyageai.com/v1/embeddings", {
     method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({ input: [q.slice(0, 4000)], model: "voyage-4-large", input_type: "query" }),
+    body: JSON.stringify({ input: qs.map((q) => q.slice(0, 4000)), model: "voyage-4-large", input_type: "query" }),
   });
-  if (!r.ok) return null;
+  if (!r.ok) return [];
   const j = await r.json().catch(() => null);
-  return j?.data?.[0]?.embedding || null;
+  const out: number[][] = [];
+  (j?.data || []).forEach((d: any) => { out[d.index] = d.embedding; });
+  return out.filter(Boolean);
 }
 // 1차는 **조 제목만** 본다. 그래서 제목에 그 말이 없는 상위법이 통째로 빠진다 —
 // 「실태조사 생략 기준」을 물었더니 지침서 둘만 나오고 「의약품 등의 안전에 관한
@@ -207,16 +212,22 @@ words 에는 이 질문의 답이 적혀 있을 조문을 **본문에서** 찾�
 - 아무 조문에나 나오는 흔한 말은 넣지 않는다(「의약품」「제조소」「경우」).
 - <b>되도록 길고 드문 말을 고른다.</b> 「제품명」보다 「제품명칭」, 「생략」보다
   「생략기간」처럼. 짧은 말은 백 곳에서 걸려 아무것도 못 가린다. 다만 확신이
-  없으면 긴 말과 짧은 말을 **둘 다** 넣는다.`;
+  없으면 긴 말과 짧은 말을 **둘 다** 넣는다.
+
+gist 에는 이 민원을 <b>법령 말투의 한 문장</b>으로 고쳐 적는다(20~40자). 업체 사정·층수·
+제품 이름은 빼고 「무엇의 허용 요건을 묻는가」만 남긴다. 뜻이 비슷한 조문을 찾는 데 쓴다.
+  「보툴리눔 독소 2층, 다른 약 3층, 2차 포장 같이 해도 되나」
+  → 「서로 다른 의약품을 같은 작업실에서 함께 포장하는 것의 허용 요건」`;
 
 const SCHEMA1 = {
   type: "object",
   properties: {
     ns:    { type: "array", items: { type: "integer" } },
     words: { type: "array", items: { type: "string" } },
+    gist:  { type: "string" },
     note:  { type: "string" },
   },
-  required: ["ns", "words", "note"],
+  required: ["ns", "words", "gist", "note"],
   additionalProperties: false,
 };
 
@@ -497,13 +508,21 @@ Deno.serve(async (req) => {
     const vKey = Deno.env.get("VOYAGE_API_KEY");
     if (vKey) {
       try {
-        const qe = await voyageQuery(vKey, question);
-        if (qe) {
-          const rr = await fetch(`${SB_URL}/rest/v1/rpc/law_match`, {
-            method: "POST", headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ q: "[" + qe.join(",") + "]", k: SEM_K, law_ids: only }),
-          });
-          const sims: any[] = rr.ok ? await rr.json() : [];
+        const gist = String(p1.gist || "").trim();
+        const qes = await voyageQuery(vKey, gist.length >= 8 ? [question, gist] : [question]);
+        if (qes.length) {
+          // 지문마다 비슷한 조문을 받아 **가장 가까운 값**으로 합친다
+          const best = new Map<string, any>();
+          for (const qe of qes) {
+            const rr = await fetch(`${SB_URL}/rest/v1/rpc/law_match`, {
+              method: "POST", headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ q: "[" + qe.join(",") + "]", k: SEM_K, law_ids: only }),
+            });
+            const got: any[] = rr.ok ? await rr.json() : [];
+            got.forEach((x) => { const k = String(x.id); if (!best.has(k) || Number(x.sim) > Number(best.get(k).sim)) best.set(k, x); });
+          }
+          const sims: any[] = [...best.values()].sort((a, b) => Number(b.sim) - Number(a.sim));
+          dbg.gist = gist;
           const have2 = new Set(cand.map((c: any) => String(c.id)));
           const nOf2 = new Map<string, number>(live.map((a: any, i: number) => [String(a.id), i + 1]));
           const semExtra = sims

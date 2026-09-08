@@ -115,6 +115,15 @@ Deno.serve(async (req) => {
       return json({ done, remaining, tokens });
     }
 
+    // 시험용: 글 한 줄의 지문으로 비슷한 조문을 바로 본다 (AI 를 안 부르니 돈이 안 든다)
+    if (op === "query") {
+      const key = Deno.env.get("VOYAGE_API_KEY");
+      if (!key) return json({ error: "열쇠 없음" });
+      const q = String(b.q || "").slice(0, 4000);
+      const res = await voyage(key, [q], "query");
+      const rows = await pg("POST", "rpc/law_match", { q: "[" + res.embs[0].join(",") + "]", k: Math.min(Number(b.k || 40), 200), law_ids: null });
+      return json({ rows, tokens: res.tokens });
+    }
     return json({ error: "op 이 이상해요: " + op });
   } catch (e) {
     return json({ error: "뜻 지문을 만들지 못했어요: " + (e instanceof Error ? e.message : String(e)) });

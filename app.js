@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v140";
+var APP_VER="v141";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3214,6 +3214,8 @@ function lawApiImport(l){
     var patch={src:"api",target:info.target,mst:info.mst,lawcode:info.code,fetched:today,
                pages:0,kind:info.kind,eff:info.eff};
     if(l.id){
+      /* PDF 파일은 더 쓸 데가 없다 — 지운다(이랑님: 「pdf 파일이 그대로 있을 이유가 있어?」) */
+      if(l.filePath){ try{ sb.storage.from("files").remove([l.filePath]); }catch(e){} patch.filePath=null; patch.fileName=null; }
       return saveLawArticles(l.id,arts,l).then(function(){
         return withAuthRetry(function(){ return sb.from("law_pages").delete().eq("law_id",l.id); });
       }).then(function(){
@@ -3255,22 +3257,64 @@ function lawApiAll(){
   }
   next();
 }
-/* 이름으로 새로 받기 — 파일 없이 */
+/* 이름으로 새로 받기 — 파일 없이. **이름을 다 몰라도 된다** — 「의약품」만 적어도 법제처가 준
+ * 후보를 목록으로 보여주고 누르면 받는다. (처음엔 정확한 이름을 요구했다 — 이랑님: 「내가 전체
+ * 이름을 모르면 못 찾잖아」.) 현행만 보이고, 이미 올린 것은 눌리지 않는다. */
+var lawApiCands=null;   /* {q, rows:[{name,kind,eff,admrul}]} */
+function lawApiSearchAll(q){
+  return Promise.all([
+    lawApiCall({op:"search",target:"eflaw",q:q}).catch(function(){ return {rows:[]}; }),
+    lawApiCall({op:"search",target:"admrul",q:q}).catch(function(){ return {rows:[]}; })
+  ]).then(function(rs){
+    var seen={}, out=[];
+    [[rs[0],false],[rs[1],true]].forEach(function(p){
+      (p[0].rows||[]).forEach(function(r){
+        if(String(r.status||"")!=="현행") return;          /* 연혁·시행예정은 판이지 다른 법령이 아니다 */
+        var k=lawBare(r.name); if(!k||seen[k]) return; seen[k]=1;
+        out.push({name:nfc(r.name),kind:nfc(r.kind||""),eff:String(r.eff||""),admrul:p[1]});
+      });
+    });
+    return out.slice(0,40);
+  });
+}
 function lawApiNew(){
   if(lawBusy) return;
-  var name=prompt("법제처에 적힌 이름 그대로 적어주세요.\n예) 약사법 · 의약품 등의 안전에 관한 규칙 · 의약품 제조 및 품질관리에 관한 규정");
+  var name=prompt("법제처에서 찾을 이름을 적어주세요. 일부만 적어도 돼요.\n예) 의약품 · 약사법 · 생물학적제제");
   if(name==null) return;
-  name=nfc(name).trim(); if(name.length<2){ showToast("이름을 적어주세요."); return; }
-  var dup=S.laws.filter(function(l){ return lawBare(l.name)===lawBare(name); });
-  if(dup.length){ showToast("「"+name+"」은 이미 있어요. 목록에서 「조문 만들기」로 갱신하세요."); return; }
-  lawBusy=true; render();
-  lawApiImport({name:name}).then(function(r){
+  name=nfc(name).trim(); if(name.length<2){ showToast("두 글자 이상 적어주세요."); return; }
+  lawBusy=true; render(); showToast("법제처에서 「"+name+"」 찾는 중...");
+  lawApiSearchAll(name).then(function(rows){
+    lawBusy=false;
+    if(!rows.length){ render(); showToast("법제처에서 「"+name+"」이(가) 든 법령·고시를 못 찾았어요.",true); return; }
+    var exact=rows.filter(function(r){ return lawBare(r.name)===lawBare(name); });
+    if(rows.length===1&&exact.length===1){ lawApiCands=null; lawApiPick(exact[0]); return; }
+    lawApiCands={q:name,rows:rows}; render();
+  },function(err){ lawBusy=false; render(); showToast((err&&err.message)||"찾지 못했어요.",true); });
+}
+function lawApiPick(r){
+  if(lawBusy||!r) return;
+  if(S.laws.some(function(l){ return lawBare(l.name)===lawBare(r.name); })){ showToast("「"+r.name+"」은 이미 있어요."); return; }
+  lawApiCands=null; lawBusy=true; render();
+  lawApiImport({name:r.name,kind:apiKindOf(r.kind,r.admrul)}).then(function(x){
     lawBusy=false; lawListOpen=true; render();
-    showToast("✓ 「"+r.name+"」 조문 "+r.arts+"개를 받았어요");
+    showToast("✓ 「"+x.name+"」 조문 "+x.arts+"개를 받았어요");
   },function(err){
     lawBusy=false; render();
     showToast((err&&err.message)||"받지 못했어요.",true);
   });
+}
+function lawCandsHtml(){
+  var c=lawApiCands; if(!c) return "";
+  return '<div class="law-cands"><div class="law-cands-h">법제처에서 「'+esc(c.q)+'」로 찾은 것 <b>'+c.rows.length+'개</b> — 누르면 받아요'
+    + '<button class="link-btn quiet-link" data-act="law-cands-x">닫기</button></div>'
+    + c.rows.map(function(r,i){
+        var have=S.laws.some(function(l){ return lawBare(l.name)===lawBare(r.name); });
+        return '<button class="law-cand'+(have?" have":"")+'" data-act="law-cand" data-id="'+i+'"'+(have?" disabled":"")+'>'
+          + '<span class="law-cand-n">'+esc(r.name)+'</span>'
+          + '<span class="law-cand-k">'+esc(r.kind)+(r.eff?' · 시행 '+esc(lawDate(r.eff)):'')+(have?' · 이미 있음':'')+'</span></button>';
+      }).join("")
+    + (c.rows.length>=40?'<div class="law-cands-more">더 있어요 — 이름을 더 적으면 좁혀져요.</div>':'')
+    + '</div>';
 }
 
 function lawName(id){
@@ -5566,6 +5610,7 @@ function renderLaws(){
     +   '<span class="import-bar-go">→</span></button>'
     /* 법령·고시는 파일 없이 이름만으로 받는다. 지침서만 PDF 로 올린다. */
     + '<div class="law-api-row">법령·고시는 <button class="link-btn" data-act="law-api-new"'+(lawBusy?" disabled":"")+'>법제처에서 이름으로 받기</button> — PDF 는 지침서·안내서에만</div>'
+    + lawCandsHtml()
     + list
     /* 초안 창은 법령 탭에서 열리므로 여기에도 자리를 둔다 —
      * 없으면 renderAnsModal() 이 조용히 아무것도 안 해서 「눌러도 안 열린다」가 된다. */
@@ -5841,6 +5886,8 @@ document.getElementById("app").addEventListener("click",function(e){
     case "law-help": lawHelpToggle(); break;
     case "law-api-all": lawApiAll(); break;
     case "law-api-new": lawApiNew(); break;
+    case "law-cand": lawApiPick(lawApiCands&&lawApiCands.rows[parseInt(id,10)]); break;
+    case "law-cands-x": lawApiCands=null; render(); break;
     case "law-site": { var ls=S.laws.find(function(x){ return x.id===id; }); if(ls) window.open(lawSiteUrl(ls),"_blank"); break; }
     case "lv-site": { var lv2=lawView&&S.laws.find(function(x){ return x.id===lawView.lawId; }); if(lv2) window.open(lawSiteUrl(lv2),"_blank"); break; }
     case "board-more": { var bt=el.getAttribute("data-table"); boardOpen[bt]=!boardOpen[bt]; render(); break; }

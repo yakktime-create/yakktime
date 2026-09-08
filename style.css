@@ -1231,6 +1231,17 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .law-src{font-size:var(--fs-2xs);font-weight:800;color:var(--accent);background:var(--accent-soft);
   border-radius:var(--r-full);padding:1px 7px;}
 .law-api-row{margin:calc(-1*var(--sp-2)) 0 var(--sp-4);font-size:var(--fs-sm);color:var(--muted);}
+/* 법제처 검색 후보 — 한 줄이 한 법령, 누르면 받는다. 손가락으로 누를 높이. */
+.law-cands{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);margin-bottom:var(--sp-4);}
+.law-cands-h{display:flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-sm);color:var(--muted);padding:var(--sp-1) 0 var(--sp-2);}
+.law-cands-h .link-btn{margin-left:auto;}
+.law-cand{display:flex;align-items:baseline;gap:var(--sp-3);width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line);
+  padding:var(--sp-3) var(--sp-1);font:inherit;color:var(--ink);cursor:pointer;min-height:var(--tap);}
+.law-cand-n{flex:1 1 auto;min-width:0;font-weight:600;}
+.law-cand-k{flex:none;font-size:var(--fs-xs);color:var(--muted);white-space:nowrap;}
+.law-cand.have{opacity:.5;cursor:default;}
+.law-cands-more{font-size:var(--fs-xs);color:var(--muted);padding:var(--sp-2) 0 var(--sp-1);}
+@media (hover:hover){ .law-cand:not(.have):hover{background:var(--paper);} }
 .lv-src{font-size:var(--fs-xs);color:var(--muted);align-self:center;}
 /* 표(격자) — 별표의 칸을 그대로 그린다. 좁은 화면에선 표 안에서만 가로로 굴린다 */
 .lv-gridwrap{overflow-x:auto;margin:var(--sp-2) 0;max-width:100%;}

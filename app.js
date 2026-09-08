@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v137";
+var APP_VER="v138";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3203,7 +3203,10 @@ function lawApiImport(l){
     arts.forEach(function(a){
       var pg=pages[a.page-1];
       if(pg&&pg.title&&a.label.indexOf(" · ")<0) a.label+=" · "+pg.title;
-      if(a.content.indexOf(GR)>=0) a.tbl=false;      /* 격자는 읽을 수 있는 표다 */
+      /* 법제처 판은 전부 읽을 수 있는 글자다(격자도 표로 그린다) — tbl 은 **모든 행에** false.
+       * 행마다 키가 다르면 PostgREST 가 묶음 넣기를 통째로 거부한다(PGRST102 「All object keys
+       * must match」). 실제로 규칙 410조가 지워진 채 하나도 안 들어갔다. */
+      a.tbl=false;
       a.page=0; a.page_end=0;
     });
     if(arts.length<3) throw new Error("조문을 "+arts.length+"개밖에 못 만들었어요. 옛 조문은 그대로 두었어요.");

@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v132";
+var APP_VER="v133";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3066,9 +3066,16 @@ function lawAskHtml(){
   var d=lawAsk;
   var head='<div class="ask-head"><span class="ask-qt">「'+esc(d.q)+'」</span>'
     + '<span class="ask-cost">이번 '+(d.krw||0)+'원</span></div>';
+  /* 조문이 없는 데는 두 가지가 있다. 「찾아봤는데 없다」와 「AI 가 멈췄다」는
+   * 뜻이 정반대인데 예전엔 둘 다 「못 찾았어요」로 나와, 거부당한 줄 모르고
+   * 계속 다시 누르게 됐다. d.stopped 가 있으면 그쪽을 앞세운다. */
   if(!d.picks||!d.picks.length)
     return '<div class="ask-box">'+head
-      + '<p class="ask-none">올려둔 법령에서는 관련 조문을 못 찾았어요.</p>'
+      + '<p class="ask-none">'+(d.stopped
+          ? (d.stopped==="refusal"?"AI 가 답하기를 거부했어요."
+            :d.stopped==="max_tokens"?"AI 답이 중간에서 잘렸어요."
+            :"AI 답을 읽지 못했어요.")
+          : "올려둔 법령에서는 관련 조문을 못 찾았어요.")+'</p>'
       + (d.note?'<p class="ask-note">'+esc(d.note)+'</p>':'')+'</div>';
   /* 점수가 낮은 것은 접어 둔다. 결과가 길어지면 위쪽 확실한 것부터 보이지 않는다 —
    * 화면을 넘기지 않고도 볼 것부터 보이게 하는 게 이 접기의 목적이다. */

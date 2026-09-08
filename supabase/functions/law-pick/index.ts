@@ -268,6 +268,27 @@ function readJson(res: any) {
   if (i >= 0 && j > i) { try { return JSON.parse(raw.slice(i, j + 1)); } catch (_) {} }
   return null;
 }
+
+// AI 가 JSON 을 안 냈을 때 「왜」를 갈라 안내한다.
+// 지금까지는 원인이 무엇이든 「AI 답을 읽지 못했어요」 하나뿐이라, 사용자가
+// 다시 눌러 봐야 소용없는 경우(거부)에도 계속 다시 누르게 됐다.
+// stop_reason 은 Anthropic 이 돌려주는 끝맺음 사유다.
+//   refusal    — 모델이 답하기를 거부했다. 질문에 독소·병원체 이름이 들어 있으면 그럴 수 있다.
+//   max_tokens — 낼 말이 상한에 닿아 JSON 이 한복판에서 잘렸다.
+function whyNoJson(res: any) {
+  const sr = String(res?.stop_reason || "");
+  if (sr === "refusal")
+    return { stopped: "refusal",
+      note: "AI 가 이 질문에 답하기를 거부했어요. 질문에 독소·병원체 이름(예: 「보툴리눔 독소」)이 "
+          + "들어 있으면 그럴 수 있어요 — 그 말을 「주사제」·「생물학적제제」처럼 바꿔서 다시 물어보세요. "
+          + "다시 눌러도 같은 결과가 나옵니다." };
+  if (sr === "max_tokens")
+    return { stopped: "max_tokens",
+      note: "AI 가 낼 말이 상한에 닿아 답이 중간에서 잘렸어요. 질문을 짧게 나눠서 물어보세요." };
+  return { stopped: sr || "unknown",
+      note: "AI 답을 읽지 못했어요. 다시 한 번 눌러주세요."
+           + (sr ? " (끝맺음: " + sr + ")" : "") };
+}
 function usdOf(u: any) {
   return ((u?.input_tokens || 0) * IN_USD
         + (u?.cache_read_input_tokens || 0) * IN_USD * 0.1
@@ -334,7 +355,10 @@ Deno.serve(async (req) => {
     // --- 1차: 제목만 보고 후보 추리기 -------------------------------------
     const r1: any = await claude(apiKey, {
       model: MODEL,
-      max_tokens: 700,
+      // 700 이었는데 후보 20개 + 낱말 6개 + note 를 다 내면 아슬아슬하다.
+      // 잘리면 JSON 이 깨져 통째로 실패하므로 넉넉히 준다 —
+      // 안 쓰면 돈이 안 나가니 올려도 값은 그대로다.
+      max_tokens: 1500,
       system: [
         { type: "text", text: RULES1 },
         // 조 목록은 매번 똑같으므로 캐시에 재운다. 5분 안에 다시 물으면 1/10 값.
@@ -345,7 +369,10 @@ Deno.serve(async (req) => {
       output_config: { format: { type: "json_schema", schema: SCHEMA1 } },
     });
     const p1 = readJson(r1);
-    if (!p1) return json({ error: "AI 답을 읽지 못했어요. 다시 한 번 눌러주세요." });
+    // 실패는 오류(빨간 토스트 3초)가 아니라 **결과 자리**에 남긴다.
+    // 거부는 다시 눌러도 소용없으므로 화면에 남아 있어야 읽힌다.
+    if (!p1) return json({ picks: [], ...whyNoJson(r1),
+                           arts: live.length, krw: Math.round(usdOf(r1.usage) * KRW) });
 
     let cand = (p1.ns || [])
       .map((n: number) => index[n] ? { n, ...index[n] } : null)
@@ -460,7 +487,14 @@ Deno.serve(async (req) => {
       output_config: { format: { type: "json_schema", schema: SCHEMA2 } },
     });
     const p2 = readJson(r2);
-    if (!p2) return json({ error: "AI 답을 읽지 못했어요. 다시 한 번 눌러주세요." });
+    if (!p2) {
+      const w = whyNoJson(r2);
+      return json({ picks: [], ...w,
+        // 1차는 통과했으므로 어디까지 갔는지 알려 준다 — 「아무것도 안 됐다」와 다르다.
+        note: w.note + ` (제목만 보고 후보 ${cand.length}개까지는 골랐지만, 본문을 읽는 두 번째 단계에서 멈췄어요.)`,
+        arts: live.length, skipped,
+        krw: Math.round((usdOf(r1.usage) + usdOf(r2.usage)) * KRW) });
+    }
 
     // --- 등급 계산 --------------------------------------------------------
     // 세 가지 판단에 값을 매겨 더한다. AI 에게 「0~100 중 알아서」를 시키면

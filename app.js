@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v138";
+var APP_VER="v139";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3178,8 +3178,9 @@ function lawApiImport(l){
       var base={};
       if(admrul) pages=apiAdmrulPages(doc);
       else { var got=apiLawPages(doc); pages=got.pages; base=got.map; }
-      pages=pages.concat(apiBuchikPages(doc));
-      /* 시행예정 판 — 앞 판과 다른 조만 「[시행일: …]」을 달아 넣는다 (PDF 판과 같은 꼴) */
+      /* 시행예정 판 — 앞 판과 다른 조만 「[시행일: …]」을 달아 넣는다 (PDF 판과 같은 꼴).
+       * **부칙은 그 뒤에** 붙인다 — 부칙 머리말 뒤의 조는 전부 「부칙 제N조」가 되므로(inBuchik),
+       * 시행예정 조가 부칙 뒤에 오면 「부칙 제3조(약사 자격과 면허) · 시행 …」이 된다(실제로 그랬다). */
       var chain=Promise.resolve(base);
       futures.forEach(function(f){
         chain=chain.then(function(prev){
@@ -3191,7 +3192,7 @@ function lawApiImport(l){
           },function(){ return prev; });
         });
       });
-      return chain;
+      return chain.then(function(){ pages=pages.concat(apiBuchikPages(doc)); });
     });
   }).then(function(){
     return apiBylPages(doc,function(i,n,head){ showToast("별표 받는 중 "+i+"/"+n+" · "+head.slice(0,18)); });

@@ -21,7 +21,32 @@
 // 하는 일이 「HTTP 두 번 부르기」뿐이라 fetch 로 직접 부른다. 받아올 것이
 // 없으니 깨어나는 데 시간이 안 걸리고, 남의 판이 바뀌어 깨질 일도 없다.
 
-const MODEL      = "claude-haiku-4-5-20251001";
+// ---- 어느 모델로 부를까 -----------------------------------------------
+// **조문 찾기는 Haiku 다.** 2026-09-08 에 Opus 5 와 나란히 재봤다 —
+// Opus 가 조문을 더 잘 찾지만(아래 실측) 한 번에 307~644원이라 월 한도를
+// 하루 이틀에 태운다. Haiku 는 41~136원.
+//   실태조사 생략: Haiku 는 「의약품등 품목별 사전 GMP 평가 운영지침」을 통째로
+//     놓쳤고 Opus 는 8·10·11쪽을 찾아냈다.
+//   시험 위탁: Haiku 5건 중 2건이 근거 없음, Opus 는 7건 전부 원문 인용
+//     (별표 17 · 7.3 위탁자 / 7.4 수탁자 / 7.5 계약서).
+//   보툴리눔 독소: **Opus 는 거부했다**(refusal, 6초). 독소·병원체 이름이 든
+//     질문은 Opus 쪽 안전장치에 걸린다 — 이 업무에선 치명적이다.
+// 나중에 바꾸려면 아래 cfg 한 줄만 MODELS.opus 로 고친다.
+// **요청 본문으로 모델을 고르게 두지 않는다** — 이 함수는 앱 열쇠만 있으면
+// 부를 수 있어서, 아무나 5배짜리 호출을 시킬 수 있다.
+type Cfg = { id: string; in: number; out: number; effort?: string; room: number };
+const MODELS: Record<string, Cfg> = {
+  haiku: { id: "claude-haiku-4-5-20251001", in: 1.0, out:  5.0, room: 1 },
+  // Opus 5 는 「생각하기」가 기본으로 켜져 있고, max_tokens 가 **생각한 양까지
+  // 합쳐서** 자른다. 그대로 두면 JSON 이 한복판에서 끊긴다 — 자리를 넉넉히 준다.
+  // effort 는 Haiku 에 없는 값이라(넣으면 오류) Opus 일 때만 붙인다.
+  opus:  { id: "claude-opus-5",             in: 5.0, out: 25.0, effort: "low", room: 6 },
+};
+const CFG: Cfg = MODELS.haiku;
+// 조에 딸린 output_config. 스키마는 그대로, effort 는 있을 때만.
+const outCfg = (c: Cfg, schema: unknown) => c.effort
+  ? { effort: c.effort, format: { type: "json_schema", schema } }
+  : {                   format: { type: "json_schema", schema } };
 const MAX_ARTS   = 3000;   // 조 목록 상한 — 토큰이 무한정 늘지 않게
 const SHORTLIST  = 20;     // 1차에서 추릴 후보 수
 const MAX_PICKS  = 10;     // 2차에서 남길 최종 수
@@ -75,7 +100,7 @@ function kindOf(name: string) {
 }
 
 // Haiku 4.5 값 ($/100만 토큰). 캐시 읽기 0.1배, 캐시 쓰기 1.25배.
-const IN_USD = 1.0, OUT_USD = 5.0;
+// 값은 모델마다 다르다 — usdOf() 가 그때그때 받는다.
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -289,11 +314,11 @@ function whyNoJson(res: any) {
       note: "AI 답을 읽지 못했어요. 다시 한 번 눌러주세요."
            + (sr ? " (끝맺음: " + sr + ")" : "") };
 }
-function usdOf(u: any) {
-  return ((u?.input_tokens || 0) * IN_USD
-        + (u?.cache_read_input_tokens || 0) * IN_USD * 0.1
-        + (u?.cache_creation_input_tokens || 0) * IN_USD * 1.25
-        + (u?.output_tokens || 0) * OUT_USD) / 1e6;
+function usdOf(u: any, c: Cfg) {
+  return ((u?.input_tokens || 0) * c.in
+        + (u?.cache_read_input_tokens || 0) * c.in * 0.1
+        + (u?.cache_creation_input_tokens || 0) * c.in * 1.25
+        + (u?.output_tokens || 0) * c.out) / 1e6;
 }
 
 Deno.serve(async (req) => {
@@ -304,6 +329,7 @@ Deno.serve(async (req) => {
     if (!apiKey) return json({ error: "ANTHROPIC_API_KEY 가 없어요. Edge Functions 비밀값에 넣어주세요." });
 
     const { q, lawIds } = await req.json().catch(() => ({ q: "", lawIds: null }));
+    const cfg = CFG;
     const question = String(q || "").trim();
     if (question.length < 5)    return json({ error: "질문을 조금 더 길게 적어주세요." });
     if (question.length > 4000) return json({ error: "질문이 너무 길어요. 4000자 안으로 줄여주세요." });
@@ -354,11 +380,11 @@ Deno.serve(async (req) => {
 
     // --- 1차: 제목만 보고 후보 추리기 -------------------------------------
     const r1: any = await claude(apiKey, {
-      model: MODEL,
+      model: cfg.id,
       // 700 이었는데 후보 20개 + 낱말 6개 + note 를 다 내면 아슬아슬하다.
       // 잘리면 JSON 이 깨져 통째로 실패하므로 넉넉히 준다 —
       // 안 쓰면 돈이 안 나가니 올려도 값은 그대로다.
-      max_tokens: 1500,
+      max_tokens: 1500 * cfg.room,
       system: [
         { type: "text", text: RULES1 },
         // 조 목록은 매번 똑같으므로 캐시에 재운다. 5분 안에 다시 물으면 1/10 값.
@@ -366,13 +392,13 @@ Deno.serve(async (req) => {
           cache_control: { type: "ephemeral" } },
       ],
       messages: [{ role: "user", content: `민원 질문:\n${question}` }],
-      output_config: { format: { type: "json_schema", schema: SCHEMA1 } },
+      output_config: outCfg(cfg, SCHEMA1),
     });
     const p1 = readJson(r1);
     // 실패는 오류(빨간 토스트 3초)가 아니라 **결과 자리**에 남긴다.
     // 거부는 다시 눌러도 소용없으므로 화면에 남아 있어야 읽힌다.
     if (!p1) return json({ picks: [], ...whyNoJson(r1),
-                           arts: live.length, krw: Math.round(usdOf(r1.usage) * KRW) });
+                           arts: live.length, krw: Math.round(usdOf(r1.usage, cfg) * KRW) });
 
     let cand = (p1.ns || [])
       .map((n: number) => index[n] ? { n, ...index[n] } : null)
@@ -454,7 +480,7 @@ Deno.serve(async (req) => {
     if (!cand.length) {
       return json({ picks: [], note: String(p1.note || "관련 조문을 찾지 못했어요."),
                     arts: live.length, skipped, truncated: arts.length >= MAX_ARTS,
-                    krw: Math.round(usdOf(r1.usage) * KRW) });
+                    krw: Math.round(usdOf(r1.usage, cfg) * KRW) });
     }
 
     // --- 후보의 본문을 읽어 온다 (2차에게 먹이고, 화면 미리보기로도 쓴다) ---
@@ -480,11 +506,15 @@ Deno.serve(async (req) => {
 
     // --- 2차: 본문을 읽고 최종으로 추리기 ---------------------------------
     const r2: any = await claude(apiKey, {
-      model: MODEL,
-      max_tokens: 2000,
+      model: cfg.id,
+      // 2000 이었는데 **실측에서 잘렸다.** 후보 10개마다 why(왜 골랐나)와
+      // quote(원문에서 옮긴 문장)를 내므로 한 개에 200토큰쯤 든다 —
+      // 어려운 질문에서 10개를 다 채우면 2000 을 넘긴다.
+      // 1차만 올리고 2차를 안 올린 것이 화근이었다. 안 쓰면 값은 그대로다.
+      max_tokens: 6000 * cfg.room,
       system: [{ type: "text", text: RULES2 }],
       messages: [{ role: "user", content: `민원 질문:\n${question}\n\n<조문>${sheet}</조문>` }],
-      output_config: { format: { type: "json_schema", schema: SCHEMA2 } },
+      output_config: outCfg(cfg, SCHEMA2),
     });
     const p2 = readJson(r2);
     if (!p2) {
@@ -493,7 +523,7 @@ Deno.serve(async (req) => {
         // 1차는 통과했으므로 어디까지 갔는지 알려 준다 — 「아무것도 안 됐다」와 다르다.
         note: w.note + ` (제목만 보고 후보 ${cand.length}개까지는 골랐지만, 본문을 읽는 두 번째 단계에서 멈췄어요.)`,
         arts: live.length, skipped,
-        krw: Math.round((usdOf(r1.usage) + usdOf(r2.usage)) * KRW) });
+        krw: Math.round((usdOf(r1.usage, cfg) + usdOf(r2.usage, cfg)) * KRW) });
     }
 
     // --- 등급 계산 --------------------------------------------------------
@@ -596,7 +626,10 @@ Deno.serve(async (req) => {
       boosted,
       words,
       dbg,
-      krw: Math.round((usdOf(r1.usage) + usdOf(r2.usage)) * KRW),
+      krw: Math.round((usdOf(r1.usage, cfg) + usdOf(r2.usage, cfg)) * KRW),
+      // 어느 모델이 답했는지 돌려준다. 「왜 이런 답이 나왔지」를 따질 때
+      // 제일 먼저 알아야 하는 것이 이것이다 — 실제로 오늘 여기서 갈렸다.
+      model: cfg.id,
     });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) });

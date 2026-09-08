@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v133";
+var APP_VER="v134";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3009,7 +3009,13 @@ function lawAskRun(){
     d.q=q; lawAsk=d; lawAskSel={}; lawAskMore=false;
     if((d.picks||[]).length){ lawHelpOpen=false; lawListOpen=false; }
     if(d.krw!=null) lawAskLast=d.krw;
-    (d.picks||[]).forEach(function(p){ if(askRank(p.grade)<=ASK_KEEP) lawAskSel[p.id]=true; });
+    /* 전에 답변에 쓴 조문은 등급이 낮아도 처음부터 체크한다 — 접힌 곳에 두면
+     * 「지난번엔 이걸 인용했는데」를 놓친다. 아니면 빼면 된다. */
+    var usedOf=ansUsedMap();
+    (d.picks||[]).forEach(function(p){
+      p.used=usedOf[ansUsedKey(p.law,p.label)]||0;
+      if(askRank(p.grade)<=ASK_KEEP||p.used) lawAskSel[p.id]=true;
+    });
     done();
   }).catch(function(e){ showToast("물어보지 못했어요: "+e.message,true); done(); });
 }
@@ -3079,8 +3085,11 @@ function lawAskHtml(){
       + (d.note?'<p class="ask-note">'+esc(d.note)+'</p>':'')+'</div>';
   /* 점수가 낮은 것은 접어 둔다. 결과가 길어지면 위쪽 확실한 것부터 보이지 않는다 —
    * 화면을 넘기지 않고도 볼 것부터 보이게 하는 게 이 접기의 목적이다. */
-  var sure=d.picks.filter(function(p){ return askRank(p.grade)<=ASK_KEEP; });
-  var maybe=d.picks.filter(function(p){ return askRank(p.grade)>ASK_KEEP; });
+  /* 전에 답변에 쓴 조문은 등급과 상관없이 펼쳐 둔다(접히면 못 본다) */
+  var usedOf=ansUsedMap();
+  d.picks.forEach(function(p){ p.used=usedOf[ansUsedKey(p.law,p.label)]||0; });
+  var sure=d.picks.filter(function(p){ return askRank(p.grade)<=ASK_KEEP||p.used; });
+  var maybe=d.picks.filter(function(p){ return askRank(p.grade)>ASK_KEEP&&!p.used; });
   var shown=lawAskMore?d.picks:sure;
   function askItem(p){
     var on=!!lawAskSel[p.id];
@@ -3090,7 +3099,7 @@ function lawAskHtml(){
       + '<div class="ask-item-body">'
       +   '<div class="ask-art"><span class="ask-score n-'+needRank(p.need)+'">'
       +     esc(p.need||"있으면 좋음")+'</span><b>'+esc(p.label)+'</b>'
-      +     '<span class="ask-law">'+esc(p.law)+'</span>'
+      +     '<span class="ask-law">'+esc(p.law)+'</span>'+ansUsedChip(p.used)
       /* 종류 배지는 뺐다 — 바로 위 묶음 머리말과 같은 말이다.
        * (법령 목록에서 뺀 것과 같은 이유) */
       +     '<button class="link-btn law-go-art" data-act="law-art" data-art-id="'+esc(p.id)+'" data-id="'+esc(p.lawId)+'">전체 보기</button></div>'
@@ -3124,8 +3133,11 @@ function lawAskHtml(){
       return (i<0?9:i)-(j<0?9:j);
     });
     return order.map(function(k){
+      /* 묶음 안에서는 전에 답변에 쓴 것이 먼저, 나머지는 점수 순 그대로 */
+      var used=by[k].filter(function(p){ return p.used; }),
+          rest=by[k].filter(function(p){ return !p.used; });
       return '<li class="ask-kindhead"><span>'+esc(k)+'</span><i>'+by[k].length+'</i></li>'
-           + by[k].map(askItem).join("");
+           + used.concat(rest).map(askItem).join("");
     }).join("");
   }
   var items=askGrouped(shown)
@@ -3133,7 +3145,8 @@ function lawAskHtml(){
         ? '<li class="ask-more"><button class="link-btn" data-act="ask-more">'
           + '관련도 낮은 '+maybe.length+'개 더 보기</button></li>' : '');
   var nSel=Object.keys(lawAskSel).filter(function(k){ return lawAskSel[k]; }).length;
-  var nSure=sure.length;
+  /* 「중간 이상 N곳」은 등급으로만 센다 — 답변에 쓴 조문은 펼쳐 두긴 해도 등급이 낮을 수 있다 */
+  var nSure=d.picks.filter(function(p){ return askRank(p.grade)<=ASK_KEEP; }).length;
   var askWhat=nSel?("고른 "+nSel+"곳"):"전부";
   /* 낱말 검색 결과와 같은 부품·같은 자리 — 한쪽만 다르게 생기면 매번 다시 배워야 한다 */
   var acts='<div class="law-head"><div class="law-count">'+d.picks.length+'곳'
@@ -3360,6 +3373,10 @@ function buildLawHits(rows,terms){
   });
   /* 법 위계 순으로 세운다 — 지침서가 법률 위에 오면 근거가 약한 것을 먼저
    * 보게 된다. 목록에서 쓰는 것과 같은 순서라 눈이 헷갈리지 않는다. */
+  /* 같은 법령 안에서는 **전에 답변에 쓴 조가 먼저**, 나머지는 쪽 순서. 위계·법령
+   * 순서는 그대로다 — 지침서의 쓴 조가 법률 위로 올라오면 안 된다. */
+  var usedOf=ansUsedMap();
+  out.forEach(function(g){ g.used=usedOf[ansUsedKey(lawName(g.lawId),g.art)]||0; });
   out.sort(function(a,b){
     var la=S.laws.find(function(x){ return x.id===a.lawId; });
     var lb=S.laws.find(function(x){ return x.id===b.lawId; });
@@ -3367,6 +3384,7 @@ function buildLawHits(rows,terms){
     if(ka!==kb) return ka-kb;
     var na=lawName(a.lawId), nb=lawName(b.lawId);
     if(na!==nb) return na<nb?-1:1;
+    if((a.used?1:0)!==(b.used?1:0)) return a.used?-1:1;
     return a.page-b.page;
   });
   return out;
@@ -4594,6 +4612,26 @@ function ansNumOf(label){
   var m=/^(제\s*\d+\s*조(?:\s*의\s*\d+)?)/.exec(nfc(label||""));
   return m?m[1].replace(/\s+/g,""):nfc(label||"");
 }
+/* ---------- 전에 답변에 쓴 조문 ---------- */
+/* 「민원 답변」에 담긴 근거 조문을 센다. 그 조문이 다시 나오면 검색·AI 결과에서
+ * **위로 올리고 「답변에 씀」을 붙인다** — 한 번 근거로 삼은 조문은 다음 민원에서도
+ * 근거일 확률이 높고, 그때 무엇을 인용했는지 바로 떠올릴 수 있다.
+ * 열쇠는 id 가 아니라 **이름+조 번호**다. 조문 id 는 「조문 전부 다시 만들기」마다
+ * 새로 생기므로 답변에도 id 는 없다(ansSave 참고). 새 버튼은 없다 — 저장된 답변이
+ * 곧 신호다. */
+function ansUsedKey(law,label){ return nfc(law||"").replace(/\s+/g,"")+"|"+ansNumOf(label); }
+function ansUsedMap(){
+  var m={};
+  (S.answers||[]).forEach(function(a){
+    (a.cites||[]).forEach(function(c){
+      var k=ansUsedKey(c.law,c.num||c.label); m[k]=(m[k]||0)+1;
+    });
+  });
+  return m;
+}
+function ansUsedCount(law,label){ return ansUsedMap()[ansUsedKey(law,label)]||0; }
+/* 칩 하나. 횟수는 두 번째부터 적는다 — 「1번 씀」은 「씀」과 같은 말이다. */
+function ansUsedChip(n){ return n?'<span class="law-used" title="「민원 답변」에 근거로 담은 조문">답변에 '+(n>1?n+'번 ':'')+'씀</span>':''; }
 /* 낱말 검색 결과에서 — 검색어가 든 항 전문을 담는다 (「전부 복사」와 같은 규칙) */
 function ansCitesFromLaw(){
   var picked=lawPicked(), out=[];
@@ -5301,6 +5339,7 @@ function renderLawResults(){
       + '<div class="law-hit-body" data-act="law-art" data-art-id="'+g.artId+'" data-id="'+g.lawId+'">'
       +   '<div class="law-meta">'
       +     '<span class="law-art">'+esc(g.art)+'</span>'
+      +     ansUsedChip(g.used)
       +     (lawIsFuture(g.art)?'<span class="law-soon">아직 시행 전</span>':'')
       /* 지침서는 조가 없어 라벨이 「22쪽」이다. 그 옆에 또 「22쪽」을 붙이면
        * 같은 말이 두 번이다. 라벨이 이미 그 쪽을 말하고 있으면 생략한다. */

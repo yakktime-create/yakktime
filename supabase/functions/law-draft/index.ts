@@ -17,12 +17,28 @@
 // npm 꾸러미를 안 쓴다 — law-pick 에서 겪은 그대로, 깨어날 때 내려받다
 // 시간이 넘어 WORKER_ERROR(500)만 난다. fetch 로 직접 부른다.
 
-const MODEL     = "claude-haiku-4-5-20251001";
+// ---- 어느 모델로 부를까 -----------------------------------------------
+// **초안은 Opus 5 다.** 조문 찾기(law-pick)는 Haiku 인데 여기만 Opus 인 이유:
+//  · 여기서 AI 가 내는 건 요지 한 문장과 참고 두어 문장뿐이라 **4원 → 23원**,
+//    한 달에 500원도 안 든다. 조문 찾기는 같은 교체가 월 10만원이다.
+//  · 실측(2026-09-08, 위탁제조판매업신고 민원)에서 Opus 는 민원인이 실제로
+//    물은 것을 요지에 그대로 옮기고, 참고에 **조 번호를 짚어** 적었다.
+//  · **거부 위험이 없다.** 조문 원문을 읽고 두 문장 쓰는 일이라, law-pick 을
+//    Opus 로 올렸을 때 보툴리눔 질문이 막히던 것과 다르다.
+// 요청 본문으로 모델을 고르게 두지 않는다(값이 튄다). 바꾸려면 CFG 한 줄.
+type Cfg = { id: string; in: number; out: number; effort?: string; room: number };
+const MODELS: Record<string, Cfg> = {
+  haiku: { id: "claude-haiku-4-5-20251001", in: 1.0, out:  5.0, room: 1 },
+  // Opus 5 는 생각하기가 기본으로 켜져 있고 max_tokens 가 생각한 양까지 합쳐
+  // 자르므로 자리를 넉넉히 준다. effort 는 Opus 일 때만 붙인다(Haiku 는 오류).
+  opus:  { id: "claude-opus-5",             in: 5.0, out: 25.0, effort: "low", room: 6 },
+};
+const CFG: Cfg = MODELS.opus;
 const ART_MAX   = 3000;    // 조 하나에서 AI 에게 읽힐 최대 글자
 const TOTAL_MAX = 40000;   // AI 에게 넣을 글자 총량
 const Q_MAX     = 4000;    // 민원 내용 상한
 const KRW       = 1400;    // 원/달러
-const IN_USD = 1.0, OUT_USD = 5.0;   // Haiku 100만 토큰당 달러
+// 값은 모델마다 다르다 — 아래 usd() 가 그때그때 받는다.
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -103,10 +119,23 @@ function readJson(res: any) {
   const c = (res?.content || []).find((x: any) => x.type === "text");
   try { return JSON.parse(c?.text || "{}"); } catch { return {}; }
 }
-function usdOf(u: any) {
+// AI 가 JSON 을 안 냈을 때 「왜」를 사람 말로. law-pick 의 whyNoJson 과 같은 규칙.
+// **이게 없어서 거부가 조용히 빈 초안으로 나왔다** — 요지 칸만 비어 있고
+// 아무 말도 안 뜨는, 제일 알아채기 어려운 실패였다(2026-09-08 실측).
+function whyStop(res: any) {
+  const sr = String(res?.stop_reason || "");
+  if (sr === "refusal")
+    return "AI 가 이 민원에 답하기를 거부했어요. 민원 내용에 독소·병원체 이름이 "
+         + "들어 있으면 그럴 수 있어요 — 그 말을 빼고 다시 만들어 보세요.";
+  if (sr === "max_tokens")
+    return "AI 답이 중간에서 잘렸어요. 고른 조문을 줄여서 다시 만들어 보세요.";
+  return "AI 답을 읽지 못했어요. 다시 한 번 눌러주세요."
+       + (sr ? " (끝맺음: " + sr + ")" : "");
+}
+function usdOf(u: any, c: Cfg) {
   const i = (u?.input_tokens || 0) + (u?.cache_read_input_tokens || 0);
   const o = u?.output_tokens || 0;
-  return (i / 1e6) * IN_USD + (o / 1e6) * OUT_USD;
+  return (i / 1e6) * c.in + (o / 1e6) * c.out;
 }
 // 사용자가 붙여넣은 글에 남아 있을 수 있는 자모 분리(NFD)를 맞춘다.
 const nfc = (s: string) => (s || "").normalize("NFC");
@@ -137,11 +166,13 @@ Deno.serve(async (req) => {
       return `[${i + 1}] 「${law}」 ${num}\n${t}`;
     }).join("\n\n");
 
-    const res = await claude(apiKey, {
-      model: MODEL,
-      max_tokens: 900,
+    const ask = (c: Cfg) => ({
+      model: c.id,
+      max_tokens: 900 * c.room,
       system: RULES,
-      output_config: { format: { type: "json_schema", schema: SCHEMA } },
+      output_config: c.effort
+        ? { effort: c.effort, format: { type: "json_schema", schema: SCHEMA } }
+        : {                   format: { type: "json_schema", schema: SCHEMA } },
       messages: [{
         role: "user",
         content:
@@ -151,7 +182,25 @@ Deno.serve(async (req) => {
       }],
     });
 
-    const out = readJson(res);
+    // **거부하면 한 단계 아래 모델로 자동으로 다시 부른다.**
+    // Opus 5 는 독소·병원체 이름이 든 민원을 거부한다(보툴리눔 실측). 거부는
+    // 빈 답으로 돌아오므로, 안 받아내면 「요지 칸이 빈 초안」이 나온다.
+    // Haiku 는 같은 민원에 멀쩡히 답한다 — 좋은 모델을 먼저 쓰고, 막히면
+    // 되받는다. 사용자는 실패를 볼 일이 없다.
+    const plan: Cfg[] = CFG.id === MODELS.haiku.id ? [CFG] : [CFG, MODELS.haiku];
+    let res: any = null, cfg: Cfg = CFG, out: any = null;
+    let krw = 0, fellBack = false, why = "";
+    for (let i = 0; i < plan.length; i++) {
+      cfg = plan[i];
+      res = await claude(apiKey, ask(cfg));
+      // 되받을 때도 값은 쌓인다 — 실제로 나간 돈을 그대로 보여준다.
+      krw += Math.round(usdOf(res?.usage, cfg) * KRW);
+      const got = readJson(res);
+      if (String(got?.summary || "").trim()) { out = got; fellBack = i > 0; break; }
+      why = whyStop(res);
+    }
+    if (!out) return json({ error: why || "AI 답을 읽지 못했어요.", krw });
+
 
     // **말로 시켜도 샌다 — 서버가 한 번 더 거른다.**
     // 실측: 「총리령(의약품 등의 제조·수입 및 판매에 관한 규칙)」이라는
@@ -182,7 +231,11 @@ Deno.serve(async (req) => {
       help,
       // 걸러낸 게 있으면 화면에서 알린다 — 조용히 지우면 왜 짧아졌는지 모른다
       dropped: helpRaw && helpRaw !== help,
-      krw: Math.round(usdOf(res?.usage) * KRW),
+      krw,
+      model: cfg.id,
+      // 좋은 모델이 거부해서 아래 모델로 되받았음을 화면에서 알린다 —
+      // 조용히 갈아타면 「오늘은 왜 초안이 다르지」를 알 길이 없다.
+      fellBack,
     });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) });

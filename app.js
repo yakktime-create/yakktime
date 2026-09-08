@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v136";
+var APP_VER="v137";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3520,7 +3520,7 @@ function lawAskHtml(){
      * 펼쳐 보지 않는 한 「매우 높음이 뭐 기준인데」로 남는다. */
     /* 배지를 「인용 필수」로 바꿨으면 이 줄도 같이 바꿔야 한다 —
      * 안 바꾸면 화면엔 「인용 필수」가 떠 있는데 설명은 「등급」을 말한다. */
-    + '<div class="ask-legend"><b>앞 배지</b>는 답변서에 <b>인용해야 하나</b> —'
+    + '<div class="ask-legend">조문 앞의 <b>색 표시</b>는 답변서에 <b>인용해야 하나</b>예요 —'
     +   '<span>인용 필수</span><span>있으면 좋음</span><span>없어도 됨</span>'
     +   '<i>그 아래 낱말 둘은 왜 그렇게 봤는지예요. 차례는 셋을 합쳐 매깁니다.</i></div>'
     + acts+'<ol class="ask-list">'+items+'</ol>'
@@ -4786,15 +4786,15 @@ function lawHelpHtml(){
     + '<div class="law-help-head"><b>법령 검색 사용법</b>'
     +   '<button class="law-help-x" data-act="law-help" title="접기">접기 ✕</button></div>'
 
-    + '<div class="law-help-sec"><div class="law-help-t">◆ 배지는 「이걸 답변에 넣을까」를 말해요</div>'
-    +   '<p>조문마다 앞에 붙는 배지가 <b>답변서에 인용해야 하나</b>입니다. '
-    +     '읽고 바로 정하시라고 등급어 대신 이걸 올렸어요.</p>'
+    + '<div class="law-help-sec"><div class="law-help-t">◆ 조문 앞의 색 표시는 「이걸 답변에 넣을까」예요</div>'
+    +   '<p>AI 가 고른 조문마다 앞에 「인용 필수」 같은 <b>색 표시</b>가 붙어요. 뜻은 <b>답변서에 인용해야 하나</b>입니다. '
+    +     '읽고 바로 정하시라고 「관련도 높음」 같은 말 대신 이걸 올렸어요.</p>'
     +   '<ul>'
     +     '<li><b>인용 필수</b> — 이 조를 안 적으면 답변이 성립하지 않아요</li>'
     +     '<li><b>있으면 좋음</b> — 근거를 두텁게 하지만 없어도 답은 됩니다</li>'
     +     '<li><b>없어도 됨</b> — 배경으로만 참고</li>'
     +   '</ul>'
-    +   '<p>배지 아래 작은 낱말 둘은 <b>왜 그렇게 봤는지</b>예요.</p>'
+    +   '<p>그 아래 작은 낱말 둘은 <b>왜 그렇게 봤는지</b>예요.</p>'
     +   '<ul>'
     +     '<li><b>이 조에서 무엇을 얻나</b><br />'
     +       '<span class="law-help-dim"><b>답 확인</b> — 이 조를 펴면 답이 나와요<br />'

@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v141";
+var APP_VER="v142";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3060,8 +3060,11 @@ function xmlUnesc(s){
     .replace(/&#x([0-9a-fA-F]+);/g,function(m,h){ return String.fromCharCode(parseInt(h,16)); })
     .replace(/&#(\d+);/g,function(m,d){ return String.fromCharCode(+d); }).replace(/&amp;/g,"&");
 }
+/* <hp:t> 안에는 <hp:tab/>·<hp:lineBreak/> 같은 꼬리표가 섞여 있다 — 안 떼면 「<hp:tab width="4000" …/>」가
+ * 본문에 그대로 새어 나온다(GMP 고시 별표 2의2 에서 실제로 그랬다). 탭·줄바꿈은 빈칸으로, 나머지는 뗀다. */
 function hwpxParaText(p){
-  var t=""; p.replace(/<hp:t(?:\s[^>]*)?>([\s\S]*?)<\/hp:t>/g,function(m,x){ t+=xmlUnesc(x); return ""; });
+  var t=""; p.replace(/<hp:t(?:\s[^>]*)?>([\s\S]*?)<\/hp:t>/g,function(m,x){
+    t+=xmlUnesc(x.replace(/<hp:(tab|lineBreak)\b[^>]*\/?>/g," ").replace(/<[^>]+>/g,"")); return ""; });
   return t;
 }
 function hwpxSectionItems(xml,out){

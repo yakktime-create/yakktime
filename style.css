@@ -1231,6 +1231,9 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .law-src{font-size:var(--fs-2xs);font-weight:800;color:var(--accent);background:var(--accent-soft);
   border-radius:var(--r-full);padding:1px 7px;}
 .law-api-row{margin:calc(-1*var(--sp-2)) 0 var(--sp-4);font-size:var(--fs-sm);color:var(--muted);}
+/* 낱말 결과 아래에 남는 AI 결과 — 사이를 띄우고 한 단 낮춘다 */
+.ask-below{margin-top:var(--sp-6);padding-top:var(--sp-4);border-top:1px dashed var(--line);}
+.ask-x{margin-left:auto;}
 /* 법제처 검색 후보 — 한 줄이 한 법령, 누르면 받는다. 손가락으로 누를 높이. */
 .law-cands{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);margin-bottom:var(--sp-4);}
 .law-cands-h{display:flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-sm);color:var(--muted);padding:var(--sp-1) 0 var(--sp-2);}

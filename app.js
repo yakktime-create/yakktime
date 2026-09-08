@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v142";
+var APP_VER="v143";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3473,7 +3473,9 @@ function lawAskSelAll(on){
 function lawAskHtml(){
   var d=lawAsk;
   var head='<div class="ask-head"><span class="ask-qt">「'+esc(d.q)+'」</span>'
-    + '<span class="ask-cost">이번 '+(d.krw||0)+'원</span></div>';
+    + '<span class="ask-cost">이번 '+(d.krw||0)+'원</span>'
+    + '<button class="link-btn quiet-link ask-x" data-act="ask-close" title="AI 결과 닫기">닫기 ✕</button></div>'
+    + (lawHits!==null?'<p class="ask-note">AI 가 찾은 조문이에요. 위의 낱말 검색 결과와 함께 골라 「답변 초안」에 넣을 수 있어요.</p>':'');
   /* 조문이 없는 데는 두 가지가 있다. 「찾아봤는데 없다」와 「AI 가 멈췄다」는
    * 뜻이 정반대인데 예전엔 둘 다 「못 찾았어요」로 나와, 거부당한 줄 모르고
    * 계속 다시 누르게 됐다. d.stopped 가 있으면 그쪽을 앞세운다. */
@@ -3609,7 +3611,9 @@ var LAW_HIT_MAX=600;   /* 검색 결과 상한 — 닿으면 화면에 알린다
 var lawCapped=false;
 function lawSearch(){
   var q=nfc(val("law-q")||"").trim();
-  lawQuery=q; lawSel={}; lawHits=null; lawOpen={}; lawAsk=null; lawAsking=false;
+  /* AI 결과는 지우지 않는다 — 「조문을 더 보태려고」 낱말을 치는 흐름이다(이랑님: 「낱말 다시
+   * 입력하면 밑에 떠 있던 AI 조문이 싹 다 날아간다」). 낱말 결과는 위에, AI 결과는 그 아래 남는다. */
+  lawQuery=q; lawSel={}; lawHits=null; lawOpen={}; lawAsking=false;
   lawTermList=lawTerms(q);
   if(!lawTermList.length){ renderLawResults(); showToast("두 글자 이상 입력해 주세요."); return; }
   if(!S.laws.length){ renderLawResults(); showToast("먼저 법령 PDF를 올려주세요."); return; }
@@ -4985,11 +4989,27 @@ function ansCitesFromLaw(){
   });
   return out;
 }
+/* 낱말 결과와 AI 결과 **양쪽에서 고른 것을 합친다.** 어느 한쪽이라도 고른 게 있으면 고른 것만,
+ * 아무것도 안 골랐으면 보이는 것 전부(각 화면의 규칙 그대로). 같은 조는 하나로. */
+function ansCitesAll(then){
+  var nHit=lawSelCount(), nAsk=Object.keys(lawAskSel).filter(function(k){ return lawAskSel[k]; }).length;
+  var any=nHit+nAsk>0;
+  var fromHits=(lawHits&&lawHits.length&&(!any||nHit))?ansCitesFromLaw():[];
+  var q=(lawAsk&&lawAsk.q)||lawTermList.join(" ");
+  function merge(fromAsk){
+    var seen={}, out=[];
+    fromAsk.concat(fromHits).forEach(function(c){ var k=lawBare(c.law)+"|"+c.num; if(seen[k]) return; seen[k]=1; out.push(c); });
+    if(!out.length){ showToast("담아 갈 조문이 없어요."); return; }
+    then(out,q);
+  }
+  if(lawAsk&&(lawAsk.picks||[]).length&&(!any||nAsk)) ansCitesFromAsk(merge,true);
+  else merge([]);
+}
 /* AI 결과에서 — 조문 원문은 표에서 새로 가져온다 */
-function ansCitesFromAsk(then){
+function ansCitesFromAsk(then,quiet){
   var ids=Object.keys(lawAskSel).filter(function(k){ return lawAskSel[k]; });
   if(!ids.length) ids=(lawAsk&&lawAsk.picks||[]).map(function(p){ return p.id; });
-  if(!ids.length){ showToast("담아 갈 조문이 없어요."); return; }
+  if(!ids.length){ if(quiet) then([]); else showToast("담아 갈 조문이 없어요."); return; }
   showToast("조문 원문을 불러오는 중...");
   withAuthRetry(function(){
     return sb.from("law_articles").select("id,law_id,label,content,tbl").in("id",ids);
@@ -5638,12 +5658,13 @@ function renderLaws(){
 function renderLawResults(){
   var el=document.getElementById("law-results"); if(!el) return;
 
-  /* AI가 고른 조문이 있으면 그걸 보여준다. 낱말 검색과 한 자리를 나눠 쓴다 —
-   * 둘이 같이 떠 있으면 무엇을 보고 있는지 헷갈린다. */
+  /* AI 결과와 낱말 결과는 **함께** 보인다. AI 로 먼저 찾고 낱말로 더 보태는 흐름이라,
+   * 새로 친 낱말 결과가 위에, AI 결과가 그 아래 남는다. 「답변 초안」은 둘에서 고른 것을 합친다. */
   if(lawAsking){ el.innerHTML=lawWaitHtml(); return; }
-  if(lawAsk){ el.innerHTML=lawAskHtml(); return; }
-  if(lawSearching){ el.innerHTML='<p class="empty">찾는 중...</p>'; return; }
+  var askPart=lawAsk?lawAskHtml():"";
+  if(lawSearching){ el.innerHTML='<p class="empty">찾는 중...</p>'+askPart; return; }
   if(lawHits===null){
+    if(askPart){ el.innerHTML=askPart; return; }
     el.innerHTML=S.laws.length
       ? '<div class="empty-box"><div class="empty-ic">⌕</div><p>찾을 단어를 넣고 Enter를 눌러요.<br />낱말을 띄어 쓰면 <b>모두 들어 있는 곳</b>만 찾아요. 붙은 말 그대로 찾으려면 "따옴표"로 묶어요.<br /><br />처음이시면 위의 <b>「검색하는 법 · 화면 보는 법」</b>을 펼쳐 보세요.</p></div>'
       : '<div class="empty-box"><div class="empty-ic">▤</div><p>법령 PDF를 올리면 여기서 검색할 수 있어요.<br />공개 법령·지침서만 올려주세요.</p></div>';
@@ -5651,7 +5672,7 @@ function renderLawResults(){
   }
   if(!lawHits.length){
     el.innerHTML='<p class="empty">「'+esc(lawTermList.join(" + "))+'」를 찾지 못했어요.<br />'
-      +(lawTermList.length>1?'낱말을 줄이거나 ':'')+'띄어쓰기를 바꿔 보세요.</p>';
+      +(lawTermList.length>1?'낱말을 줄이거나 ':'')+'띄어쓰기를 바꿔 보세요.</p>'+askPart;
     return;
   }
 
@@ -5736,7 +5757,8 @@ function renderLawResults(){
   });
 
   el.innerHTML=head+'<div class="law-hits">'+body+'</div>'
-    + '<p class="law-note">같은 조에서 나온 것은 한 카드로 묶었어요. <b>카드를 누르면 그 조 전문이 열리고</b>, 그 창에서 「법제처에서 보기」나 「PDF 원문」으로 갈 수 있어요.</p>';
+    + '<p class="law-note">같은 조에서 나온 것은 한 카드로 묶었어요. <b>카드를 누르면 그 조 전문이 열리고</b>, 그 창에서 「법제처에서 보기」나 「PDF 원문」으로 갈 수 있어요.</p>'
+    + (askPart?'<div class="ask-below">'+askPart+'</div>':'');
 }
 
 /* 쪽 보기 창은 Esc로 닫는다 */
@@ -5912,8 +5934,8 @@ document.getElementById("app").addEventListener("click",function(e){
     case "law-copy": lawCopy(); break;
     case "law-save": lawDownload(); break;
     /* ---- 민원 답변 초안 ---- */
-    case "ans-start": ansStart(ansCitesFromLaw(),lawTermList.join(" ")); break;
-    case "ans-start-ask": ansCitesFromAsk(function(cs){ ansStart(cs,(lawAsk&&lawAsk.q)||""); }); break;
+    case "ans-start": case "ans-start-ask": ansCitesAll(function(cs,q){ ansStart(cs,q); }); break;
+    case "ask-close": lawAsk=null; lawAskSel={}; renderLawResults(); break;
     case "ans-close": ansDraft=null; render(); break;
     case "ans-make": ansMake(); break;
     case "ans-mode": if(ansDraft){ ansDraft.mode=id; renderAnsModal(); } break;

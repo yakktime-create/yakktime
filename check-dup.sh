@@ -25,7 +25,7 @@ python3 "$(dirname "$0")/check-refs.py" || exit 1
 # ── law-pick.txt 가 원본과 같은지 ────────────────────────────────────────
 # 아이패드에서 복붙하기 좋게 저장소 뿌리에 사본을 둔다(yakktime.com/law-pick.txt).
 # 두 벌이 되면 반드시 어긋나므로 여기서 막는다.
-for f in law-pick law-draft; do
+for f in law-pick law-draft law-fetch; do
   if [ -f "$f.txt" ] && [ -f "supabase/functions/$f/index.ts" ]; then
     if diff -q "$f.txt" "supabase/functions/$f/index.ts" >/dev/null; then
       echo "✓ $f.txt 가 원본과 같음"

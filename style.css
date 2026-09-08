@@ -1227,6 +1227,20 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 /* 같은 법령의 더 새 판이 있는 줄 — 지워야 할 것이므로 눈에 띄되 요란하지 않게 */
 .law-old-tag{flex:none;font-size:var(--fs-2xs);font-weight:800;color:var(--brick);
   background:var(--brick-soft);border-radius:var(--r-full);padding:1px 8px;}
+/* 법제처에서 받은 법령 — 쪽 대신 이 배지 */
+.law-src{font-size:var(--fs-2xs);font-weight:800;color:var(--accent);background:var(--accent-soft);
+  border-radius:var(--r-full);padding:1px 7px;}
+.law-api-row{margin:calc(-1*var(--sp-2)) 0 var(--sp-4);font-size:var(--fs-sm);color:var(--muted);}
+.lv-src{font-size:var(--fs-xs);color:var(--muted);align-self:center;}
+/* 표(격자) — 별표의 칸을 그대로 그린다. 좁은 화면에선 표 안에서만 가로로 굴린다 */
+.lv-gridwrap{overflow-x:auto;margin:var(--sp-2) 0;max-width:100%;}
+.lv-grid{border-collapse:collapse;font-size:var(--fs-sm);line-height:var(--lh-snug);min-width:100%;}
+.lv-grid th,.lv-grid td{border:1px solid var(--line);padding:var(--sp-1) var(--sp-2);vertical-align:top;
+  text-align:left;font-weight:400;color:var(--ink);min-width:56px;}
+.lv-grid th{background:var(--paper);font-weight:700;white-space:nowrap;}
+.lv-grid td:first-child{min-width:140px;}
+.law-snip-grid{padding:0;}
+.law-snip-grid .lv-grid{font-size:var(--fs-xs);}
 /* 앞줄과 같은 자리에서 나온 것 — 「7호 다목」을 되풀이하지 않는 대신 살짝 들여 쓴다 */
 .law-snip.law-snip-same{padding-left:var(--sp-4);}
 /* 곧 시행될 개정 조문 — 지금 것과 헷갈리면 안 된다 */

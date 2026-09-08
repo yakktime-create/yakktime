@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v135";
+var APP_VER="v136";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -1004,127 +1004,11 @@ function renderMfds(){
   wireBoardDrag();
 }
 
-/* ========== 민원 자료 ==========
- * 처음엔 「건별 카드」로 만들었는데, 실제로는 마스터 문서 하나를 계속 고쳐가며
- * 올리는 방식이었다. 그래서 법령 탭과 같은 구조로 바꿨다 —
- * 문서를 올리면 절 단위로 쪼개 저장하고, 그 안을 검색한다.
- * 같은 자료에 새 파일을 올리면 통째로 갈아끼운다(갱신). 자료가 늘지 않는다. */
-
-var refQuery="", refTerms=[], refHits=null, refBusy=false, refListOpen=false,
-    refOpen={}, refNeedOnly=false;
-
-/* 절 머리말 — 실제 쓰시는 문서들의 표기를 읽는다.
- *   건 1.  /  제1부.  /  §1  /  1-1.  /  1-2-3.  /  ○ 무엇
- *
- * 길이 제한이 핵심이다. 「§6.4 단서는 요건 두 가지를…」처럼 조문 인용으로
- * 시작하는 본문 문장이 흔한데, 이걸 제목으로 오인하면 문장 한복판에서
- * 절이 갈린다. 제목은 짧다 — 그 성질로 가른다. */
-var REF_HEAD_MAX=60;
-var REF_HEAD_RE=/^\s*(건\s*\d+\s*\.|제\s*\d+\s*부\s*\.|§\s*\d+(?:\s*\.\s*\d+)?|\d+-\d+(?:-\d+)?\.|○)\s*(.*)$/;
-var REF_NEED_RE=/\[\s*확인\s*필요/;
-var REF_PART_MAX=40000;
-var REF_MIN_BODY=80;   /* 이보다 짧은 절은 앞 절에 붙인다 */
-
-function refHeadLevel(mark){
-  if(/^건/.test(mark)) return 0;
-  if(/^제/.test(mark)) return 0;
-  if(/^§/.test(mark)) return 0;
-  if(/^○/.test(mark)) return 1;
-  return (mark.split("-").length>=3)?2:1;
-}
-/* 머리말처럼 생겼어도 문장이면 본문이다 */
-function refIsHead(line,m){
-  if(line.length>REF_HEAD_MAX) return false;
-  var title=(m[2]||"").trim();
-  if(/[.。]$/.test(title)&&title.length>20) return false;   /* 문장으로 끝나면 본문 */
-  if(/^[○]$/.test(m[1])&&!title) return false;
-  return true;
-}
-
-/* 줄 배열 → 절 배열. 머리말이 하나도 없으면 통째로 한 절이다. */
-/* 번호가 안 붙은 제목 — 「공통 적용 근거」 「[역할]」처럼 짧은 줄 뒤에
- * 긴 문단이 이어지면 제목이다. 표 머리칸(「구분」 「결론」)은 뒤에 오는 것도
- * 짧으므로 걸리지 않는다. 이걸 안 잡으면 앞 절에 남의 내용이 딸려 들어간다
- * (건3 요약에 건1·건2 얘기가 섞였던 게 그 경우다). */
-var REF_PLAIN_MAX=20, REF_PLAIN_NEXT=60;
-function refIsPlainHead(t,next){
-  if(t.length>REF_PLAIN_MAX) return false;
-  if(!next||next.length<REF_PLAIN_NEXT) return false;
-  if(/[.。?!]$/.test(t)) return false;
-  if(REF_HEAD_RE.test(next)) return false;   /* 다음 줄이 번호 제목이면 그건 묶음 이름이다 */
-  return true;
-}
-
-function buildRefParts(lines,docName){
-  var parts=[], cur=null, seen={}, lastShort="", group="", lastNumbered="";
-  var clean=lines.map(function(x){ return (x||"").trim(); }).filter(function(x){ return x; });
-  clean.forEach(function(t,ci){
-    var m=REF_HEAD_RE.exec(t);
-    if(m&&!refIsHead(t,m)) m=null;
-    if(!m&&refIsPlainHead(t,clean[ci+1])){
-      /* 「□ 근거」만 있으면 어느 건인지 알 수 없다. 앞의 번호 절을 붙인다.
-       * 이미 「A › B」로 붙어 있으면 뒤쪽만 써서 두 단으로 끝낸다. */
-      var par=lastNumbered;
-      if(par&&par.indexOf(" › ")>=0) par=par.split(" › ").pop();
-      if(par&&par.length>30) par=par.slice(0,30)+"…";
-      cur={ seq:parts.length+1, label:(par?par+" › "+t:t).slice(0,120),
-            level:2, need:false, lines:[t] };
-      parts.push(cur); lastShort=""; return;
-    }
-    if(m){
-      var mark=m[1].replace(/\s+/g,""), title=(m[2]||"").trim();
-      var label=(mark+(title?" "+title:""));
-      /* 「건3.」 같은 번호는 문서 안에서 한 번만 나오는 게 정상이다.
-       * 두 번째로 나오면 맨 뒤 요약 표처럼 본문을 다시 훑는 자리다.
-       * 그대로 두면 본문 건3과 라벨이 똑같아 보여 헷갈리므로,
-       * 바로 앞에 있던 짧은 줄(그 표의 제목)을 앞에 붙여 구분한다.
-       * ○ 나 § 는 원래 여러 번 나오므로 이 검사에서 뺀다. */
-      if(/^(건|제)/.test(mark)||/^\d+-/.test(mark)){
-        if(seen[mark]){
-          /* 요약 구역에 들어섰다. 표 중간에 긴 줄이 끼어도 맥락이 끊기지
-           * 않도록, 한 번 잡은 제목을 그 구역 내내 붙인다. */
-          if(!group) group=lastShort||"요약";
-          label=group+" › "+label;
-        } else {
-          group="";
-          seen[mark]=true;
-        }
-      }
-      cur={ seq:parts.length+1, label:label.slice(0,120),
-            level:refHeadLevel(mark), need:false, lines:[t] };
-      parts.push(cur);
-      lastNumbered=cur.label;
-      lastShort="";
-      return;
-    }
-    if(t.length<=30) lastShort=t; else lastShort="";
-    if(!cur){ cur={seq:1,label:docName||"머리말",level:0,need:false,lines:[]}; parts.push(cur); }
-    cur.lines.push(t);
-  });
-  /* 목차 줄이나 표 한 칸이 머리말처럼 생겨서 짧은 절로 흩어진다.
-   * 알맹이가 거의 없는 절은 앞 절에 붙인다 — 글자는 그대로 남으니 검색에는 다 걸린다. */
-  var merged=[];
-  parts.forEach(function(pt){
-    var body=pt.lines.join("\n");
-    if(merged.length && body.trim().length<REF_MIN_BODY){
-      merged[merged.length-1].lines=merged[merged.length-1].lines.concat(pt.lines);
-      return;
-    }
-    merged.push(pt);
-  });
-  return merged.map(function(pt,i){
-    var c=pt.lines.join("\n");
-    if(c.length>REF_PART_MAX) c=c.slice(0,REF_PART_MAX);
-    return { seq:i+1, label:pt.label, level:pt.level,
-             need:REF_NEED_RE.test(c), content:c };
-  }).filter(function(pt){ return pt.content.trim().length>1; });
-}
-
-/* ZIP(docx) 안에서 word/document.xml 하나만 꺼낸다.
+/* ZIP 안에서 항목 하나를 글자로 꺼낸다 (별표 hwpx 의 Contents/section0.xml).
  * 외부 라이브러리 없이 중앙 디렉터리를 직접 읽고 DecompressionStream 으로 푼다.
- * (예전 「.docx 건별 가져오기」에 딸려 있던 함수인데, 그 기능을 걷어낼 때
- *  같이 지워져서 워드 업로드가 깨졌다. 여기로 옮겨 온다.) */
-function extractDocXml(arrayBuffer){
+ * (원래 .docx 의 word/document.xml 을 꺼내던 함수다. 마스터 문서 기능을 걷어내며
+ *  이름만 남기고 일반화했다 — 지우면 hwpx 를 못 연다.) */
+function zipEntryText(arrayBuffer,want){
   return new Promise(function(resolve,reject){
     try{
       var bytes=new Uint8Array(arrayBuffer);
@@ -1140,21 +1024,18 @@ function extractDocXml(arrayBuffer){
         var method=dv.getUint16(pos+10,true), compSz=dv.getUint32(pos+20,true);
         var locOff=dv.getUint32(pos+42,true);
         var fn=new TextDecoder().decode(bytes.slice(pos+46,pos+46+fnLen));
-        if(fn==="word/document.xml"){
+        if(fn===want){
           var lfn=dv.getUint16(locOff+26,true), lex=dv.getUint16(locOff+28,true);
           var start=locOff+30+lfn+lex, raw=bytes.slice(start,start+compSz);
           if(method===0){ resolve(new TextDecoder().decode(raw)); return; }
           if(method===8){
-            if(typeof DecompressionStream!=="undefined"){
-              var ds=new DecompressionStream("deflate-raw");
-              new Response(new Blob([raw]).stream().pipeThrough(ds)).text().then(resolve).catch(reject);
-            } else { reject(new Error("이 브라우저에서는 압축 해제를 지원하지 않아요.")); }
+            try{ resolve(new TextDecoder().decode(inflateRawSync(raw))); }catch(ex){ reject(ex); }
             return;
           }
         }
         pos+=46+fnLen+exLen+cmLen;
       }
-      reject(new Error("word/document.xml을 찾지 못했어요"));
+      reject(new Error(want+"을 찾지 못했어요"));
     }catch(ex){ reject(ex); }
   });
 }
@@ -1178,181 +1059,6 @@ function markTerms(text,terms){
     pos=r[1];
   });
   return out+esc(text.slice(pos));
-}
-
-/* 워드: 문단 그대로 / PDF: 쪽 텍스트를 이어 붙여 줄로 나눈다 */
-function refLinesFromDocx(buf){
-  return extractDocXml(buf).then(function(xml){
-    var doc=new DOMParser().parseFromString(xml,"text/xml");
-    var ns="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-    var ps=doc.getElementsByTagNameNS(ns,"p"), out=[];
-    for(var i=0;i<ps.length;i++){
-      var ts=ps[i].getElementsByTagNameNS(ns,"t"), txt="";
-      for(var k=0;k<ts.length;k++) txt+=ts[k].textContent;
-      txt=txt.replace(/\s+/g," ").trim();
-      if(txt) out.push(txt);
-    }
-    return out;
-  });
-}
-function refLinesFromPdf(buf){
-  return extractPdfPages(buf,function(i,n){ showToast("텍스트 추출 "+i+"/"+n+"쪽"); })
-    .then(function(pages){
-      var out=[];
-      pages.forEach(function(pg){
-        /* 쪽 안에서도 절 머리말 앞에서 줄을 끊는다 */
-        pg.content.split(/(?=\s(?:제\s*\d+\s*부\.|§\s*\d+|\d+-\d+(?:-\d+)?\.))/)
-          .forEach(function(x){ x=x.trim(); if(x) out.push(x); });
-      });
-      return out;
-    });
-}
-
-function refUploadClick(id){
-  if(refBusy) return;
-  refTargetId=id||null;
-  document.getElementById("reffile").click();
-}
-var refTargetId=null;
-
-function refUpload(f){
-  if(refBusy) return;
-  var target=refTargetId; refTargetId=null;
-  var isDocx=/\.docx$/i.test(f.name), isPdf=/\.pdf$/i.test(f.name);
-  if(!isDocx&&!isPdf){ showToast("PDF나 워드(.docx) 파일만 돼요.",true); return; }
-  refBusy=true; render();
-  showToast("파일 읽는 중...");
-  var path=Date.now()+"_"+f.name.replace(/[^a-zA-Z0-9._-]/g,"_"), uploaded=false, lines=[];
-  readBuffer(f).then(function(buf){
-    return isDocx?refLinesFromDocx(buf):refLinesFromPdf(buf);
-  }).then(function(ls){
-    lines=ls;
-    var chars=0; lines.forEach(function(l){ chars+=l.length; });
-    if(chars<200) throw new Error("글자를 거의 못 뽑았어요. 스캔본이면 아직 안 돼요.");
-    showToast("파일 올리는 중...");
-    return sb.storage.from("files").upload(path,f);
-  }).then(function(res){
-    if(res.error) throw new Error("업로드 실패: "+res.error.message);
-    uploaded=true;
-    var chars=0; lines.forEach(function(l){ chars+=l.length; });
-    var parts=buildRefParts(lines,f.name.replace(/\.(docx|pdf)$/i,""));
-    if(!parts.length) throw new Error("내용을 찾지 못했어요.");
-    if(target){
-      var old=S.refs.find(function(x){ return x.id===target; });
-      var oldPath=old&&old.filePath;
-      var patch={filePath:path,fileName:f.name,chars:chars,parts:parts.length};
-      if(old){ Object.keys(patch).forEach(function(k){ old[k]=patch[k]; }); }
-      return dbUpdate("refs",target,patch)
-        .then(function(){ if(oldPath&&oldPath!==path) sb.storage.from("files").remove([oldPath]); })
-        .then(function(){ return saveRefParts(target,parts); });
-    }
-    var item={name:nfc(f.name).replace(/\.(docx|pdf)$/i,""),filePath:path,fileName:f.name,
-              chars:chars,parts:parts.length};
-    return dbInsert("refs",item).then(function(row){
-      if(!row) throw new Error("자료 정보를 저장하지 못했어요.");
-      S.refs.unshift(item);
-      return saveRefParts(row.id,parts);
-    });
-  }).then(function(){
-    refBusy=false; refListOpen=true;
-    if(refQuery) refSearch(); else render();
-    showToast(target?"✓ 자료를 갱신했어요":"✓ 자료를 추가했어요");
-  }).catch(function(err){
-    refBusy=false;
-    if(uploaded&&!target) sb.storage.from("files").remove([path]);
-    render();
-    showToast((err&&err.message)||"자료를 넣지 못했어요.",true);
-  });
-}
-
-function saveRefParts(refId,parts){
-  return withAuthRetry(function(){
-    return sb.from("ref_parts").delete().eq("ref_id",refId);
-  }).then(function(res){
-    if(res.error) throw new Error("옛 내용을 지우지 못했어요: "+res.error.message);
-    var rows=parts.map(function(pt){
-      return {ref_id:refId,seq:pt.seq,label:pt.label,level:pt.level,need:pt.need,content:pt.content};
-    });
-    var i=0;
-    function chunk(){
-      if(i>=rows.length) return Promise.resolve();
-      var part=rows.slice(i,i+40); i+=40;
-      showToast("저장 중 "+Math.min(i,rows.length)+"/"+rows.length);
-      return withAuthRetry(function(){ return sb.from("ref_parts").insert(part); }).then(function(r){
-        if(r.error) throw new Error("저장 실패: "+r.error.message);
-        return chunk();
-      });
-    }
-    return chunk();
-  });
-}
-
-function refName(id){
-  var r=S.refs.find(function(x){ return x.id===id; });
-  return r?r.name:"(지운 자료)";
-}
-
-function refSearch(){
-  var q=(val("ref-q")||"").trim();
-  refQuery=q; refHits=null; refOpen={};
-  refTerms=lawTerms(q);
-  if(!refTerms.length&&!refNeedOnly){ renderRefResults(); showToast("두 글자 이상 입력해 주세요."); return; }
-  if(!S.refs.length){ renderRefResults(); showToast("먼저 자료를 올려주세요."); return; }
-  refSearching=true; renderRefResults();
-  withAuthRetry(function(){
-    var qb=sb.from("ref_parts").select("id,ref_id,seq,label,level,need,content");
-    refTerms.forEach(function(t){ qb=qb.ilike("content","%"+escLike(t)+"%"); });
-    if(refNeedOnly) qb=qb.eq("need",true);
-    return qb.order("ref_id").order("seq").limit(200);
-  }).then(function(res){
-    refSearching=false;
-    if(res.error){
-      showToast(/ref_parts/.test(res.error.message||"")?"자료 표가 아직 없어요. Supabase SQL을 먼저 돌려주세요.":"검색 실패: "+res.error.message,true);
-      refHits=[]; renderRefResults(); return;
-    }
-    refHits=buildRefHits(res.data||[],refTerms);
-    renderRefResults();
-  });
-}
-var refSearching=false;
-
-function buildRefHits(rows,terms){
-  var out=[], PAD=90, MAX=5;
-  rows.forEach(function(r){
-    var c=r.content||"", lc=c.toLowerCase(), found=[];
-    terms.forEach(function(t){
-      var lt=t.toLowerCase(), from=0, n=0, at;
-      while(n<10&&(at=lc.indexOf(lt,from))>=0){ found.push({at:at,len:t.length}); from=at+t.length; n++; }
-    });
-    found.sort(function(a,b){ return a.at-b.at; });
-    var total=found.length, wins=[];
-    found.forEach(function(f){
-      var st=Math.max(0,f.at-PAD), en=Math.min(c.length,f.at+f.len+PAD);
-      var last=wins.length?wins[wins.length-1]:null;
-      if(last&&st<=last.en){ if(en>last.en) last.en=en; }
-      else wins.push({st:st,en:en});
-    });
-    if(!wins.length) wins=[{st:0,en:Math.min(c.length,260)}];
-    if(wins.length>MAX) wins=wins.slice(0,MAX);
-    out.push({ key:"r"+r.id, refId:r.ref_id, label:r.label, level:r.level, need:r.need,
-               total:total,
-               snips:wins.map(function(w){
-                 return (w.st>0?"…":"")+c.slice(w.st,w.en)+(w.en<c.length?"…":"");
-               }) });
-  });
-  out.sort(function(a,b){
-    var na=refName(a.refId), nb=refName(b.refId);
-    return na!==nb ? (na<nb?-1:1) : 0;
-  });
-  return out;
-}
-
-function refDel(id){
-  var r=S.refs.find(function(x){ return x.id===id; }); if(!r) return;
-  if(!confirm('"'+r.name+'"\n\n자료와 뽑아둔 내용이 모두 지워집니다. 계속할까요?')) return;
-  if(r.filePath) sb.storage.from("files").remove([r.filePath]);
-  S.refs=S.refs.filter(function(x){ return x.id!==id; });
-  refHits=null; render(); dbDelete("refs",id);
 }
 
 /* 문서 인덱스 탭은 2026-08-31에 없앴다.
@@ -1597,13 +1303,6 @@ function whereHtml(it,table){
 }
 
 /* 비공개 버킷: signed URL로 파일 열기 */
-function openStorageFile(path){
-  sb.storage.from("files").createSignedUrl(path,3600).then(function(res){
-    if(res.error){ showToast("파일을 열지 못했어요.",true); return; }
-    window.open(res.data.signedUrl,"_blank");
-  });
-}
-
 /* ========== 백업 (JSON 내보내기/불러오기) ========== */
 function exportData(){
   var blob=new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
@@ -1947,15 +1646,10 @@ function extractPdfPages(buf,onProgress){
 
 function lawUploadClick(){ if(!lawBusy) document.getElementById("lawfile").click(); }
 
-/* 파일 선택 배선 — 두 탭이 같은 방식이다.
- * (예전엔 이 리스너가 .docx 가져오기 구역 안에 섞여 있었다) */
+/* 파일 선택 배선 */
 document.getElementById("lawfile").addEventListener("change",function(e){
   var f=e.target.files[0]; e.target.value=""; if(!f) return;
   lawUpload(f);
-});
-document.getElementById("reffile").addEventListener("change",function(e){
-  var f=e.target.files[0]; e.target.value=""; if(!f) return;
-  refUpload(f);
 });
 
 /* 법제처 파일 이름은 「법령명(종류)(제N호)(시행일)」로 딱 떨어진다.
@@ -2432,6 +2126,8 @@ function buildLawArticles(pages,docName,docKind){
     var subs=(isTbl&&raw.length>=SUB_MIN)?subHeads(raw):[];
     /* 소제목이 없는 표 별표는 호 자리·길이로 나눈다 (TBL_CHUNK 설명 참고) */
     if(isTbl&&subs.length<2&&raw.length>=TBL_SPLIT_MIN) subs=tblChunks(raw);
+    /* 법제처 별표의 격자(┃…┨) 한복판에서 자르면 표가 깨진다 — 줄 안에 떨어진 자름점은 뺀다 */
+    subs=gridSafe(raw,subs);
     if(subs.length>=2){
       if(subs[0].at>=SUB_HEAD_MIN) subs.unshift({at:0,title:"머리말"});
       var parts=[];
@@ -2450,7 +2146,7 @@ function buildLawArticles(pages,docName,docKind){
       var parts2=[];
       parts.forEach(function(pt){
         if(pt.text.length<TBL_SPLIT_MIN){ parts2.push(pt); return; }
-        var cs=tblChunks(pt.text);
+        var cs=gridSafe(pt.text,tblChunks(pt.text));
         if(cs.length<2){ parts2.push(pt); return; }
         for(var z=0;z<cs.length;z++){
           var za=cs[z].at, zb=(z+1<cs.length)?cs[z+1].at:pt.text.length;
@@ -2634,6 +2330,11 @@ function lawReindex(id){
   var l=S.laws.find(function(x){ return x.id===id; });
   if(!l) return;
   lawBusy=true; render();
+  if(l.src==="api"){
+    lawApiImport(l).then(function(r){ lawBusy=false; render(); showToast("✓ 조문 "+r.arts+"개를 새로 받았어요"); },
+      function(err){ lawBusy=false; render(); showToast((err&&err.message)||"받지 못했어요.",true); });
+    return;
+  }
   showToast("쪽을 읽는 중...");
   var fresh=null;
   Promise.resolve(lawPagesForReindex(l)).then(function(fp){
@@ -2888,6 +2589,7 @@ function lawBuildAll(all){
   next();
 }
 function lawReindexOne(l){
+  if(l.src==="api") return lawApiImport(l).then(function(){});   /* 법제처 판은 다시 받는다 */
   var fresh=null;
   return Promise.resolve(lawPagesForReindex(l)).then(function(fp){
     fresh=fp;
@@ -2917,6 +2619,653 @@ function lawReindexOne(l){
     if(!arts.length) throw new Error("조문 없음");
     return savePageRows(l.id,rows,isNew,false)
       .then(function(){ return saveLawArticles(l.id,arts,l); });
+  });
+}
+
+/* ========== 법제처 OPEN API 로 법령 받기 ==========================================
+ * 법령·고시는 PDF 를 올리는 대신 **법제처에서 바로 받는다.** 개정되면 「조문 다시
+ * 만들기」 한 번으로 최신판이 따라오고, 별표의 표도 격자 그대로 읽을 수 있다.
+ * 지침서·안내서는 법제처에 없으므로 여전히 PDF 다 (투트랙).
+ *
+ * 흐름은 PDF 와 같다 — 글자를 뽑아 「쪽」을 만들고 buildLawArticles() 에 넣는다.
+ * 그래야 라벨(제N조(제목) · 별표 N(제목) · 부칙 제N조 · 시행예정 표시)이 PDF 판과
+ * 똑같이 나온다. 조문 id 는 새로 생기지만 답변 기록은 이름+조 번호라 안전하다.
+ *
+ * 브라우저는 law.go.kr 을 직접 못 부른다(CORS · OC 노출). Edge Function `law-fetch` 가
+ * 대신 불러 준다 — AI 를 안 쓰므로 돈이 안 든다.
+ *
+ * **「현행」 본문은 eflaw 로 받아야 한다.** target=law 로 받으면 시행예정판이 온다
+ * (약사법은 2026-11-12 판) — 아직 시행 안 된 조문을 현행으로 보여주게 된다.
+ * 시행예정 조문은 따로 받아 「· 시행 2026. 11. 12.」 라벨로 붙인다 (PDF 판과 같은 꼴). */
+
+var API_KINDS={"법률":1,"대통령령":1,"총리령":1,"부령":1,"고시":1,"훈령":1,"예규":1};
+/* 법제처에서 받을 수 있는 종류인가 (지침서는 아니다) */
+function lawIsApiable(l){ return !!(l&&l.kind&&API_KINDS[l.kind]); }
+function lawIsAdmrul(kind){ return kind==="고시"||kind==="훈령"||kind==="예규"||kind==="공고"; }
+function lawBare(s){ return nfc(s||"").replace(/[\s·ㆍ・]/g,""); }
+function todayKey(){ return keyOf(new Date()).replace(/-/g,""); }
+function lawDateDots(d){ d=String(d||""); return d.length<8?d:(d.slice(0,4)+". "+(+d.slice(4,6))+". "+(+d.slice(6,8))+"."); }
+function arr(x){ return x==null?[]:(Array.isArray(x)?x:[x]); }
+/* 중첩된 배열·객체에서 글자만 차례로 모은다 (별표내용은 [[줄,줄],[줄]] 꼴이다) */
+function flatStr(x,out){
+  out=out||[];
+  if(typeof x==="string") out.push(x);
+  else if(Array.isArray(x)) x.forEach(function(y){ flatStr(y,out); });
+  else if(x&&typeof x==="object") Object.keys(x).forEach(function(k){ flatStr(x[k],out); });
+  return out;
+}
+function lawSiteUrl(l){
+  var nm=encodeURIComponent(nfc(l.name||""));
+  return l.target==="admrul"?"https://www.law.go.kr/행정규칙/"+nm:"https://www.law.go.kr/법령/"+nm;
+}
+
+function lawApiCall(body){
+  return sb.functions.invoke("law-fetch",{body:body}).then(function(r){
+    var d=r&&r.data;
+    if(!d) throw new Error("법제처를 부르지 못했어요: "+((r&&r.error&&r.error.message)||"응답이 비었어요"));
+    if(d.error) throw new Error(d.error);
+    return d;
+  });
+}
+/* 이름으로 찾는다. 법령(eflaw)에 없으면 행정규칙(admrul)도 본다.
+ * 돌려주는 것: {admrul, rows:[{name,mst,eff,status,kind,code}]} — 이름이 정확히 같은 것만 */
+function lawApiLocate(name,kind){
+  var order=kind?[lawIsAdmrul(kind)]:[false,true];
+  function tryOne(i){
+    if(i>=order.length) return Promise.reject(new Error("법제처에서 「"+name+"」을(를) 못 찾았어요. 법제처에 적힌 이름 그대로인지 확인해 주세요."));
+    var admrul=order[i];
+    return lawApiCall({op:"search",target:admrul?"admrul":"eflaw",q:name}).then(function(d){
+      var rows=(d.rows||[]).filter(function(r){ return lawBare(r.name)===lawBare(name); });
+      if(!rows.length) return tryOne(i+1);
+      return {admrul:admrul,rows:rows};
+    });
+  }
+  return tryOne(0);
+}
+/* 법제처의 종류 이름을 앱의 kind 로 — 「보건복지부령」은 부령이다 */
+function apiKindOf(k,admrul){
+  k=nfc(k||"");
+  if(admrul) return (/^(고시|훈령|예규|공고)$/.test(k))?k:"고시";
+  if(k==="법률"||k==="대통령령"||k==="총리령") return k;
+  if(/령$/.test(k)) return "부령";
+  return "법률";
+}
+
+/* ---------- 본문 JSON → 「쪽」 ---------- */
+/* 법령(법률·령·규칙): 조문단위가 조 → 항 → 호 → 목으로 나뉘어 온다. 줄마다 들여쓴다. */
+function apiArtKey(a){ return "제"+a["조문번호"]+"조"+(a["조문가지번호"]?"의"+a["조문가지번호"]:""); }
+function apiArtText(a){
+  var lines=[], head=flatStr(a["조문내용"]).join(" ").replace(/\s+/g," ").trim();
+  head=nfc(head);
+  var hang=arr(a["항"]);
+  if(/^제\d+조(의\d+)?삭제/.test(head.replace(/\s+/g,""))&&!hang.length) return "";
+  if(head) lines.push(head);
+  hang.forEach(function(h){
+    if(typeof h==="string"){ lines.push("  "+nfc(h).trim()); return; }
+    flatStr(h["항내용"]).forEach(function(x){ lines.push("  "+nfc(x).trim()); });
+    arr(h["호"]).forEach(function(ho){
+      if(typeof ho==="string"){ lines.push("    "+nfc(ho).trim()); return; }
+      flatStr(ho["호내용"]).forEach(function(x){ lines.push("    "+nfc(x).trim()); });
+      arr(ho["목"]).forEach(function(mo){
+        flatStr(typeof mo==="string"?mo:mo["목내용"]).forEach(function(x){ lines.push("      "+nfc(x).trim()); });
+      });
+    });
+  });
+  return lines.join("\n");
+}
+function apiLawPages(doc){
+  var pages=[], map={};
+  arr(doc["조문"]&&doc["조문"]["조문단위"]).forEach(function(a){
+    if(!a||typeof a!=="object"||a["조문여부"]!=="조문") return;   /* 「전문」은 장·절 제목이다 */
+    var t=apiArtText(a); if(!t) return;
+    var k=apiArtKey(a);
+    map[k]=(map[k]?map[k]+"\n":"")+t;
+    pages.push({text:t});
+  });
+  return {pages:pages,map:map};
+}
+/* 행정규칙(고시): 조 하나가 한 줄이고 항·호가 붙어 온다(「…말한다.1. 다음의…」).
+ * 항(①)·호(1.)·목(가.) 앞에서 줄을 끊어야 화면 층이 산다. */
+function admrulBreaks(t){
+  return t.replace(/\s*([①-⑳])/g,"\n$1")
+          .replace(/([.)\]」』])\s*(\d{1,2}\.\s)/g,"$1\n$2")
+          .replace(/([.)\]」』])\s*([가-힣]\.\s)/g,"$1\n$2");
+}
+function apiAdmrulPages(doc){
+  var pages=[];
+  flatStr(doc["조문내용"]).forEach(function(l){
+    l=nfc(l).trim(); if(!l) return;
+    var b=l.replace(/\s+/g,"");
+    if(/^제\d+(장|절|편)/.test(b)&&l.length<40) return;     /* 장·절 제목 */
+    if(!/^제\d+조/.test(b)){ if(pages.length) pages[pages.length-1].text+="\n"+l; return; }
+    pages.push({text:admrulBreaks(l)});
+  });
+  return pages;
+}
+/* 부칙 — 가장 최근 것 하나만. 「부칙 <제N호,날짜>」 머리말이 첫 줄이라 buildLawArticles 가
+ * 「부칙 제1조(시행일)」로 라벨을 붙인다(PDF 판과 같다). */
+function apiBuchikPages(doc){
+  var bu=doc["부칙"]||{}, units=arr(bu["부칙단위"]);
+  /* 행정규칙(고시)은 부칙단위가 없고 부칙공포일자[]·부칙내용[] 두 배열이 나란히 온다.
+   * 마지막 것이 최근이다. 조가 「…시행한다.제2조(…)」처럼 붙어 있어 조 앞에서 끊는다. */
+  if(!units.length&&bu["부칙내용"]!=null){
+    var ds=arr(bu["부칙공포일자"]), cs=arr(bu["부칙내용"]);
+    var bi=-1, bd="";
+    cs.forEach(function(c,i){ var d=String(ds[i]||""); if(bi<0||d>=bd){ bi=i; bd=d; } });
+    if(bi>=0){
+      var t=flatStr(cs[bi]).map(function(x){ return nfc(x).trim(); }).filter(Boolean).join("\n")
+        .replace(/\s*(제\d+조(?:의\d+)?\s*\()/g,"\n$1");
+      units=[{"부칙공포일자":bd,"부칙내용":admrulBreaks(t)}];
+    }
+  }
+  if(!units.length) return [];
+  var best=null;
+  units.forEach(function(u){ var d=String(u["부칙공포일자"]||u["부칙발령일자"]||""); if(!best||d>String(best["부칙공포일자"]||best["부칙발령일자"]||"")) best=u; });
+  var lines=flatStr(best["부칙내용"]).join("\n").split("\n").map(function(x){ return nfc(x).trim(); }).filter(Boolean);
+  if(!lines.length) return [];
+  if(!/^부\s*칙/.test(lines[0])) lines.unshift("부칙 <"+String(best["부칙공포일자"]||best["부칙발령일자"]||"")+">");
+  /* 조가 없는 부칙(「이 규칙은 공포한 날부터 시행한다」)은 머리말이 없어 앞 조 꼬리에 붙는다 — 넣지 않는다 */
+  if(!lines.some(function(l){ return /^제\d+조(의\d+)?\s*\(/.test(l); })) return [];
+  return [{text:lines.join("\n")}];
+}
+
+/* ---------- 표(격자) 글자 꼴 ----------
+ * 표는 글자 속에 「┃칸│칸│칸┨」 한 줄로 넣는다. 공백 손질(\s+→" ")을 견디고, 법령 글에
+ * 안 쓰는 기호라 검색·복사·AI 는 그대로 글자로 보고 화면만 표로 그린다. */
+var GR="┃", GC="│", GE="┨";
+var GRID_ROW_RE=/┃([^┃┨]*)┨/g;
+function gridRowText(cells){
+  return GR+cells.map(function(c){ return String(c||"").replace(/[┃│┨]/g," ").replace(/\s+/g," ").trim(); }).join(GC)+GE;
+}
+function gridCells(s){ return String(s||"").split(GC).map(function(c){ return c.trim(); }); }
+/* 글자 → [{text} | {rows:[[칸]]}] */
+function gridSplit(text){
+  text=String(text||"");
+  if(text.indexOf(GR)<0) return [{text:text}];
+  var out=[], rows=[], pos=0, m;
+  GRID_ROW_RE.lastIndex=0;
+  while((m=GRID_ROW_RE.exec(text))!==null){
+    var gap=text.slice(pos,m.index);
+    if(gap.trim()){ if(rows.length){ out.push({rows:rows}); rows=[]; } out.push({text:gap}); }
+    rows.push(gridCells(m[1]));
+    pos=m.index+m[0].length;
+  }
+  if(rows.length) out.push({rows:rows});
+  var tail=text.slice(pos);
+  if(tail.trim()) out.push({text:tail});
+  return out;
+}
+function gridHtml(rows,q){
+  var terms=Array.isArray(q)?q:(q?[q]:[]);
+  return '<div class="lv-gridwrap"><table class="lv-grid">'
+    + rows.map(function(r,i){
+        var tag=i===0?"th":"td";
+        return '<tr>'+r.map(function(c){ return '<'+tag+'>'+markTerms(c,terms)+'</'+tag+'>'; }).join("")+'</tr>';
+      }).join("")
+    + '</table></div>';
+}
+/* 표를 알아보고 그린다 — 조 전체 보기·쪽 보기가 같이 쓴다 */
+function gridAwareHtml(text,q){
+  var html="", lv=0;
+  gridSplit(text).forEach(function(s){
+    if(s.rows){ html+=gridHtml(s.rows,q); return; }
+    var r=formatLawSeg(s.text,q,lv); html+=r.html; lv=r.lv;
+  });
+  return html;
+}
+/* 복사·저장용 평문 — 표 한 줄은 「칸 | 칸 | 칸」 */
+function gridRowsPlain(rows){ return rows.map(function(r){ return r.join(" | "); }).join("\n"); }
+/* 자름점(at) 가운데 표 줄 안에 떨어진 것을 뺀다 */
+function gridSafe(raw,subs){
+  if(!subs||!subs.length||raw.indexOf(GR)<0) return subs||[];
+  var rows=gridRowsInfo(raw);
+  return subs.filter(function(sb){
+    for(var i=0;i<rows.length;i++) if(sb.at>rows[i].st&&sb.at<rows[i].en) return false;
+    return true;
+  });
+}
+/* 글자 안의 표 줄 자리 — 검색 결과에서 「그 줄 전체」를 발췌로 쓰기 위해 */
+function gridRowsInfo(c){
+  if(c.indexOf(GR)<0) return [];
+  var out=[], m, prevEnd=-1, head=null;
+  GRID_ROW_RE.lastIndex=0;
+  while((m=GRID_ROW_RE.exec(c))!==null){
+    var cells=gridCells(m[1]);
+    /* 앞 줄과 사이에 글자가 있으면 다른 표다 — 머리 줄을 새로 잡는다 */
+    if(prevEnd<0||c.slice(prevEnd,m.index).trim()) head=null;
+    out.push({st:m.index,en:m.index+m[0].length,cells:cells,head:head});
+    if(!head) head=cells;
+    prevEnd=m.index+m[0].length;
+  }
+  return out;
+}
+
+/* ---------- 별표 파일(hwp·hwpx) → 문단·표 ----------
+ * 법제처 별표 본문 JSON 은 표의 칸이 풀려 못 쓴다. 파일에는 격자가 그대로 있다.
+ * 고시 별표는 .hwpx(zip 안 XML), 법령 별표는 구형 .hwp(CFB)다.
+ * 돌려주는 것: [{p:"문단"} | {tstart:true} | {row:[칸], head:bool}] */
+/* **압축은 직접 푼다.** DecompressionStream("deflate-raw") 은 hwp 스트림 끝의 꼬리 바이트를
+ * 오류로 보고 「Failed to fetch」를 낸다(파이썬 zlib 은 그냥 풀린다). 구형 사파리에는 아예 없다.
+ * deflate 는 150줄이면 된다 — puff 의 알고리즘 그대로다. */
+var INF_LBASE=[3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];
+var INF_LEXT=[0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];
+var INF_DBASE=[1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
+var INF_DEXT=[0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
+var INF_CLORDER=[16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];
+var INF_FIXED=null;
+function inflateRawSync(src){
+  var pos=0, bitBuf=0, bitCnt=0, i;
+  function bits(n){
+    while(bitCnt<n){ if(pos>=src.length) throw new Error("압축 자료가 중간에서 끝났어요"); bitBuf|=src[pos++]<<bitCnt; bitCnt+=8; }
+    var v=bitBuf&((1<<n)-1); bitBuf>>>=n; bitCnt-=n; return v;
+  }
+  function tree(lengths,n){
+    var t={count:new Uint16Array(16),symbol:new Uint16Array(n)}, offs=new Uint16Array(16), k;
+    for(k=0;k<n;k++) t.count[lengths[k]]++;
+    t.count[0]=0;
+    for(k=1;k<16;k++) offs[k]=offs[k-1]+t.count[k-1];
+    for(k=0;k<n;k++) if(lengths[k]) t.symbol[offs[lengths[k]]++]=k;
+    return t;
+  }
+  function decode(t){
+    var code=0, first=0, index=0;
+    for(var len=1;len<16;len++){
+      code|=bits(1);
+      var count=t.count[len];
+      if(code-count<first) return t.symbol[index+(code-first)];
+      index+=count; first+=count; first<<=1; code<<=1;
+    }
+    throw new Error("압축 부호가 이상해요");
+  }
+  var buf=new Uint8Array(Math.max(4096,src.length*4)), n=0;
+  function put(b){ if(n>=buf.length){ var nb=new Uint8Array(buf.length*2); nb.set(buf); buf=nb; } buf[n++]=b; }
+  for(;;){
+    var last=bits(1), type=bits(2);
+    if(type===0){
+      bitBuf=0; bitCnt=0;
+      var len=src[pos]|(src[pos+1]<<8); pos+=4;
+      for(i=0;i<len;i++) put(src[pos++]);
+    } else {
+      var lt, dt;
+      if(type===1){
+        if(!INF_FIXED){
+          var fl=new Uint8Array(288); for(i=0;i<144;i++) fl[i]=8; for(;i<256;i++) fl[i]=9; for(;i<280;i++) fl[i]=7; for(;i<288;i++) fl[i]=8;
+          var fd=new Uint8Array(30); for(i=0;i<30;i++) fd[i]=5;
+          INF_FIXED={l:tree(fl,288),d:tree(fd,30)};
+        }
+        lt=INF_FIXED.l; dt=INF_FIXED.d;
+      } else if(type===2){
+        var hlit=bits(5)+257, hdist=bits(5)+1, hclen=bits(4)+4, cl=new Uint8Array(19);
+        for(i=0;i<hclen;i++) cl[INF_CLORDER[i]]=bits(3);
+        var ct=tree(cl,19), lens=new Uint8Array(hlit+hdist);
+        for(i=0;i<hlit+hdist;){
+          var sym=decode(ct), r;
+          if(sym<16) lens[i++]=sym;
+          else if(sym===16){ var prev=i?lens[i-1]:0; r=3+bits(2); while(r--) lens[i++]=prev; }
+          else if(sym===17){ r=3+bits(3); while(r--) lens[i++]=0; }
+          else { r=11+bits(7); while(r--) lens[i++]=0; }
+        }
+        lt=tree(lens.subarray(0,hlit),hlit); dt=tree(lens.subarray(hlit),hdist);
+      } else throw new Error("압축 블록 종류가 이상해요");
+      for(;;){
+        var s=decode(lt);
+        if(s<256){ put(s); continue; }
+        if(s===256) break;
+        s-=257;
+        var length=INF_LBASE[s]+bits(INF_LEXT[s]), ds=decode(dt), dist=INF_DBASE[ds]+bits(INF_DEXT[ds]);
+        for(i=0;i<length;i++) put(buf[n-dist]);
+      }
+    }
+    if(last) break;
+  }
+  return buf.subarray(0,n);
+}
+function inflateRaw(u8){
+  try{ return Promise.resolve(inflateRawSync(u8)); }catch(e){ return Promise.reject(e); }
+}
+function b64Bytes(b64){
+  var bin=atob(b64), out=new Uint8Array(bin.length);
+  for(var i=0;i<bin.length;i++) out[i]=bin.charCodeAt(i);
+  return out;
+}
+/* 표 하나 → 줄 목록. 폭 전체를 병합한 칸 하나짜리 줄은 제목·일반기준이므로 문단으로 돌린다.
+ * 머리 줄: 첫 줄, 그리고 첫 칸이 빈 채로 이어지는 줄들(「│ │ 1차 │ 2차 │」). */
+function tableItems(nr,nc,cells,out){
+  var grid=[], i, j, full={};
+  for(i=0;i<nr;i++){ var row=[]; for(j=0;j<nc;j++) row.push(""); grid.push(row); }
+  cells.forEach(function(c){
+    if(c.r>=nr||c.c>=nc) return;
+    grid[c.r][c.c]=c.t.join(" ").replace(/\s+/g," ").trim();
+    if(c.cs>=nc) full[c.r]=1;
+  });
+  out.push({tstart:true});
+  var started=false, head=true;
+  for(i=0;i<nr;i++){
+    var r=grid[i], ne=r.filter(function(x){ return x; });
+    if(!ne.length) continue;
+    if(ne.length===1&&full[i]){ out.push({p:ne[0]}); continue; }
+    if(head&&(!started||!r[0])){ out.push({row:r,head:true}); started=true; continue; }
+    head=false; out.push({row:r});
+  }
+  return out;
+}
+/* --- 구형 hwp: CFB(복합 문서) 읽기 --- */
+function cfbOpen(buf){
+  var dv=new DataView(buf), u8=new Uint8Array(buf);
+  if(u8[0]!==0xD0||u8[1]!==0xCF||u8[2]!==0x11||u8[3]!==0xE0) throw new Error("hwp 형식이 아니에요");
+  var ss=1<<dv.getUint16(30,true), ms=1<<dv.getUint16(32,true), perSec=ss/4;
+  var dirStart=dv.getUint32(48,true), cutoff=dv.getUint32(56,true);
+  var miniStart=dv.getUint32(60,true), difatStart=dv.getUint32(68,true), nDifat=dv.getUint32(72,true);
+  var FREE=0xFFFFFFFE, difat=[], i, j;
+  for(i=0;i<109;i++){ var v=dv.getUint32(76+i*4,true); if(v<FREE) difat.push(v); }
+  var ds=difatStart, g=0;
+  while(ds<FREE&&g++<=nDifat){
+    var off=(ds+1)*ss;
+    for(j=0;j<perSec-1;j++){ var w=dv.getUint32(off+j*4,true); if(w<FREE) difat.push(w); }
+    ds=dv.getUint32(off+(perSec-1)*4,true);
+  }
+  var fat=[];
+  difat.forEach(function(sec){ var o=(sec+1)*ss; for(j=0;j<perSec;j++) fat.push(dv.getUint32(o+j*4,true)); });
+  function chain(start,table){ var out=[], s=start, n=0; while(s<FREE&&n++<200000){ out.push(s); s=table[s]; if(s===undefined) break; } return out; }
+  function readChain(start,size){
+    var secs=chain(start,fat), out=new Uint8Array(size), p=0;
+    for(i=0;i<secs.length&&p<size;i++){ var o=(secs[i]+1)*ss, n=Math.min(ss,size-p); out.set(u8.subarray(o,o+n),p); p+=n; }
+    return out;
+  }
+  var entries=[];
+  chain(dirStart,fat).forEach(function(sec){
+    var o0=(sec+1)*ss;
+    for(var e=0;e<ss/128;e++){
+      var o=o0+e*128, nl=dv.getUint16(o+64,true);
+      if(!nl){ entries.push(null); continue; }
+      var name=""; for(var k=0;k<nl/2-1;k++) name+=String.fromCharCode(dv.getUint16(o+k*2,true));
+      entries.push({name:name,type:u8[o+66],left:dv.getUint32(o+68,true),right:dv.getUint32(o+72,true),
+                    child:dv.getUint32(o+76,true),start:dv.getUint32(o+116,true),size:dv.getUint32(o+120,true)});
+    }
+  });
+  var root=entries[0]; if(!root) throw new Error("hwp 목록이 비었어요");
+  var miniFat=[];
+  chain(miniStart,fat).forEach(function(sec){ var o=(sec+1)*ss; for(j=0;j<perSec;j++) miniFat.push(dv.getUint32(o+j*4,true)); });
+  var miniData=readChain(root.start,root.size);
+  function read(en){
+    if(en.size<cutoff){
+      var secs=chain(en.start,miniFat), out=new Uint8Array(en.size), p=0;
+      for(i=0;i<secs.length&&p<en.size;i++){ var o=secs[i]*ms, n=Math.min(ms,en.size-p); out.set(miniData.subarray(o,o+n),p); p+=n; }
+      return out;
+    }
+    return readChain(en.start,en.size);
+  }
+  function kids(id,out,depth){
+    if(id>=FREE||!entries[id]||depth>64) return out;
+    var e=entries[id]; kids(e.left,out,depth+1); out.push(e); kids(e.right,out,depth+1); return out;
+  }
+  return { top:kids(root.child,[],0), kids:function(en){ return kids(en.child,[],0); }, read:read };
+}
+/* PARA_TEXT 안의 제어 문자. 1~3·11·12·14~18·21~23 은 8글자(16바이트)를 차지하는 확장 제어,
+ * 4~9·19·20 도 8글자짜리 인라인 제어다. 그냥 읽으면 「捤獥 汤捯」 같은 쓰레기가 낀다. */
+var HWP_CTRL8={1:1,2:1,3:1,4:1,5:1,6:1,7:1,8:1,9:1,11:1,12:1,14:1,15:1,16:1,17:1,18:1,19:1,20:1,21:1,22:1,23:1};
+function hwpText(dv){
+  var out="", n=dv.byteLength>>1, i=0;
+  while(i<n){
+    var c=dv.getUint16(i*2,true);
+    if(HWP_CTRL8[c]){ i+=8; continue; }
+    if(c===13||c===10) out+="\n";
+    else if(c>=32) out+=String.fromCharCode(c);
+    i++;
+  }
+  return out;
+}
+function hwpSectionItems(data,out){
+  var dv=new DataView(data.buffer,data.byteOffset,data.byteLength), pos=0, tbl=null, cell=null, base=-1;
+  while(pos+4<=data.byteLength){
+    var h=dv.getUint32(pos,true), tag=h&0x3FF, lvl=(h>>10)&0x3FF, size=(h>>20)&0xFFF; pos+=4;
+    if(size===0xFFF){ size=dv.getUint32(pos,true); pos+=4; }
+    var len=Math.min(size,data.byteLength-pos);
+    var body=new DataView(data.buffer,data.byteOffset+pos,len); pos+=size;
+    if(tag===77&&len>=8){ tbl={nr:body.getUint16(4,true),nc:body.getUint16(6,true),cells:[]}; base=lvl; cell=null; continue; }
+    if(tbl){
+      if(tag===66&&lvl<base){ tableItems(tbl.nr,tbl.nc,tbl.cells,out); tbl=null; cell=null; base=-1; }
+      else if(tag===72&&lvl===base&&len>=16){
+        cell={c:body.getUint16(8,true),r:body.getUint16(10,true),cs:body.getUint16(12,true),rs:body.getUint16(14,true),t:[]};
+        tbl.cells.push(cell); continue;
+      }
+      else if(tag===67&&cell){ cell.t.push(hwpText(body)); continue; }
+      else continue;
+    }
+    if(tag===67) out.push({p:hwpText(body)});
+  }
+  if(tbl) tableItems(tbl.nr,tbl.nc,tbl.cells,out);
+  return out;
+}
+function hwpItems(buf){
+  var cfb=cfbOpen(buf), top=cfb.top, hdr=null, body=null;
+  top.forEach(function(e){ if(e.name==="FileHeader") hdr=e; if(e.name==="BodyText") body=e; });
+  if(!hdr||!body) throw new Error("hwp 안에 본문이 없어요");
+  var flags=new DataView(cfb.read(hdr).buffer).getUint32(36,true);
+  if(flags&2) throw new Error("암호가 걸린 hwp 예요");
+  var secs=cfb.kids(body).filter(function(e){ return /^Section\d+$/.test(e.name); })
+    .sort(function(a,b){ return parseInt(a.name.slice(7),10)-parseInt(b.name.slice(7),10); });
+  var out=[], p=Promise.resolve();
+  secs.forEach(function(e){
+    p=p.then(function(){
+      var raw=cfb.read(e);
+      return (flags&1)?inflateRaw(raw):Promise.resolve(raw);
+    }).then(function(data){ hwpSectionItems(data,out); });
+  });
+  return p.then(function(){ return out; });
+}
+/* --- hwpx: zip 안의 Contents/sectionN.xml --- */
+function xmlUnesc(s){
+  return String(s||"").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&apos;/g,"'")
+    .replace(/&#x([0-9a-fA-F]+);/g,function(m,h){ return String.fromCharCode(parseInt(h,16)); })
+    .replace(/&#(\d+);/g,function(m,d){ return String.fromCharCode(+d); }).replace(/&amp;/g,"&");
+}
+function hwpxParaText(p){
+  var t=""; p.replace(/<hp:t(?:\s[^>]*)?>([\s\S]*?)<\/hp:t>/g,function(m,x){ t+=xmlUnesc(x); return ""; });
+  return t;
+}
+function hwpxSectionItems(xml,out){
+  var pos=0, m, re=/<hp:tbl\b[\s\S]*?<\/hp:tbl>/g;
+  function paras(s){ (s.match(/<hp:p\b[\s\S]*?<\/hp:p>/g)||[]).forEach(function(p){ out.push({p:hwpxParaText(p)}); }); }
+  while((m=re.exec(xml))!==null){
+    paras(xml.slice(pos,m.index)); pos=m.index+m[0].length;
+    var tb=m[0], nr=+(/rowCnt="(\d+)"/.exec(tb)||[0,0])[1], nc=+(/colCnt="(\d+)"/.exec(tb)||[0,0])[1], cells=[];
+    (tb.match(/<hp:tc\b[\s\S]*?<\/hp:tc>/g)||[]).forEach(function(tc){
+      var ca=/<hp:cellAddr\s+colAddr="(\d+)"\s+rowAddr="(\d+)"/.exec(tc), sp=/<hp:cellSpan\s+colSpan="(\d+)"\s+rowSpan="(\d+)"/.exec(tc);
+      var t=(tc.match(/<hp:p\b[\s\S]*?<\/hp:p>/g)||[]).map(hwpxParaText);
+      cells.push({c:ca?+ca[1]:0,r:ca?+ca[2]:0,cs:sp?+sp[1]:1,rs:sp?+sp[2]:1,t:t});
+    });
+    if(nr&&nc) tableItems(nr,nc,cells,out);
+  }
+  paras(xml.slice(pos));
+  return out;
+}
+function hwpxItems(buf){
+  var out=[];
+  function sec(i){
+    return zipEntryText(buf,"Contents/section"+i+".xml").then(function(xml){ hwpxSectionItems(xml,out); return i<9?sec(i+1):out; },
+      function(){ if(i===0) throw new Error("hwpx 안에 본문이 없어요"); return out; });
+  }
+  return sec(0);
+}
+function bylFileItems(bytes){
+  var buf=bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength);
+  if(bytes[0]===0x50&&bytes[1]===0x4B) return hwpxItems(buf);
+  return hwpItems(buf);
+}
+
+/* ---------- 별표 → 쪽 ----------
+ * 머리말은 「[별표 N] 제목」으로 만든다 — buildLawArticles 의 BP_RE 가 읽는 꼴이다.
+ * 표가 길면 줄 단위로 토막 내고, 토막마다 머리 줄을 다시 붙여 어느 토막이든 표로 읽힌다.
+ * 토막의 이름은 첫 자료 줄의 첫 칸이다(「1의2. 거짓이나 그 밖의…」). */
+var BYL_CHUNK=4500, BYL_CHUNK_MAX=60;
+function apiBylItemsPages(head,items){
+  var pages=[], buf=[head], tlen=0, hdr=[], title="";
+  function flush(){
+    if(buf.length>1) pages.push({text:buf.join("\n"),title:title});
+    buf=[head].concat(hdr.map(gridRowText)); tlen=0; title="";
+  }
+  items.forEach(function(it){
+    if(it.tstart){ hdr=[]; tlen=0; return; }
+    if(it.p!=null){ var t=it.p.replace(/\s+/g," ").trim(); if(t) buf.push(t); return; }
+    var row=it.row, first=""; for(var i=0;i<row.length;i++){ if(row[i]){ first=row[i]; break; } }
+    if(!first) return;
+    var rt=gridRowText(row);
+    if(it.head){ hdr.push(row); buf.push(rt); return; }
+    /* **표 하나가** 길 때만 자른다 — 작은 표가 여럿인 글 별표는 소제목으로 나눈다(buildLawArticles) */
+    if(tlen>BYL_CHUNK&&pages.length<BYL_CHUNK_MAX){ flush(); title=first.slice(0,24); }
+    buf.push(rt); tlen+=rt.length;
+  });
+  flush();
+  return pages;
+}
+/* JSON 별표내용(줄 목록)만으로 — 파일을 못 받았거나 서식일 때 */
+function apiBylJsonPage(head,x){
+  var lines=flatStr(x["별표내용"]).map(function(l){ return nfc(l).replace(/\s+/g," ").trim(); });
+  /* 첫머리의 「■ … [별표 8] <개정 …>」 줄은 우리 머리말과 겹친다 — 뗀다 */
+  var k=0; while(k<3&&k<lines.length&&/\[\s*별\s*[표지]/.test(lines[k])) k++;
+  var body=lines.slice(k).filter(Boolean).join("\n");
+  return body?{text:head+"\n"+body}:null;
+}
+function apiBylHead(x){
+  var kind=x["별표구분"]||"별표", num=parseInt(x["별표번호"],10)||0, gaji=parseInt(x["별표가지번호"]||"0",10)||0;
+  var title=nfc(x["별표제목"]||"").replace(/\s+/g," ").trim();
+  var n=num+(gaji?"의"+gaji:"");
+  return kind==="서식"?("[별지 제"+n+"호서식] "+title):("[별표 "+n+"] "+title);
+}
+function apiBylPages(doc,onStep){
+  var units=arr(doc["별표"]&&doc["별표"]["별표단위"]), pages=[], p=Promise.resolve(), k=0, noInflate=false;
+  units.forEach(function(x){
+    p=p.then(function(){
+      k++;
+      var head=apiBylHead(x), kind=x["별표구분"]||"별표", link=String(x["별표서식파일링크"]||"");
+      var seq=(/flSeq=(\d+)/.exec(link)||[])[1];
+      if(kind==="서식"||!seq||noInflate){ var pg=apiBylJsonPage(head,x); if(pg) pages.push(pg); return; }
+      if(onStep) onStep(k,units.length,head);
+      return lawApiCall({op:"file",flSeq:seq}).then(function(d){
+        return bylFileItems(b64Bytes(d.b64));
+      }).then(function(items){
+        /* 파일 첫머리의 「■ 법령 [별표 N] <개정…>」 문단은 우리 머리말과 겹친다 */
+        var i=0; while(i<3&&i<items.length&&items[i].p!=null&&/\[\s*별\s*[표지]/.test(items[i].p)) i++;
+        var got=apiBylItemsPages(head,items.slice(i));
+        if(!got.length){ var pg2=apiBylJsonPage(head,x); if(pg2) pages.push(pg2); }
+        else pages.push.apply(pages,got);
+      },function(err){
+        if(err&&err.message==="NOINFLATE") noInflate=true;
+        var pg3=apiBylJsonPage(head,x); if(pg3) pages.push(pg3);
+      });
+    });
+  });
+  return p.then(function(){ return {pages:pages,noInflate:noInflate}; });
+}
+
+/* ---------- 받아서 저장 ---------- */
+/* l: 이미 있는 법령 행(id 있음) 또는 {name, kind} 새 항목 */
+function lawApiImport(l){
+  var name=nfc(l.name||"").trim(), admrul=false, info=null, doc=null, pages=[], today=todayKey();
+  if(!name) return Promise.reject(new Error("법령 이름이 비었어요."));
+  showToast("법제처에서 「"+name+"」 찾는 중...");
+  return lawApiLocate(name,l.kind).then(function(r){
+    admrul=r.admrul;
+    var cur=null; r.rows.forEach(function(x){ if(!cur&&x.status==="현행") cur=x; }); cur=cur||r.rows[0];
+    info={mst:String(cur.mst),eff:String(cur.eff||""),code:String(cur.code||""),kind:apiKindOf(cur.kind,admrul),
+          target:admrul?"admrul":"law",name:cur.name};
+    var futures=admrul?[]:r.rows.filter(function(x){ return x.status==="시행예정"&&String(x.eff)>today; })
+                        .sort(function(a,b){ return String(a.eff)<String(b.eff)?-1:1; }).slice(0,4);
+    showToast("본문 받는 중...");
+    return lawApiCall({op:"body",target:admrul?"admrul":"eflaw",mst:info.mst,efYd:info.eff}).then(function(d){
+      doc=d.doc; if(!doc) throw new Error("본문이 비어 있어요.");
+      var base={};
+      if(admrul) pages=apiAdmrulPages(doc);
+      else { var got=apiLawPages(doc); pages=got.pages; base=got.map; }
+      pages=pages.concat(apiBuchikPages(doc));
+      /* 시행예정 판 — 앞 판과 다른 조만 「[시행일: …]」을 달아 넣는다 (PDF 판과 같은 꼴) */
+      var chain=Promise.resolve(base);
+      futures.forEach(function(f){
+        chain=chain.then(function(prev){
+          showToast("시행예정("+lawDateDots(f.eff)+") 조문 받는 중...");
+          return lawApiCall({op:"body",target:"eflaw",mst:String(f.mst),efYd:String(f.eff)}).then(function(d2){
+            var r2=apiLawPages(d2.doc||{}), m2=r2.map;
+            Object.keys(m2).forEach(function(k){ if(prev[k]!==m2[k]) pages.push({text:m2[k]+"\n[시행일: "+lawDateDots(f.eff)+"]"}); });
+            return m2;
+          },function(){ return prev; });
+        });
+      });
+      return chain;
+    });
+  }).then(function(){
+    return apiBylPages(doc,function(i,n,head){ showToast("별표 받는 중 "+i+"/"+n+" · "+head.slice(0,18)); });
+  }).then(function(b){
+    pages=pages.concat(b.pages);
+    if(b.noInflate) showToast("이 브라우저는 압축을 못 풀어 별표의 표는 글자로만 넣었어요.",true);
+    pages.forEach(function(p,i){ p.page=i+1; p.content=p.text; });
+    var arts=buildLawArticles(pages,name,info.kind);
+    arts.forEach(function(a){
+      var pg=pages[a.page-1];
+      if(pg&&pg.title&&a.label.indexOf(" · ")<0) a.label+=" · "+pg.title;
+      if(a.content.indexOf(GR)>=0) a.tbl=false;      /* 격자는 읽을 수 있는 표다 */
+      a.page=0; a.page_end=0;
+    });
+    if(arts.length<3) throw new Error("조문을 "+arts.length+"개밖에 못 만들었어요. 옛 조문은 그대로 두었어요.");
+    var patch={src:"api",target:info.target,mst:info.mst,lawcode:info.code,fetched:today,
+               pages:0,kind:info.kind,eff:info.eff};
+    if(l.id){
+      return saveLawArticles(l.id,arts,l).then(function(){
+        return withAuthRetry(function(){ return sb.from("law_pages").delete().eq("law_id",l.id); });
+      }).then(function(){
+        Object.keys(patch).forEach(function(k){ l[k]=patch[k]; });
+        return dbUpdate("laws",l.id,patch);
+      }).then(function(){ return {arts:arts.length,name:name}; });
+    }
+    var item={name:name,filePath:null,fileName:null,arts:0};
+    Object.keys(patch).forEach(function(k){ item[k]=patch[k]; });
+    return dbInsert("laws",item).then(function(row){
+      if(!row) throw new Error("법령 정보를 저장하지 못했어요. 법령 표에 새 칸(src·target·mst)을 만드는 SQL 을 먼저 돌려주세요.");
+      S.laws.unshift(item);
+      return saveLawArticles(row.id,arts,item);
+    }).then(function(){ return {arts:arts.length,name:name}; });
+  });
+}
+/* 받을 수 있는 것을 한 번에 — 목록의 알림에서 부른다 */
+function lawApiAll(){
+  if(lawBusy) return;
+  var todo=S.laws.filter(function(l){ return lawIsApiable(l)&&l.src!=="api"; });
+  if(!todo.length){ showToast("법제처에서 받을 법령이 없어요."); return; }
+  var msg="아래 "+todo.length+"개를 법제처 판으로 바꿉니다.\n\n"+todo.map(function(l){ return "  · "+l.name; }).join("\n")
+    +"\n\n조문을 새로 만들고 쪽 번호는 없어져요(대신 「법제처에서 보기」). PDF 파일은 그대로 둡니다.\n문서가 크면 몇 분 걸려요. 계속할까요?";
+  if(!confirm(msg)) return;
+  lawBusy=true; render();
+  var k=0, ok=0, fails=[];
+  function next(){
+    if(k>=todo.length){
+      lawBusy=false; render();
+      showToast("✓ "+ok+"/"+todo.length+"개를 법제처 판으로 바꿨어요");
+      if(fails.length) alert("못 바꾼 것:\n\n"+fails.join("\n")+"\n\n옛 조문은 그대로 있어요. 나중에 「조문 만들기」로 다시 해 보세요.");
+      return;
+    }
+    var l=todo[k++];
+    showToast("("+k+"/"+todo.length+") "+l.name);
+    lawApiImport(l).then(function(){ ok++; next(); },function(err){
+      fails.push(l.name+" — "+((err&&err.message)||"실패")); next();
+    });
+  }
+  next();
+}
+/* 이름으로 새로 받기 — 파일 없이 */
+function lawApiNew(){
+  if(lawBusy) return;
+  var name=prompt("법제처에 적힌 이름 그대로 적어주세요.\n예) 약사법 · 의약품 등의 안전에 관한 규칙 · 의약품 제조 및 품질관리에 관한 규정");
+  if(name==null) return;
+  name=nfc(name).trim(); if(name.length<2){ showToast("이름을 적어주세요."); return; }
+  var dup=S.laws.filter(function(l){ return lawBare(l.name)===lawBare(name); });
+  if(dup.length){ showToast("「"+name+"」은 이미 있어요. 목록에서 「조문 만들기」로 갱신하세요."); return; }
+  lawBusy=true; render();
+  lawApiImport({name:name}).then(function(r){
+    lawBusy=false; lawListOpen=true; render();
+    showToast("✓ 「"+r.name+"」 조문 "+r.arts+"개를 받았어요");
+  },function(err){
+    lawBusy=false; render();
+    showToast((err&&err.message)||"받지 못했어요.",true);
   });
 }
 
@@ -3275,6 +3624,20 @@ function buildLawHits(rows,terms){
     if(!found.length) return;
     found.sort(function(a,b){ return a.at-b.at; });
     var total=found.length;
+    /* 표(격자) 줄 안에 있는 낱말은 앞뒤 80자가 아니라 **그 줄 전체**를 보여준다 —
+     * 칸 하나만 잘라 오면 어느 위반사항의 처분인지 알 수 없다. 머리 줄도 같이 붙인다. */
+    var rinfo=gridRowsInfo(c), gridHits=[], seenRow={};
+    if(rinfo.length){
+      found=found.filter(function(f){
+        for(var q=0;q<rinfo.length;q++){
+          if(f.at>=rinfo[q].st&&f.at<rinfo[q].en){
+            if(!seenRow[rinfo[q].st]){ seenRow[rinfo[q].st]=1; gridHits.push(rinfo[q]); }
+            return false;
+          }
+        }
+        return true;
+      });
+    }
 
     /* 검색어가 가까이 붙어 있으면 앞뒤 80자 창이 서로 겹쳐서
      * 같은 문장이 두세 번 나온다. 겹치는 창은 하나로 합친다.
@@ -3320,6 +3683,11 @@ function buildLawHits(rows,terms){
       if(inTitle(f.at)) return;
       var bs=blockStart(f.at);
       var st=Math.max(bs,f.at-HEAD_MAX), en=Math.min(c.length,f.at+f.len+PAD);
+      /* 글 조각이 표 줄을 삼키지 않게 — 앞뒤의 표 줄 경계에서 자른다 (표는 따로 그린다) */
+      for(var ri=0;ri<rinfo.length;ri++){
+        if(rinfo[ri].en<=f.at&&rinfo[ri].en>st) st=rinfo[ri].en;
+        if(rinfo[ri].st>=f.at+f.len&&rinfo[ri].st<en) en=rinfo[ri].st;
+      }
       var last=wins.length?wins[wins.length-1]:null;
       var cut=last?crossAt(last.at,f.at):-1;
       if(last&&st<=last.en&&cut<0){ if(en>last.en) last.en=en; return; }
@@ -3370,6 +3738,10 @@ function buildLawHits(rows,terms){
       if(bare.length<8&&g.snips.length) return;
       g.snips.push({ where:where, full:full,
         text:(w.st>(w.bs==null?0:w.bs)?"…":"")+body+(w.en<c.length?"…":"") });
+    });
+    gridHits.slice(0,MAX_SNIP).forEach(function(ri){
+      var rows=ri.head&&ri.head!==ri.cells?[ri.head,ri.cells]:[ri.cells];
+      g.snips.push({ where:"", full:gridRowsPlain(rows), grid:rows, text:ri.cells.join(" | ") });
     });
     out.push(g);
   });
@@ -3537,7 +3909,10 @@ function openLawPdf(id,page){
  *   조문 머리말은 법제처 문서에서 항상 "제N조(제목)" 꼴이다.
  *   괄호 제목을 조건으로 걸면 참조와 머리말이 깔끔하게 갈린다.
  * PDF에서 뽑은 글자는 띄어쓰기가 들쭉날쭉해서(제 12 조 ( 보관 )) 공백을 허용한다. */
-var ART_RE=/제\s*(\d+)\s*조(?:\s*의\s*(\d+))?\s*\(\s*([^()]{1,40}?)\s*\)/g;
+/* 제목은 80자까지 받는다. 40자로 재던 때는 시설기준령 「제5조(페니실린제제, 세팔로스포린제제,
+ * 카바페넴제제, 모노박탐제제, 성호르몬제제 또는 세포독성 항암제제 작업소의 시설기준)」(61자)이
+ * PDF 판에서도 통째로 빠져 있었다 (2026-09-08 법제처 판을 만들다 발견). */
+var ART_RE=/제\s*(\d+)\s*조(?:\s*의\s*(\d+))?\s*\(\s*([^()]{1,80}?)\s*\)/g;
 /* 별표: "■ 법령명 [별표 6의2] <개정 …> 의약품등 수입관리 기준 (제60조 관련)"
  * 별지: "[별지 제80호서식] <개정 …> 조사표"  — 서식 구역도 같은 방식으로 잡는다 */
 /* 제목 부분은 선택으로 둔다 — 제목 뒤에 괄호가 없는 서식이 있는데,
@@ -4072,6 +4447,12 @@ function sentRange(text,at){
  * 줄바꿈과 들여쓰기만 넣는다 — 붙여 넣으면 층이 그대로 보인다. */
 var LP_PAD=["","    ","      ","        ","          "];
 function lawPlain(text){
+  var segs=gridSplit(text);
+  if(segs.length>1||segs[0].rows)
+    return segs.map(function(sg){ return sg.rows?gridRowsPlain(sg.rows):lawPlainText(sg.text); }).join("\n");
+  return lawPlainText(text);
+}
+function lawPlainText(text){
   var pts=lawBreaks(text), lines=[], prev=0;
   function push(to,lv){
     var seg=text.slice(prev,to).replace(/\s+/g," ").trim();
@@ -4202,7 +4583,7 @@ function lawPageToArt(){
 
 /* 조 본문 HTML — 조문 한 줄을 통째로 그린다 */
 function lawArtBodyHtml(){
-  return formatLawSeg(lawView.text||"",lawTermList,0).html;
+  return gridAwareHtml(lawView.text||"",lawTermList);
 }
 
 /* 표인 쪽 판별.
@@ -4281,8 +4662,11 @@ function renderLawModal(){
     artBar='<div class="lv-arts">'+esc(lawView.art||"")+((lawView.page&&!dup)?'  ·  '+span:"")+'</div>';
 
     foot='<div class="lv-foot">'
-      + '<button class="link-btn" data-act="lv-page">쪽 그대로 보기</button>'
-      + '<button class="link-btn lv-pdf" data-act="lv-pdf">PDF 원문 열기 ↗</button>'
+      + ((l&&l.src==="api")
+          ? '<span class="lv-src">법제처 '+esc(lawEffOf(l)||"")+' 시행판</span>'
+            + '<button class="link-btn lv-pdf" data-act="lv-site">법제처에서 보기 ↗</button>'
+          : '<button class="link-btn" data-act="lv-page">쪽 그대로 보기</button>'
+            + '<button class="link-btn lv-pdf" data-act="lv-pdf">PDF 원문 열기 ↗</button>')
       + '</div>';
   } else {
     var arts=(!lawView.loading&&lawView.content)?findArticles(lawView.content):[];
@@ -4299,7 +4683,7 @@ function renderLawModal(){
       + '</div>';
   }
 
-  var pageLbl=art?((lawView.page===lawView.pageEnd)?(lawView.page+"쪽"):(lawView.page+"~"+lawView.pageEnd+"쪽"))
+  var pageLbl=art?(!lawView.page?"":(lawView.page===lawView.pageEnd)?(lawView.page+"쪽"):(lawView.page+"~"+lawView.pageEnd+"쪽"))
                  :(lawView.page+" / "+((l&&l.pages)||1)+"쪽");
   el.setAttribute("data-sig",sig);
   el.innerHTML='<div class="lv-back" data-act="lv-close"></div>'
@@ -4469,99 +4853,6 @@ function lawHelpHtml(){
     +     '<li><b>공개 법령·지침서만</b> 올려주세요. 민원인 정보나 내부 검토 문서는 올리지 않습니다.</li>'
     +   '</ul></div>'
     + '</div>';
-}
-
-
-/* ---------- 민원 자료 화면 ---------- */
-function refDate(r){
-  var d=r.updatedAt||r.createdAt; if(!d) return "";
-  var x=new Date(d); if(isNaN(x)) return "";
-  return (x.getMonth()+1)+"월 "+x.getDate()+"일";
-}
-
-function renderRefs(){
-  var items=S.refs, totalParts=0, totalChars=0;
-  items.forEach(function(r){ totalParts+=(r.parts||0); totalChars+=(r.chars||0); });
-  var pills=[pill("자료 "+items.length+"건")];
-  if(totalParts) pills.push(pill("절 "+totalParts+"개"));
-
-  var list="";
-  if(items.length){
-    list='<button class="law-toggle" data-act="ref-list">'
-      + (refListOpen?"▾":"▸")+' 올려둔 자료 '+items.length+'개'
-      + '<span class="law-toggle-hint">'+(refListOpen?"접기":"갱신 · 이름 수정 · 삭제")+'</span></button>';
-    if(refListOpen) list+='<div class="law-list">'+items.map(function(r){
-      var meta=[(r.chars?Math.round(r.chars/1000)+"천 자":""),(r.parts?"절 "+r.parts+"개":""),refDate(r)?refDate(r)+" 갱신":""].filter(Boolean).join(" · ");
-      return '<div class="law-row">'
-        + '<span class="doc-ic file">▤</span>'
-        + '<span class="law-name" data-act="edit" data-table="refs" data-field="name" data-id="'+r.id+'" title="눌러서 이름 수정">'+esc(r.name)+'</span>'
-        + '<span class="law-pages">'+esc(meta)+'</span>'
-        + '<button class="link-btn" data-act="ref-update" data-id="'+r.id+'" title="새 파일로 통째로 갈아끼웁니다">다시 올려 갱신</button>'
-        + (r.filePath?'<button class="doc-act" data-act="ref-open" data-id="'+r.id+'">열기 ↗</button>':'')
-        + '<button class="del doc-del" data-act="ref-del" data-id="'+r.id+'" title="삭제">✕</button></div>';
-    }).join("")+'</div>';
-  }
-
-  view().innerHTML='<div class="page">'
-    + pageHead2("민원 자료","마스터 문서를 올려두고 그 안을 낱말로 찾아요. 고칠 때마다 다시 올리면 갱신돼요.",items.length?pills:null)
-    + '<div class="search-box"><span class="search-ic">⌕</span>'
-    +   '<input class="input search law-input" id="ref-q" placeholder="낱말을 띄어 쓰면 모두 포함 (예: 보완요청 문안)" value="'+esc(refQuery)+'" />'
-    +   '<button class="btn sm law-go" data-act="ref-search">검색</button>'
-    + '</div>'
-    + '<div class="chip-row">'
-    +   '<button class="chip '+(refNeedOnly?"":"on")+'" data-act="ref-need" data-id="off">전체</button>'
-    +   '<button class="chip '+(refNeedOnly?"on":"")+'" data-act="ref-need" data-id="on">[확인 필요]만</button>'
-    + '</div>'
-    + '<button class="upload-bar'+(refBusy?" busy":"")+'" data-act="ref-upload"'+(refBusy?" disabled":"")+'>'
-    +   '<span class="upload-ic">⬆</span><div class="import-bar-text">'
-    +   '<div class="import-bar-title">'+(refBusy?"처리 중이에요...":"자료 올리기")+'</div>'
-    +   '<div class="import-bar-sub">'+(refBusy?"창을 닫지 마세요":"워드(.docx) · PDF · 업체명·개인정보는 지우고 올려주세요")+'</div></div>'
-    +   '<span class="import-bar-go">→</span></button>'
-    + list
-    + '<div id="ref-results"></div></div>';
-
-  renderRefResults();
-  var q=document.getElementById("ref-q");
-  if(q) q.addEventListener("keydown",function(e){ if(e.key==="Enter") refSearch(); });
-}
-
-function renderRefResults(){
-  var el=document.getElementById("ref-results"); if(!el) return;
-  if(refSearching){ el.innerHTML='<p class="empty">찾는 중...</p>'; return; }
-  if(refHits===null){
-    el.innerHTML=S.refs.length
-      ? '<div class="empty-box"><div class="empty-ic">⌕</div><p>찾을 단어를 넣고 Enter를 눌러요.<br />낱말을 띄어 쓰면 <b>모두 들어 있는 절</b>만 찾아요.<br /><br />문서 안에 <b>[확인 필요: ○○]</b>로 적어 두신 곳은 위의 칩으로 모아 볼 수 있어요.</p></div>'
-      : '<div class="empty-box"><div class="empty-ic">▤</div><p>마스터 문서를 올리면 여기서 찾을 수 있어요.<br />업체명·제조번호 같은 특정 정보는 지우고 올려주세요.</p></div>';
-    return;
-  }
-  if(!refHits.length){
-    el.innerHTML='<p class="empty">'+(refTerms.length?'「'+esc(refTerms.join(" + "))+'」를 찾지 못했어요.':'해당하는 절이 없어요.')+'</p>';
-    return;
-  }
-  var total=0; refHits.forEach(function(g){ total+=g.total; });
-  var head='<div class="law-head"><div class="law-count"><b>'+refHits.length+'</b>곳'
-    + (total?' · '+total+'건':'')
-    + (refTerms.length>1?' <span class="law-and">'+esc(refTerms.join(" + "))+' 모두 포함</span>':'')+'</div></div>';
-
-  var cur=null, body="";
-  refHits.forEach(function(g){
-    var nm=refName(g.refId);
-    if(nm!==cur){ cur=nm; body+='<div class="law-group">'+esc(nm)+'</div>'; }
-    var open=!!refOpen[g.key], list=open?g.snips:g.snips.slice(0,2);
-    body+='<div class="law-hit"><div class="law-hit-body">'
-      + '<div class="law-meta">'
-      +   '<span class="law-art lv'+(g.level||0)+'">'+esc(g.label)+'</span>'
-      +   (g.need?'<span class="entry-flag">확인 필요</span>':'')
-      +   (g.total>1?'<span class="law-n">'+g.total+'건</span>':'')
-      + '</div>'
-      + list.map(function(t){ return '<div class="law-snip">'+markTerms(t,refTerms)+'</div>'; }).join("")
-      + (g.snips.length>2
-          ? '<button class="link-btn law-more-btn" data-act="ref-expand" data-key="'+esc(g.key)+'">'
-            + (open?"접기":"이 절에서 "+(g.snips.length-2)+"곳 더 보기")+'</button>'
-          : "")
-      + '</div></div>';
-  });
-  el.innerHTML=head+body;
 }
 
 
@@ -5185,6 +5476,13 @@ function renderLaws(){
       + '<div>같은 법령이 <b>'+olds.length+'개 겹쳐</b> 있어요 (옛 판이거나 같은 판 두 벌). '
       +   '두면 검색 결과가 두 번씩 나오고 AI도 헷갈려요.</div>'
       + '<button class="btn sm" data-act="law-drop-old">겹치는 것 정리</button></div>';
+    /* 법령·고시는 법제처에서 바로 받을 수 있다 — 개정판이 따라오고 별표의 표가 읽힌다.
+     * 지침서는 법제처에 없으니 그대로 PDF 다. 한 번 바꾸면 이 알림은 사라진다. */
+    var apiable=items.filter(function(l){ return lawIsApiable(l)&&l.src!=="api"; }).length;
+    if(apiable&&!lawBusy) list+='<div class="notice"><span class="notice-ic">!</span>'
+      + '<div>법제처에서 바로 받을 수 있는 법령이 <b>'+apiable+'개</b> 있어요. 받으면 <b>개정판이 저절로 따라오고</b>, '
+      +   '별표의 표(행정처분 기준 등)를 칸 그대로 읽을 수 있어요.</div>'
+      + '<button class="btn sm" data-act="law-api-all">법제처 판으로 바꾸기</button></div>';
     var need=items.filter(function(l){ return !l.arts; }).length;
     if(need) list+='<div class="notice"><span class="notice-ic">!</span>'
       + '<div>조문으로 안 쪼개진 법령이 <b>'+need+'개</b> 있어요. 이걸 해야 검색이 조 단위로 나와요.</div>'
@@ -5229,10 +5527,12 @@ function renderLaws(){
         /* 종류 배지는 뺐다 — 바로 위 묶음 머리말과 같은 말이다.
          * 시행일·쪽수는 폭을 고정해 세로로 줄을 맞춘다. */
         + '<span class="law-eff">'+esc(lawEffOf(l)||'')+'</span>'
-        + '<span class="law-pages">'+(l.pages||0)+'쪽'
+        + '<span class="law-pages">'+(l.src==="api"?'<span class="law-src">법제처</span>':(l.pages||0)+'쪽')
         +   (l.arts?' · 조문 '+l.arts+'개':'')+'</span>'
         + (l.arts?'':'<button class="link-btn law-need" data-act="law-reindex" data-id="'+l.id+'">조문 만들기</button>')
-        + '<button class="law-ic" data-act="law-pdf" data-id="'+l.id+'" data-page="1" title="PDF 원문 열기">↗</button>'
+        + (l.src==="api"
+            ? '<button class="law-ic" data-act="law-site" data-id="'+l.id+'" title="법제처에서 보기">↗</button>'
+            : '<button class="law-ic" data-act="law-pdf" data-id="'+l.id+'" data-page="1" title="PDF 원문 열기">↗</button>')
         + '<button class="law-ic del" data-act="law-del" data-id="'+l.id+'" title="삭제">✕</button></div>';
       }).join("")+'</div>';
     }
@@ -5264,6 +5564,8 @@ function renderLaws(){
     +   '<div class="import-bar-title">'+(lawBusy?"처리 중이에요...":"법령 PDF 올리기")+'</div>'
     +   '<div class="import-bar-sub">'+(lawBusy?"창을 닫지 마세요":"글자가 들어 있는 PDF만 (스캔본은 아직 안 돼요)")+'</div></div>'
     +   '<span class="import-bar-go">→</span></button>'
+    /* 법령·고시는 파일 없이 이름만으로 받는다. 지침서만 PDF 로 올린다. */
+    + '<div class="law-api-row">법령·고시는 <button class="link-btn" data-act="law-api-new"'+(lawBusy?" disabled":"")+'>법제처에서 이름으로 받기</button> — PDF 는 지침서·안내서에만</div>'
     + list
     /* 초안 창은 법령 탭에서 열리므로 여기에도 자리를 둔다 —
      * 없으면 renderAnsModal() 이 조용히 아무것도 안 해서 「눌러도 안 열린다」가 된다. */
@@ -5346,6 +5648,7 @@ function renderLawResults(){
       /* 지침서는 조가 없어 라벨이 「22쪽」이다. 그 옆에 또 「22쪽」을 붙이면
        * 같은 말이 두 번이다. 라벨이 이미 그 쪽을 말하고 있으면 생략한다. */
       +     (function(){
+              if(!g.page) return '';        /* 법제처 판은 쪽이 없다 */
               var pg=(g.page===g.pageEnd?g.page+'쪽':g.page+'~'+g.pageEnd+'쪽');
               return String(g.art||"").indexOf(pg)===0?'':'<span class="law-page">'+pg+'</span>';
             })()
@@ -5372,6 +5675,7 @@ function renderLawResults(){
              * 「이건 어디지?」가 됐다. 조각은 점선으로 갈려 있어 반복해도 안 어지럽다. */
             return list.map(function(h){
               var w=h.where?'<span class="law-where">'+esc(h.where)+'</span>':'';
+              if(h.grid) return '<div class="law-snip law-snip-grid">'+gridHtml(h.grid,lawTermList)+'</div>';
               return '<div class="law-snip'+(w?'':' law-snip-same')+'">'
                 + w + lawSegHtml(h.text,lawTermList,0)+'</div>';
             }).join("");
@@ -5535,14 +5839,10 @@ document.getElementById("app").addEventListener("click",function(e){
       showToast("✓ 옛 판 "+olds.length+"개를 지웠어요");
       break; }
     case "law-help": lawHelpToggle(); break;
-    case "ref-search": refSearch(); break;
-    case "ref-list": refListOpen=!refListOpen; render(); break;
-    case "ref-upload": refUploadClick(null); break;
-    case "ref-update": refUploadClick(id); break;
-    case "ref-open": { var rr=S.refs.find(function(x){return x.id===id;}); if(rr&&rr.filePath) openStorageFile(rr.filePath); break; }
-    case "ref-del": refDel(id); break;
-    case "ref-need": refNeedOnly=(id==="on"); if(refQuery||refNeedOnly) refSearch(); else render(); break;
-    case "ref-expand": { var rk=el.getAttribute("data-key"); refOpen[rk]=!refOpen[rk]; renderRefResults(); break; }
+    case "law-api-all": lawApiAll(); break;
+    case "law-api-new": lawApiNew(); break;
+    case "law-site": { var ls=S.laws.find(function(x){ return x.id===id; }); if(ls) window.open(lawSiteUrl(ls),"_blank"); break; }
+    case "lv-site": { var lv2=lawView&&S.laws.find(function(x){ return x.id===lawView.lawId; }); if(lv2) window.open(lawSiteUrl(lv2),"_blank"); break; }
     case "board-more": { var bt=el.getAttribute("data-table"); boardOpen[bt]=!boardOpen[bt]; render(); break; }
     case "board-clear": { var ct=el.getAttribute("data-table"); boardSearch[ct]=""; render(); break; }
     case "lv-art": lawPageToArt(); break;

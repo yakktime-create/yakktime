@@ -61,7 +61,12 @@ Deno.serve(async (req) => {
       const t = await getText(u);
       let d: any; try { d = JSON.parse(t); } catch { return json({ error: "법제처가 JSON 이 아닌 답을 줬어요: " + t.slice(0, 80) }); }
       const top = d[Object.keys(d)[0]] || {};
-      const list = ([] as any[]).concat(...Object.values(top).filter(Array.isArray) as any[]);
+      // 결과가 하나면 배열이 아니라 객체 하나로 온다 (행정규칙 검색에서 실제로 그랬다)
+      const list: any[] = [];
+      for (const v of Object.values(top)) {
+        if (Array.isArray(v)) list.push(...v);
+        else if (v && typeof v === "object" && ((v as any)["행정규칙명"] || (v as any)["법령명한글"])) list.push(v);
+      }
       const rows = list.map((r: any) => target === "admrul"
         ? { name: r["행정규칙명"], mst: r["행정규칙일련번호"], eff: r["시행일자"], status: r["현행연혁구분"], kind: r["행정규칙종류"], code: r["행정규칙ID"], pub: r["발령일자"] }
         : { name: r["법령명한글"], mst: r["법령일련번호"], eff: r["시행일자"], status: r["현행연혁코드"], kind: r["법령구분명"], code: r["법령ID"], pub: r["공포일자"] });

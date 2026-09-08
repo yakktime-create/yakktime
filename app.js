@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v143";
+var APP_VER="v144";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2267,7 +2267,43 @@ function saveLawArticles(lawId,arts,localItem){
   }).then(function(){
     if(localItem) localItem.arts=arts.length;
     return dbUpdate("laws",lawId,{arts:arts.length});
-  }).then(unlock,fail);
+  }).then(function(){ return lawEmbedRun(lawId); })   /* 조문이 새로 생겼으니 뜻 지문도 새로 */
+  .then(unlock,fail);
+}
+
+/* ---------- 뜻 지문(임베딩) ----------
+ * 조문마다 「뜻 지문」을 두면 낱말이 달라도 뜻이 닿는 조문을 찾는다(law-pick 이 쓴다).
+ * 조문을 새로 만들면 지문도 새로 만든다. 한 번에 100개씩, 다 될 때까지 되풀이.
+ * 열쇠(VOYAGE_API_KEY)가 없으면 한 번만 알리고 조용히 넘어간다 — 검색은 예전처럼 된다. */
+var lawEmbedWarned=false;
+function lawEmbedRun(lawId,total){
+  return sb.functions.invoke("law-embed",{body:{op:"run",lawId:lawId||null}}).then(function(r){
+    var d=r&&r.data;
+    if(!d){ showToast("뜻 지문을 만들지 못했어요: "+((r&&r.error&&r.error.message)||"응답 없음"),true); return; }
+    if(d.noKey){ if(!lawEmbedWarned){ lawEmbedWarned=true; showToast("뜻 검색 열쇠(VOYAGE_API_KEY)가 아직 없어요 — 낱말로만 찾아요.",true); } return; }
+    if(d.error&&d.retryAfter){
+      showToast("뜻 지문 만드는 중… 잠시 쉬었다 이어가요 ("+d.retryAfter+"초)");
+      return new Promise(function(res){ setTimeout(res,(d.retryAfter+2)*1000); }).then(function(){ return lawEmbedRun(lawId,total); });
+    }
+    if(d.error){ showToast(d.error,true); return; }
+    if(d.remaining>0){ showToast("뜻 지문 만드는 중 · 남은 조문 "+d.remaining+"개"); return lawEmbedRun(lawId,total); }
+    if(d.done) showToast("✓ 뜻 지문을 만들었어요");
+  },function(e){ showToast("뜻 지문을 만들지 못했어요: "+(e&&e.message),true); });
+}
+/* 목록을 열 때 한 번 — 지문이 없는 조문이 있으면 알림으로 채우게 한다 */
+var lawEmbStat=null;
+function lawEmbedCheck(){
+  if(lawEmbStat!==null) return;
+  lawEmbStat={missing:0,total:0,ready:true,loading:true};
+  sb.functions.invoke("law-embed",{body:{op:"status"}}).then(function(r){
+    var d=(r&&r.data)||{}; lawEmbStat={missing:+d.missing||0,total:+d.total||0,ready:d.ready!==false,loading:false};
+    if(lawEmbStat.missing) render();
+  },function(){ lawEmbStat={missing:0,total:0,ready:false,loading:false}; });
+}
+function lawEmbedAll(){
+  if(lawBusy) return;
+  lawBusy=true; render();
+  lawEmbedRun(null).then(function(){ lawBusy=false; lawEmbStat=null; render(); lawEmbedCheck(); });
 }
 
 /* 조문 판별 규칙이 나아질 때마다 다시 올리지 않아도 되게 다시 계산한다.
@@ -3568,6 +3604,7 @@ function lawAskHtml(){
     + (d.truncated?'<p class="ask-warn">올려둔 조문이 너무 많아 <b>앞쪽 '+d.arts+'개만</b> 봤어요. 위에서 법령을 골라 범위를 좁혀주세요.</p>':'')
     + (d.boosted?'<p class="ask-note">조 제목에는 안 드러나서 <b>본문을 낱말로 뒤져</b> 조문 '+d.boosted+'개를 후보에 더 넣었어요'
         + (d.words&&d.words.length?' (찾은 낱말 — '+esc(d.words.join(' · '))+')':'')+'.</p>':'')
+    + (d.semantic?'<p class="ask-note">낱말이 달라도 <b>뜻이 닿는 조문</b> '+d.semantic+'개를 후보에 더 넣었어요.</p>':'')
     + (d.skipped?'<p class="ask-note">아직 시행 전인 개정 조문 '+d.skipped+'개는 빼고 봤어요 — 답변 근거는 <b>지금 적용되는 조문</b>이어야 하니까요. 그 조문들은 낱말 검색에서는 그대로 보입니다.</p>':'')
     /* 등급이 무슨 뜻인지 결과 바로 옆에 적어 둔다. 사용법 안에만 있으면
      * 펼쳐 보지 않는 한 「매우 높음이 뭐 기준인데」로 남는다. */
@@ -5550,6 +5587,11 @@ function renderLaws(){
       + '<div>법제처에서 바로 받을 수 있는 법령이 <b>'+apiable+'개</b> 있어요. 받으면 <b>개정판이 저절로 따라오고</b>, '
       +   '별표의 표(행정처분 기준 등)를 칸 그대로 읽을 수 있어요.</div>'
       + '<button class="btn sm" data-act="law-api-all">법제처 판으로 바꾸기</button></div>';
+    lawEmbedCheck();
+    if(lawEmbStat&&!lawEmbStat.loading&&lawEmbStat.missing&&lawEmbStat.ready&&!lawBusy)
+      list+='<div class="notice"><span class="notice-ic">!</span>'
+        + '<div>뜻으로 찾을 준비가 안 된 조문이 <b>'+lawEmbStat.missing+'개</b> 있어요. 준비하면 <b>낱말이 달라도 뜻이 닿는 조문</b>을 AI 가 찾아요. 돈은 안 들어요.</div>'
+        + '<button class="btn sm" data-act="law-embed-all">뜻 검색 준비하기</button></div>';
     var need=items.filter(function(l){ return !l.arts; }).length;
     if(need) list+='<div class="notice"><span class="notice-ic">!</span>'
       + '<div>조문으로 안 쪼개진 법령이 <b>'+need+'개</b> 있어요. 이걸 해야 검색이 조 단위로 나와요.</div>'
@@ -5910,6 +5952,7 @@ document.getElementById("app").addEventListener("click",function(e){
       break; }
     case "law-help": lawHelpToggle(); break;
     case "law-api-all": lawApiAll(); break;
+    case "law-embed-all": lawEmbedAll(); break;
     case "law-api-new": lawApiNew(); break;
     case "law-cand": lawApiPick(lawApiCands&&lawApiCands.rows[parseInt(id,10)]); break;
     case "law-cands-x": lawApiCands=null; render(); break;

@@ -56,6 +56,20 @@ const MAX_PICKS  = 10;     // 2차에서 남길 최종 수
 const ART_MAX    = 2800;   // 조 하나에서 읽을 최대 글자 (후보를 더 많이 읽히려고 줄임)
 const TOTAL_MAX  = 60000;  // 2차에 넣을 글자 총량
 const PREVIEW    = 180;    // 화면에 보여줄 미리보기
+// 뜻으로 찾기 — 질문의 지문과 가까운 조문(law_match). 낱말이 안 맞아도 찾는다.
+// 「같이 2차 포장」→ 법령의 「구획」을 낱말로는 못 찾았다(2026-09-08). 맨 앞에 끼워 넣는다.
+const SEM_K      = 24;     // pgvector 에서 받아올 수
+const SEM_MAX    = 12;     // 후보에 보탤 최대 수
+const SEM_MIN    = 0.35;   // 이보다 먼 것은 안 보탠다 (코사인 유사도)
+async function voyageQuery(key: string, q: string): Promise<number[] | null> {
+  const r = await fetch("https://api.voyageai.com/v1/embeddings", {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ input: [q.slice(0, 4000)], model: "voyage-4-large", input_type: "query" }),
+  });
+  if (!r.ok) return null;
+  const j = await r.json().catch(() => null);
+  return j?.data?.[0]?.embedding || null;
+}
 // 1차는 **조 제목만** 본다. 그래서 제목에 그 말이 없는 상위법이 통째로 빠진다 —
 // 「실태조사 생략 기준」을 물었더니 지침서 둘만 나오고 「의약품 등의 안전에 관한
 // 규칙」이 안 딸려왔다. 규칙의 조 제목은 「제4조(제조판매·수입 품목의 허가 신청)」이라
@@ -477,6 +491,33 @@ Deno.serve(async (req) => {
       cand = cand.slice(0, 10).concat(extra, cand.slice(10));
     }
 
+    // --- 뜻으로 후보를 보탠다 ------------------------------------------------
+    // 열쇠가 없거나 지문이 아직 없으면 조용히 건너뛴다 — 예전과 똑같이 돈다.
+    let semantic = 0;
+    const vKey = Deno.env.get("VOYAGE_API_KEY");
+    if (vKey) {
+      try {
+        const qe = await voyageQuery(vKey, question);
+        if (qe) {
+          const rr = await fetch(`${SB_URL}/rest/v1/rpc/law_match`, {
+            method: "POST", headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ q: "[" + qe.join(",") + "]", k: SEM_K, law_ids: only }),
+          });
+          const sims: any[] = rr.ok ? await rr.json() : [];
+          const have2 = new Set(cand.map((c: any) => String(c.id)));
+          const nOf2 = new Map<string, number>(live.map((a: any, i: number) => [String(a.id), i + 1]));
+          const semExtra = sims
+            .filter((x) => Number(x.sim) >= SEM_MIN && nOf2.has(String(x.id)) && !have2.has(String(x.id)))
+            .slice(0, SEM_MAX)
+            .map((x) => { const n = nOf2.get(String(x.id))!; return { n, ...index[n], sim: Number(x.sim) }; });
+          semantic = semExtra.length;
+          dbg.sem = sims.length; dbg.semTop = sims.slice(0, 3).map((x) => [x.label, Number(x.sim).toFixed(2)]);
+          // 뜻이 닿는 것을 **맨 앞에** — 예산은 뒤에서부터 잘린다
+          cand = semExtra.concat(cand);
+        }
+      } catch (e) { dbg.semErr = String(e).slice(0, 120); }
+    }
+
     if (!cand.length) {
       return json({ picks: [], note: String(p1.note || "관련 조문을 찾지 못했어요."),
                     arts: live.length, skipped, truncated: arts.length >= MAX_ARTS,
@@ -624,6 +665,7 @@ Deno.serve(async (req) => {
       truncated: arts.length >= MAX_ARTS,
       // 제목에는 안 드러나서 낱말로 찾아 보탠 상위법 조문 수
       boosted,
+      semantic,
       words,
       dbg,
       krw: Math.round((usdOf(r1.usage, cfg) + usdOf(r2.usage, cfg)) * KRW),

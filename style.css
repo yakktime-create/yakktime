@@ -1384,6 +1384,8 @@ textarea.ans-q,textarea.ans-final{width:100%;resize:vertical;line-height:var(--l
 .ans-row-body{flex:1;min-width:0;}
 .ans-row-t{font-size:var(--fs-base);font-weight:650;line-height:var(--lh-tight);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ans-row-g{font-size:var(--fs-md);color:#43514A;margin-top:3px;line-height:var(--lh-snug);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
 .ans-row-s{font-size:var(--fs-sm);color:var(--muted);margin-top:2px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ans-row-go{flex-shrink:0;color:var(--muted);font-size:var(--fs-base);}

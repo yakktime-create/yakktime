@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v158";
+var APP_VER="v159";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -5422,14 +5422,17 @@ function renderAnswers(){
 
   var list=items.map(function(a){
     var open=(ansOpenId===a.id);
-    var cites=(a.cites||[]).map(function(c){ return c.law+" "+c.num; }).join(" · ");
+    var nc=(a.cites||[]).length, gist=ansSummaryOf(a).replace(/\s+/g," ").trim();
     return '<div class="ans-row'+(open?" on":"")+'">'
       + '<div class="ans-row-head" data-act="ans-open" data-id="'+esc(a.id)+'">'
       +   '<span class="doc-ic file">▤</span>'
       +   '<div class="ans-row-body">'
       +     '<div class="ans-row-t">'+esc(a.title||"(제목 없음)")+'</div>'
-      +     '<div class="ans-row-s">'+esc(ansDateOf(a))+(cites?' · '+esc(cites):'')
-      +       (a.mode==="help"?' · 도움말 포함':'')+(a.final?' · <b>최종본 있음</b>':'')+'</div>'
+      /* 안 펼치고도 요지를 읽는다(이랑님 2026-09-09) — 제목이 핵심 낱말이 된 뒤로 요지 문장은 본문 첫 줄에서 되찾아
+         둘째 줄에 둔다. 옛 답변처럼 제목이 곧 요지면 되풀이하지 않는다. 근거는 이름을 늘어놓지 않고 개수만. */
+      +     (gist&&gist.slice(0,24)!==String(a.title||"").trim().slice(0,24)?'<div class="ans-row-g">'+esc(gist)+'</div>':'')
+      +     '<div class="ans-row-s">'+esc(ansDateOf(a))+(nc?' · 근거 '+nc+'건':'')
+      +       (a.mode==="help"?' · 참고 붙임':'')+(a.final?' · <b>고친 글 있음</b>':'')+'</div>'
       +   '</div>'
       +   '<span class="ans-row-go">'+(open?"▾":"›")+'</span>'
       +   '<button class="del doc-del" data-act="ans-del" data-id="'+esc(a.id)+'" title="삭제">✕</button>'

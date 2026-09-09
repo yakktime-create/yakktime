@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v152";
+var APP_VER="v153";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3488,9 +3488,10 @@ function lawAskRun(){
      * 아니라 「어느 답변엔가 인용한 적 있다」는 뜻이라, 이번 질문에 맞는지는 이랑님이
      * 본다(2026-09-08 「애매한 것도 다 차용하게 하는 게 좋나」 → 아니다). */
     var usedOf=ansUsedMap();
+    /* 처음부터 체크되는 것은 **「인용 필수」만**(이랑님: 「인용 필수만 선체크하자」). 나머지는 펼쳐 두되 체크 안 함. */
     (d.picks||[]).forEach(function(p){
       p.used=usedOf[ansUsedKey(p.law,p.label)]||0;
-      if(askRank(p.grade)<=ASK_KEEP) lawAskSel[p.id]=true;
+      if(p.need==="인용 필수") lawAskSel[p.id]=true;
     });
     done();
   }).catch(function(e){ showToast("물어보지 못했어요: "+e.message,true); done(); });
@@ -3549,6 +3550,8 @@ function lawAskHtml(){
   var head='<div class="ask-head"><span class="ask-qt">「'+esc(d.q)+'」</span>'
     + '<span class="ask-cost">이번 '+(d.krw||0)+'원</span>'
     + '<button class="link-btn quiet-link ask-x" data-act="ask-close" title="AI 결과 닫기">닫기 ✕</button></div>'
+    /* AI 가 질문을 어떻게 읽었는지 보여준다 — 핀트가 어긋났으면 여기서 바로 보인다(이랑님: 「질문의 핵심을 담는 기능도 있나?」) */
+    + (d.gist?'<p class="ask-gist"><b>AI 가 읽은 핵심</b> — '+esc(d.gist)+' <span class="ask-dim">이게 아니면 질문을 고쳐 다시 물어보세요.</span></p>':'')
     + (lawHits!==null?'<p class="ask-note">AI 가 찾은 조문이에요. 위의 낱말 검색 결과와 함께 골라 「답변 초안」에 넣을 수 있어요.</p>':'');
   /* 조문이 없는 데는 두 가지가 있다. 「찾아봤는데 없다」와 「AI 가 멈췄다」는
    * 뜻이 정반대인데 예전엔 둘 다 「못 찾았어요」로 나와, 거부당한 줄 모르고

@@ -250,7 +250,9 @@ const RULES2 = `${HEAD}
     "배경 확인" 낱말 뜻풀이(정의)나 신청 절차·벌칙만 있고 답은 없다.
 
   need — 민원 답변서를 쓸 때 이 조를 인용해야 하나?
-    "인용 필수"   이 조를 안 적으면 답변이 성립하지 않는다.
+    "인용 필수"   이 조를 안 적으면 답변이 성립하지 않는다. **<핵심> 에 곧바로 답하는 조에만** 준다.
+                  주변 사정(병원체 관리·시설 일반·정의)은 아무리 관련 있어도 「있으면 좋음」이다.
+                  실제로 「같이 포장해도 되나」에 바이러스 벡터 시설 방침이 인용 필수로 붙어 핀트가 어긋났다.
     "있으면 좋음" 적어 두면 답변이 튼튼해진다.
     "없어도 됨"   안 적어도 답변은 된다.
 
@@ -574,7 +576,7 @@ Deno.serve(async (req) => {
       // 1차만 올리고 2차를 안 올린 것이 화근이었다. 안 쓰면 값은 그대로다.
       max_tokens: 6000 * cfg.room,
       system: [{ type: "text", text: RULES2 }],
-      messages: [{ role: "user", content: `민원 질문:\n${question}\n\n<조문>${sheet}</조문>` }],
+      messages: [{ role: "user", content: `민원 질문:\n${question}\n\n<핵심>${String(p1.gist || "").trim() || "(1차가 요지를 내지 않았다 — 질문에서 직접 읽는다)"}</핵심>\n\n<조문>${sheet}</조문>` }],
       output_config: outCfg(cfg, SCHEMA2),
     });
     const p2 = readJson(r2);

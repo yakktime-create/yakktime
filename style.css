@@ -718,6 +718,8 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
    「답변에 씀」 알약이 한 줄에 셋이라 무엇이 제목인지 안 보였다. 조 전체 보기 창의 머리줄(.lv-arts)은 그대로다. */
 .law-art{font-size:var(--fs-lg);font-weight:700;color:var(--ink);letter-spacing:var(--ls-head);
   white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;line-height:var(--lh-tight);}
+/* 조 이름의 구분선 「별표 17 | 5.2 …」 — 가운뎃점은 번호와 제목 사이에서 잘 안 보였다 */
+.law-art-sep{display:inline-block;margin:0 .4em;color:var(--muted);opacity:.45;font-weight:300;}
 .lv-arts{flex-shrink:0;padding:9px 16px;border-bottom:1px solid var(--line);
   background:var(--paper);font-size:var(--fs-sm);font-weight:650;color:#6B5518;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}

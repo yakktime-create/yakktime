@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v157";
+var APP_VER="v158";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -4716,7 +4716,7 @@ function renderLawModal(){
     /* 지침서는 조가 없어 라벨이 「34쪽」이다. 그 옆에 또 「34쪽」을 붙이면 같은 말이
      * 두 번이다 — 검색 결과 카드와 같은 규칙을 여기에도 건다. */
     var dup=String(lawView.art||"").indexOf(span)===0;
-    artBar='<div class="lv-arts">'+esc(lawView.art||"")+((lawView.page&&!dup)?'  ·  '+span:"")+'</div>';
+    artBar='<div class="lv-arts">'+lawArtHtml(lawView.art||"")+((lawView.page&&!dup)?'  ·  '+span:"")+'</div>';
 
     foot='<div class="lv-foot">'
       + ((l&&l.src==="api")
@@ -5019,6 +5019,13 @@ function ansUsedMap(){
 }
 function ansUsedCount(law,label){ return ansUsedMap()[ansUsedKey(law,label)]||0; }
 /* 칩 하나. 횟수는 두 번째부터 적는다 — 「1번 씀」은 「씀」과 같은 말이다. */
+/* 조 이름 「별표 17 · 5.2 제조 시 교차오염의 방지」의 가운뎃점을 세로줄로 그린다(이랑님 2026-09-09).
+   저장된 라벨은 그대로고(검색·복사·답변은 「·」 그대로) 화면만 바꾼다 — 첫 「·」만, 뒤의 「·」은 제목 안의 것일 수 있다. */
+function lawArtHtml(label){
+  var t=String(label||""), i=t.indexOf(" · ");
+  if(i<0) return esc(t);
+  return esc(t.slice(0,i))+'<span class="law-art-sep">|</span>'+esc(t.slice(i+3));
+}
 function ansUsedChip(n){ return n?'<span class="law-used" title="「민원 답변」에 근거로 담은 조문">답변에 '+(n>1?n+'번 ':'')+'씀</span>':''; }
 /* 고른 카드에서 근거 조문 묶음을 만든다. 발췌가 있는 카드(낱말 검색)는 검색어가 든 항 전문을,
  * 그 밖(AI · 뜻)은 조문 원문을 표에서 받아 온다. AI 근거 문장(quote)은 핵심 구절로 쓴다. */
@@ -5840,7 +5847,7 @@ function renderLawResults(){
       + '<div class="law-hit-body" data-act="law-art" data-art-id="'+c.artId+'" data-id="'+c.lawId+'">'
       +   '<div class="law-meta">'
       +     (p?'<span class="ask-score n-'+needRank(p.need)+'">'+esc(p.need||"있으면 좋음")+'</span>':'')
-      +     '<span class="law-art">'+esc(c.art)+'</span>'
+      +     '<span class="law-art">'+lawArtHtml(c.art)+'</span>'
       +     ansUsedChip(c.used)
       +     (lawIsFuture(c.art)?'<span class="law-soon">아직 시행 전</span>':'')
       +     (function(){ if(!g||!g.page) return ''; var pg=(g.page===g.pageEnd?g.page+'쪽':g.page+'~'+g.pageEnd+'쪽'); return String(c.art||"").indexOf(pg)===0?'':'<span class="law-page">'+pg+'</span>'; })()

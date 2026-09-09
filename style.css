@@ -1323,7 +1323,10 @@ textarea.ans-q,textarea.ans-final{width:100%;resize:vertical;line-height:var(--l
   line-height:var(--lh-snug);}
 
 /* 두 판을 나란히 — 좁으면 하나만 보이고 좌우로 넘긴다 */
-.ans-panes{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-3);margin-top:var(--sp-4);}
+.ans-panes{display:grid;grid-template-columns:1fr;gap:var(--sp-3);margin-top:var(--sp-4);}
+.ans-help-chk{display:inline-flex;align-items:center;gap:6px;font-weight:600;color:var(--accent);margin-left:var(--sp-2);cursor:pointer;min-height:var(--tap);}
+.ans-help-chk input{width:16px;height:16px;}
+.ans-final-foot{padding:var(--sp-2) 0 0;justify-content:flex-end;}
 .ans-pane{border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;
   display:flex;flex-direction:column;background:var(--surface);}
 .ans-pane-head{padding:var(--sp-2) var(--sp-3);background:var(--paper);

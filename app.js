@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v148";
+var APP_VER="v149";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -5027,6 +5027,7 @@ function ansMark(i){
  * 바꾸고 싶어진다. 기본값은 「2025 행정업무운영 편람」 기준이다. */
 var ANS_FMT0={
   hangul:false,   /* false = 1. 2. 3. (편람 기준) · true = 가. 나. 다. */
+  brief:true,     /* true = 핵심 구절 한 문장만 「…에 따라 ~하여야 합니다」 · false = 조문 전체 */
   end:true,       /* 끝. 표시 (규칙 제4조제5항) */
   head:"귀하께서 주신 내용은 {요지}(으)로 이해되며, 이에 대한 답변입니다.",
   cite:"「{법령명}」 {조항}에 따라",
@@ -5118,7 +5119,7 @@ function ansCitesFromAsk(then,quiet){
       var a=by[String(p.id)]; if(!a) return;
       out.push({ law:nfc(p.law||""), kind:nfc(p.kind||""), num:ansNumOf(a.label),
                  label:nfc(a.label||""), text:lawPlain(cleanPdfText(nfc(a.content||""))),
-                 table:!!a.tbl });
+                 quote:nfc(p.quote||""), table:!!a.tbl });
     });
     then(out);
   });
@@ -5148,6 +5149,8 @@ function ansMake(){
     if(r&&r.error){ d.err=String(r.error.message||r.error); render(); return; }
     if(!v||v.error){ d.err=(v&&v.error)||"응답이 비어 있어요."; render(); return; }
     d.summary=v.summary||""; d.help=v.help||""; d.krw=v.krw||0; d.made=true;
+    /* 결국 쓰는 곳은 최종본이다 — 만들어지면 바로 채워 둔다(비어 있을 때만). */
+    if(!(d.final&&d.final.trim())) d.final=ansText(d.mode||"plain");
     d.dropped=!!v.dropped;
     render();
   },function(e){ d.busy=false; d.err=String(e&&e.message||e); render(); });
@@ -5166,18 +5169,48 @@ function ansCiteLines(text){
   });
   return out;
 }
+/* 조문 전체를 구구절절 붙이면 답변이 길고 읽히지 않는다(이랑님: 「핵심 구절만 남기는 게 좋을 듯」).
+ * 근거 문장 하나를 고른다 — ① AI 가 원문과 대조해 짚은 근거 문장 ② 없으면 검색 낱말이 가장 많이
+ * 든 문장 ③ 그것도 없으면 첫 문장. 항·호·목 표시(① 1. 가.)와 소제목(8.2 포장공정관리)은 뗀다. */
+function ansKeyLine(c){
+  var q=String(c.quote||"").trim();
+  var sents=String(c.text||"").replace(/\s+/g," ").match(/[^.]*\.(?=\s|$)/g)||[];
+  var clean=function(t){ return t.replace(/^\s*(?:[\u2460-\u2473]|\d{1,2}(?:\.\d+)*\.?|[가-힣]\.|[가-힣]\))\s*/,"").replace(/^\s*\d+(?:\.\d+)+\s+[^.]{2,20}\s+(?=[가-힣])/,"").trim(); };
+  if(q) return clean(q.replace(/\s+/g," "));
+  var terms=(lawTermList||[]).concat((lawAsk&&lawAsk.words)||[]).filter(function(w){ return w&&w.length>=2; });
+  var best=null, bestN=0;
+  sents.forEach(function(t){
+    var n=0; terms.forEach(function(w){ if(t.indexOf(w)>=0) n++; });
+    if(n>bestN&&t.length>=15){ best=t; bestN=n; }
+  });
+  if(!best) best=sents.filter(function(t){ return clean(t).length>=15; })[0]||sents[0]||String(c.text||"").slice(0,200);
+  return clean(best);
+}
+/* 법령 말투 → 공문 말투. 끝만 바꾼다(편람: 「하시기 바랍니다」 꼴). */
+function ansPolite(t){
+  t=String(t||"").trim().replace(/\.$/,"");
+  var r=[[/한다$/,"합니다"],[/된다$/,"됩니다"],[/있다$/,"있습니다"],[/없다$/,"없습니다"],[/이다$/,"입니다"],[/하다$/,"합니다"],[/않는다$/,"않습니다"],[/아니한다$/,"아니합니다"],[/한다\)$/,"합니다)"]];
+  for(var i=0;i<r.length;i++){ if(r[i][0].test(t)) return t.replace(r[i][0],r[i][1])+"."; }
+  return t+".";
+}
 function ansBlocks(mode){
   var d=ansDraft; if(!d) return [];
   var out=[], n=0;
   out.push({t:ansMark(n++)+" "+ansFmt.head.replace("{요지}",d.summary||"(요지)"),lv:0});
   d.cites.forEach(function(c){
     out.push({t:"",lv:9});
-    out.push({t:ansMark(n++)+" "+ansFmt.cite.replace("{법령명}",c.law).replace("{조항}",c.num),lv:0});
-    out.push({t:"",lv:9});
+    var headLine=ansMark(n++)+" "+ansFmt.cite.replace("{법령명}",c.law).replace("{조항}",c.label||c.num);
     if(c.table){
       /* 표로 된 대목은 글자를 안 보여준다 — 칸이 뒤섞여 읽을 수 없다 */
+      out.push({t:headLine,lv:0}); out.push({t:"",lv:9});
       out.push({t:"(칸이 뒤섞여 읽기 어려운 대목입니다. PDF 원문에서 확인해 붙여 넣어주세요.)",lv:1});
-    } else ansCiteLines(c.text).forEach(function(x){ out.push(x); });
+    } else if(ansFmt.brief){
+      /* 「N. 「법령」 조항에 따라 ~하여야 합니다.」 한 문단 */
+      out.push({t:headLine+" "+ansPolite(ansKeyLine(c)),lv:0});
+    } else {
+      out.push({t:headLine,lv:0}); out.push({t:"",lv:9});
+      ansCiteLines(c.text).forEach(function(x){ out.push(x); });
+    }
   });
   out.push({t:"",lv:9});
   out.push({t:ansMark(n++)+" "+ansFmt.tail+(ansFmt.end?"  끝.":""),lv:0});
@@ -5243,12 +5276,12 @@ function ansSave(mode){
     if(i>=0){ var k; for(k in item) S.answers[i][k]=item[k]; }
     dbUpdate("answers",d.id,item);
     showToast("✓ 저장했어요");
-    ansDraft=null; render(); return;
+    ansDraft=null; active="answers"; render(); return;
   }
   dbInsert("answers",item).then(function(row){
     if(row){ S.answers.unshift(row); }
     showToast("✓ 「민원 답변」에 담았어요");
-    ansDraft=null; render();
+    ansDraft=null; active="answers"; render();
   },function(e){ showToast("저장하지 못했어요: "+(e&&e.message||e),true); });
 }
 /* 지우기는 기존 del() 을 그대로 쓴다 — 되돌리기까지 이미 들어 있다 */
@@ -5299,6 +5332,9 @@ function ansModalHtml(){
 
   var fmt=ansFmtOpen
     ? '<div class="ans-fmt">'
+      + '<div class="ans-fmt-row"><span class="ans-fmt-k">조문 인용</span>'
+      +   '<button class="chip '+(ansFmt.brief?"on":"")+'" data-act="ans-brief" data-id="on">핵심 구절만<span class="ans-fmt-hint">한 문장</span></button>'
+      +   '<button class="chip '+(ansFmt.brief?"":"on")+'" data-act="ans-brief" data-id="off">조문 전체</button></div>'
       + '<div class="ans-fmt-row"><span class="ans-fmt-k">항목 기호</span>'
       +   '<button class="chip '+(ansFmt.hangul?"":"on")+'" data-act="ans-mark" data-id="num">1. 2. 3.<span class="ans-fmt-hint">편람 기준</span></button>'
       +   '<button class="chip '+(ansFmt.hangul?"on":"")+'" data-act="ans-mark" data-id="han">가. 나. 다.</button></div>'
@@ -5317,33 +5353,23 @@ function ansModalHtml(){
 
   var panes="";
   if(d.made){
-    panes='<div class="ans-panes" id="ans-panes">'
-      + ["plain","help"].map(function(m){
-          var on=(d.mode===m);
-          return '<div class="ans-pane'+(on?" on":"")+'" data-mode="'+m+'">'
-            /* 두 판은 「같은 글 + 꼬리」 관계라 위만 보면 똑같아 보인다.
-             * 무엇이 다른지 머리말에서 바로 알린다. */
-            + '<div class="ans-pane-head">'+(m==="plain"?"조문만":"조문 + 도움말")
-            +   (m==="help"
-                  ? (d.help
-                      ? ' <span class="ans-pane-plus">아래에 참고 '+d.help.split(/\n+/).filter(function(x){return x.trim();}).length+'줄</span>'
-                      : ' <span class="ans-pane-note">참고할 것이 없다고 판단했어요</span>')
-                  : ' <span class="ans-pane-note">공문에 그대로</span>')
-            /* 없는 법령 이름을 든 문장은 서버가 버린다. 조용히 지우면
-             * 왜 짧아졌는지 알 수가 없으므로 여기서 알린다. */
-            +   ((m==="help"&&d.dropped)?' <span class="ans-pane-note">· 근거에 없는 법령을 든 문장은 뺐어요</span>':'')+'</div>'
-            + '<pre class="ans-body">'+esc(ansText(m))+'</pre>'
-            + '<div class="ans-pane-foot">'
-            +   '<button class="btn quiet sm" data-act="ans-copy" data-id="'+m+'">복사</button>'
-            +   '<button class="btn quiet sm" data-act="ans-txt" data-id="'+m+'">텍스트</button>'
-            +   '<button class="btn quiet sm" data-act="ans-hwpx" data-id="'+m+'">한글</button>'
-            +   '<button class="btn sm" data-act="ans-save" data-id="'+m+'">이걸로 담기</button>'
-            + '</div></div>';
-        }).join("")
-      + '</div>'
-      + '<div class="ans-seg"><button class="chip '+(d.mode==="plain"?"on":"")+'" data-act="ans-mode" data-id="plain">조문만</button>'
-      +   '<button class="chip '+(d.mode==="help"?"on":"")+'" data-act="ans-mode" data-id="help">조문 + 도움말</button>'
-      +   '<span class="ans-seg-hint">← 옆으로 쓸어넘겨도 됩니다</span></div>';
+    /* 판 하나. 「조문만」과 「조문 + 도움말」은 같은 글에 꼬리가 붙었을 뿐이라 둘을 나란히 두면
+     * 위만 보면 똑같아 보였다(이랑님: 「합치면 안 되나?」). 참고 붙이기는 머리말의 체크 하나로 켜고 끈다. */
+    var nHelp=d.help?d.help.split(/\n+/).filter(function(x){ return x.trim(); }).length:0;
+    var m=d.mode==="help"&&nHelp?"help":"plain";
+    panes='<div class="ans-panes" id="ans-panes"><div class="ans-pane on" data-mode="'+m+'">'
+      + '<div class="ans-pane-head">초안'
+      +   (nHelp
+            ? ' <label class="ans-help-chk"><input type="checkbox" data-act="ans-mode" data-id="'+(m==="help"?"plain":"help")+'"'+(m==="help"?" checked":"")+' /> AI 참고 '+nHelp+'줄 뒤에 붙이기</label>'
+            : ' <span class="ans-pane-note">AI 가 참고할 것이 없다고 판단했어요 — 조문만</span>')
+      +   (d.dropped?' <span class="ans-pane-note">· 근거에 없는 법령을 든 문장은 뺐어요</span>':'')+'</div>'
+      + '<pre class="ans-body">'+esc(ansText(m))+'</pre>'
+      + '<div class="ans-pane-foot">'
+      +   '<button class="btn quiet sm" data-act="ans-copy" data-id="'+m+'">복사</button>'
+      +   '<button class="btn quiet sm" data-act="ans-txt" data-id="'+m+'">텍스트</button>'
+      +   '<button class="btn quiet sm" data-act="ans-hwpx" data-id="'+m+'">한글</button>'
+      +   '<button class="btn sm" data-act="ans-to-final" data-id="'+m+'">최종본으로 내리기 ↓</button>'
+      + '</div></div></div>';
   }
 
   return '<div class="ans-back" data-act="ans-close"></div>'
@@ -5364,16 +5390,38 @@ function ansModalHtml(){
     +   fmt
     +   (d.err?'<p class="ask-warn">'+esc(d.err)+'</p>':"")
     +   panes
-    +   (d.made?'<label class="ans-lab">최종본 <span class="ans-lab-n">고쳐서 담고 싶을 때만</span></label>'
-        + '<textarea class="input ans-final" id="ans-final" rows="4" placeholder="비워 두면 위 초안이 그대로 담깁니다.">'+esc(d.final||"")+'</textarea>':"")
+    /* 흐름은 한 줄이다: 초안 → 「최종본으로 내리기」 → 여기서 고친다 → 「민원 답변에 담기」 → 그 탭으로 간다.
+     * (이랑님: 「이걸로 담기 하면 밑에 최종본으로 넘어오고, 최종본에서 담기 하면 민원 답변으로 가게」) */
+    +   (d.made?'<label class="ans-lab">최종본 <span class="ans-lab-n">여기서 고친 뒤 담아요. 비워 두면 위 초안이 그대로 담깁니다.</span></label>'
+        + '<textarea class="input ans-final" id="ans-final" rows="8" placeholder="위 초안의 「최종본으로 내리기」를 누르면 여기로 옵니다.">'+esc(d.final||"")+'</textarea>'
+        + '<div class="ans-pane-foot ans-final-foot">'
+        +   '<button class="btn quiet sm" data-act="ans-final-copy">복사</button>'
+        +   '<button class="btn sm" data-act="ans-save" data-id="'+(d.mode||"plain")+'">민원 답변에 담기 →</button>'
+        + '</div>':"")
     +   '<p class="ans-warn">⚠ 초안입니다. 보내시기 전에 반드시 확인하세요.</p>'
     + '</div></div>';
 }
-function renderAnsModal(){
+/* 창을 통째로 다시 그리면 스크롤이 맨 위로 튀고 쓰던 글자의 커서가 날아간다. 앱은 창이 앞으로
+ * 올 때마다(window focus·visibilitychange) 자료를 새로 받고 render() 를 부르는데, 아이패드에서
+ * 글쇠판을 열고 닫는 것만으로도 그 일이 난다(이랑님: 「스크롤 내리면 다시 위로 올라가서 불편해」).
+ * 그래서 **보이는 내용이 바뀌었을 때만** 다시 그리고, 다시 그릴 때도 스크롤 자리를 되돌린다.
+ * 민원 내용·최종본 글은 서명에 넣지 않는다 — 그 둘은 입력 리스너가 상태에 바로 적는다. */
+var ansSigLast="";
+function ansSig(){
+  var d=ansDraft; if(!d) return "";
+  return JSON.stringify([d.made,d.mode,d.busy,d.err,d.krw,d.summary,d.help,d.dropped,d.id,
+    d.cites.map(function(c){ return c.law+"|"+c.label; }),ansFmtOpen,ansFmt]);
+}
+function renderAnsModal(force){
   var el=document.getElementById("ans-modal"); if(!el) return;
-  if(!ansDraft){ el.innerHTML=""; document.body.style.overflow=""; return; }
+  if(!ansDraft){ el.innerHTML=""; ansSigLast=""; document.body.style.overflow=""; return; }
   document.body.style.overflow="hidden";
+  var sig=ansSig();
+  if(!force&&sig===ansSigLast&&el.firstChild) return;      /* 그대로 둔다 */
+  ansSigLast=sig;
+  var sc=el.querySelector(".ans-scroll"), top=sc?sc.scrollTop:0;
   el.innerHTML=ansModalHtml();
+  var sc2=el.querySelector(".ans-scroll"); if(sc2&&top) sc2.scrollTop=top;
   var q=document.getElementById("ans-q");
   if(q) q.addEventListener("input",function(){ if(ansDraft) ansDraft.q=q.value; });
   var f=document.getElementById("ans-final");
@@ -6053,6 +6101,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "ans-drop": if(ansDraft){ ansDraft.cites.splice(parseInt(id,10),1); renderAnsModal(); } break;
     case "ans-fmt": ansFmtOpen=!ansFmtOpen; renderAnsModal(); break;
     case "ans-mark": ansFmt.hangul=(id==="han"); ansFmtSave(); renderAnsModal(); break;
+    case "ans-brief": ansFmt.brief=(id==="on"); ansFmtSave(); renderAnsModal(); break;
     case "ans-end": ansFmt.end=!ansFmt.end; ansFmtSave(); renderAnsModal(); break;
     case "ans-fmt-reset": { var fk; for(fk in ANS_FMT0) ansFmt[fk]=ANS_FMT0[fk];
       ansFmtSave(); renderAnsModal(); break; }
@@ -6060,6 +6109,11 @@ document.getElementById("app").addEventListener("click",function(e){
     case "ans-txt": ansTxt(id); break;
     case "ans-hwpx": ansHwpx(id); break;
     case "ans-save": ansSave(id); break;
+    case "ans-to-final": if(ansDraft){ ansDraft.mode=id; ansDraft.final=ansText(id); renderAnsModal();
+      var fa=document.getElementById("ans-final"); if(fa){ fa.scrollIntoView({behavior:"smooth",block:"center"}); fa.focus(); } } break;
+    case "ans-final-copy": { var ft=(document.getElementById("ans-final")||{}).value||""; if(!ft.trim()){ showToast("최종본이 비어 있어요."); break; }
+      var okc=function(){ showToast("✓ 최종본을 복사했어요"); };
+      if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(ft).then(okc,function(){ lawCopyFallback(ft,okc); }); else lawCopyFallback(ft,okc); break; }
     case "ans-open": ansOpenId=(ansOpenId===id)?null:id; render(); break;
     case "ans-del": ansDel(id); break;
     case "ans-edit": ansReopen(id); break;

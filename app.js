@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v145";
+var APP_VER="v146";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -4903,10 +4903,11 @@ function lawHelpHtml(){
     +   '</ul>'
     +   '<p><b>차례는 이 셋을 합쳐서 매깁니다</b> — 위에 있는 것부터 펴 보시면 돼요. '
     +     '아래쪽 관련 낮은 것은 접어 둡니다.</p>'
-    +   '<p class="law-help-dim">찾는 순서 — ① 조 <b>제목</b>만 훑어 후보 20개를 추리고 '
-    +     '② 그 20개의 <b>조문을 통째로 읽어</b> 최종 10개로 추립니다. '
-    +     '한 번에 하려면 조 목록 전체에 본문을 붙여야 해서 값이 몇 배로 뜁니다.<br />'
-    +     '아주 긴 조(정의 조항·별표가 붙은 것)는 앞 4천 자까지만 읽고 「뒤가 잘림」으로 알립니다.<br />'
+    +   '<p class="law-help-dim">찾는 순서 — ① 조 <b>제목</b>을 훑어 후보 20개를 추리고, '
+    +     '② 민원 말을 법령 말로 바꾼 낱말로 본문을 뒤져 보태고, '
+    +     '③ <b>뜻이 닿는 조문</b> 12개를 더 보탭니다(낱말이 달라도 찾아요). '
+    +     '그다음 후보의 <b>조문을 통째로 읽어</b> 최종 10개로 추립니다.<br />'
+    +     '아주 긴 조(정의 조항·별표가 붙은 것)는 앞 2,800자까지만 읽고 「뒤가 잘림」으로 알립니다.<br />'
     +     '<b>값이 아까우면 위에서 법령 범위를 좁히세요.</b> 값의 대부분은 ①에서 조 목록을 '
     +     '통째로 보내는 데 듭니다.</p>'
     + '</div>'
@@ -4917,9 +4918,9 @@ function lawHelpHtml(){
     +       '결과가 너무 많으면 낱말을 하나 더 넣어 좁히세요.</li>'
     +     '<li><b>붙은 말 그대로</b> 찾으려면 따옴표로 묶어요. <code>"안전상비의약품"</code></li>'
     +     '<li>두 글자 이상이어야 찾아요. 최대 다섯 낱말.</li>'
-    +     '<li>법에 쓰인 말로 넣어야 나와요. <u>「타이레놀」로는 안 나옵니다</u> — '
+    +     '<li>낱말 검색은 <b>법에 쓰인 말</b>로만 찾아요. <u>「타이레놀」로는 안 나옵니다</u> — '
     +       '법에는 「안전상비의약품」이라고 적혀 있으니까요. '
-    +       '<span class="law-help-soon">(이 부분은 다음 단계에서 AI가 대신 찾아 줄 예정)</span></li>'
+    +       '문장으로 물으면(「관련 조문 찾아줘」) <b>뜻으로도 찾으니</b> 낱말이 달라도 됩니다.</li>'
     +   '</ul></div>'
 
     + '<div class="law-help-sec"><div class="law-help-t">② 결과 읽는 법</div>'
@@ -5612,6 +5613,9 @@ function renderLaws(){
           ? '<button class="link-btn" data-act="law-only-all">☑ 전체</button>'
             + '<button class="link-btn quiet-link" data-act="law-only-none">☐ 해제</button>'
             + '<span class="law-head-sep">·</span>'
+            + '<button class="link-btn" data-act="law-api-new"'+(lawBusy?" disabled":"")+'>＋ 법제처에서 받기</button>'
+            + '<button class="link-btn quiet-link" data-act="law-upload"'+(lawBusy?" disabled":"")+'>PDF 올리기</button>'
+            + '<span class="law-head-sep">·</span>'
             + '<button class="link-btn" data-act="law-build-all" data-id="all"'+(lawBusy?" disabled":"")+'>'
             + (lawBusy?"만드는 중…":"조문 전부 다시 만들기")+'</button>'
             + '<button class="link-btn quiet-link" data-act="law-list">접기</button>'
@@ -5672,14 +5676,10 @@ function renderLaws(){
     +   '<span class="ask-bar-n">'+(lawAskLast!=null?"지난번 "+lawAskLast+"원":"한 번에 50~150원")+'</span>'
     + '</button>'
     + lawHelpHtml()
-    /* 결과를 보는 중에는 올리기 배너를 한 줄로 줄인다 — 지금 할 일이 아니다 */
-    + '<button class="upload-bar'+(lawBusy?" busy":"")+((lawHits||lawAsk)&&!lawBusy?" slim":"")+'" data-act="law-upload"'+(lawBusy?" disabled":"")+'>'
-    +   '<span class="upload-ic">⬆</span><div class="import-bar-text">'
-    +   '<div class="import-bar-title">'+(lawBusy?"처리 중이에요...":"법령 PDF 올리기")+'</div>'
-    +   '<div class="import-bar-sub">'+(lawBusy?"창을 닫지 마세요":"글자가 들어 있는 PDF만 (스캔본은 아직 안 돼요)")+'</div></div>'
-    +   '<span class="import-bar-go">→</span></button>'
-    /* 법령·고시는 파일 없이 이름만으로 받는다. 지침서만 PDF 로 올린다. */
-    + '<div class="law-api-row">법령·고시는 <button class="link-btn" data-act="law-api-new"'+(lawBusy?" disabled":"")+'>법제처에서 이름으로 받기</button> — PDF 는 지침서·안내서에만</div>'
+    /* 올리기·받기는 목록 머리줄 안에 있다(가끔 쓰는 것은 접어 둔다). 법령이 하나도 없을 때만 크게. */
+    + (items.length?'':'<div class="empty-box"><div class="empty-ic">▤</div><p>아직 법령이 없어요.<br />'
+        + '<button class="link-btn" data-act="law-api-new">법제처에서 법령·고시 받기</button> · '
+        + '<button class="link-btn" data-act="law-upload">지침서 PDF 올리기</button></p></div>')
     + lawCandsHtml()
     + list
     /* 초안 창은 법령 탭에서 열리므로 여기에도 자리를 둔다 —
@@ -5714,7 +5714,7 @@ function renderLawResults(){
     if(askPart){ el.innerHTML=askPart; return; }
     el.innerHTML=S.laws.length
       ? '<div class="empty-box"><div class="empty-ic">⌕</div><p>찾을 단어를 넣고 Enter를 눌러요.<br />낱말을 띄어 쓰면 <b>모두 들어 있는 곳</b>만 찾아요. 붙은 말 그대로 찾으려면 "따옴표"로 묶어요.<br /><br />처음이시면 위의 <b>「검색하는 법 · 화면 보는 법」</b>을 펼쳐 보세요.</p></div>'
-      : '<div class="empty-box"><div class="empty-ic">▤</div><p>법령 PDF를 올리면 여기서 검색할 수 있어요.<br />공개 법령·지침서만 올려주세요.</p></div>';
+      : '';
     return;
   }
   if(!lawHits.length){

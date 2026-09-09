@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v149";
+var APP_VER="v150";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -5175,7 +5175,11 @@ function ansCiteLines(text){
 function ansKeyLine(c){
   var q=String(c.quote||"").trim();
   var sents=String(c.text||"").replace(/\s+/g," ").match(/[^.]*\.(?=\s|$)/g)||[];
-  var clean=function(t){ return t.replace(/^\s*(?:[\u2460-\u2473]|\d{1,2}(?:\.\d+)*\.?|[가-힣]\.|[가-힣]\))\s*/,"").replace(/^\s*\d+(?:\.\d+)+\s+[^.]{2,20}\s+(?=[가-힣])/,"").trim(); };
+  var clean=function(t){
+    return t.replace(/^\s*제\s*\d+\s*조(?:\s*의\s*\d+)?\s*\([^()]{1,80}\)\s*/,"")      /* 「제48조(준수사항)」 라벨 */
+            .replace(/^\s*(?:[\u2460-\u2473]|\d{1,2}(?:\.\d+)*\.?|[가-힣]\.|[가-힣]\))\s*/,"")   /* ① 1. 가. */
+            .replace(/^\s*\d+(?:\.\d+)+\s+[^.]{2,20}\s+(?=[가-힣])/,"").trim();          /* 8.2 포장공정관리 */
+  };
   if(q) return clean(q.replace(/\s+/g," "));
   var terms=(lawTermList||[]).concat((lawAsk&&lawAsk.words)||[]).filter(function(w){ return w&&w.length>=2; });
   var best=null, bestN=0;
@@ -5758,9 +5762,9 @@ function renderLaws(){
   }
 
   view().innerHTML='<div class="page">'
-    + pageHead2("법령","올려둔 법령 전체에서 단어를 찾고, 결과를 골라 모아요.",items.length?pills:null)
+    + pageHead2("법령","법령·고시·지침 전체에서 낱말이나 뜻으로 찾고, 골라 모아 답변 초안을 만들어요.",items.length?pills:null)
     + '<div class="search-box"><span class="search-ic">⌕</span>'
-    +   '<textarea class="input search law-input" id="law-q" rows="1" placeholder="낱말로 찾거나, 민원 질문을 그대로 붙여넣어요">'+esc(lawQuery)+'</textarea>'
+    +   '<textarea class="input search law-input" id="law-q" rows="1" placeholder="낱말 두세 개는 그 낱말이 든 조문을, 문장은 뜻이 가까운 조문을 찾아요 (Enter)">'+esc(lawQuery)+'</textarea>'
     +   '<button class="btn sm law-go" data-act="law-search">검색</button>'
     + '</div>'
     /* 돈이 드는 동작이라 검색칸 안에 넣지 않는다. 눌러야만 나간다.

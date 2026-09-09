@@ -579,6 +579,15 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
 /* 결과 머리줄 */
 .law-head{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap;
   padding:12px 2px 11px;border-bottom:1px solid var(--line);margin-bottom:4px;}
+/* 결과 머리줄은 스크롤해도 위에 붙어 있다 — 아래 카드를 체크하고 바로 「답변 초안」을 누른다 */
+.law-head.sticky{position:sticky;top:0;z-index:6;background:var(--paper);}
+.law-hit.has-ai{border-left:3px solid var(--accent-soft);}
+.law-hit.has-ai.r-1,.law-hit.has-ai.r-2{border-left-color:var(--accent);}
+.law-hit .ask-why{margin:var(--sp-1) 0 0;}
+.law-hit .ask-head-txt{margin-top:var(--sp-2);}
+.law-fold{display:block;margin:var(--sp-3) auto;}
+.ask-extra{margin:var(--sp-1) 0 0;}
+.ans-save-btn{margin-left:auto;}
 .law-count{font-size:var(--fs-md);color:var(--muted);}
 .law-count b{color:var(--ink);font-size:var(--fs-base);}
 /* 결과가 상한에서 잘렸다는 표시 — 잘린 줄 모르는 것이 제일 위험하다 */
@@ -594,7 +603,7 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
    display:inline-block 이 앞쪽의 display:flex 를 덮었고, 그 바람에
    gap 과 margin-left:auto 가 죽어 「…에 관한 규칙시행규칙」처럼
    이름과 종류가 붙어 나왔다. */
-.law-group{position:sticky;top:0;z-index:3;display:flex;align-items:baseline;gap:var(--sp-3);
+.law-group{display:flex;align-items:baseline;gap:var(--sp-3);
   font-size:var(--fs-sm);font-weight:700;color:var(--blue-deep);background:var(--blue-soft);
   border-radius:var(--r-sm);padding:7px 12px;margin:14px 0 8px;}
 /* 종류는 오른쪽 끝에, 이름보다 한 단계 조용하게 */

@@ -324,7 +324,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v160";
+var APP_VER="v161";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -5252,7 +5252,10 @@ function ansSave(mode){
     final:(fin!=null&&String(fin).trim())?String(fin):null
   };
   if(d.id){
+    /* 다시 열어 고쳐 담을 때 **처음 초안은 그대로 둔다**(이랑님 2026-09-09 「고치기 전 글 어디서 확인?」).
+       덮어쓰면 고치기 전 글이 사라진다. 처음 담을 때 초안이 비어 있었던 옛 답변만 채운다. 고친 글(final)은 늘 새것. */
     var i=S.answers.findIndex(function(x){ return x.id===d.id; });
+    if(i>=0&&String(S.answers[i].draft||"").trim()) delete item.draft;
     if(i>=0){ var k; for(k in item) S.answers[i][k]=item[k]; }
     dbUpdate("answers",d.id,item);
     showToast("✓ 저장했어요");
@@ -5441,6 +5444,7 @@ function renderAnswers(){
   var list=items.map(function(a){
     var open=(ansOpenId===a.id);
     var nc=(a.cites||[]).length, gist=ansSummaryOf(a).replace(/\s+/g," ").trim();
+    var sameTxt=!a.final||String(a.final).trim()===String(a.draft||"").trim();
     return '<div class="ans-row'+(open?" on":"")+'">'
       + '<div class="ans-row-head" data-act="ans-open" data-id="'+esc(a.id)+'">'
       +   '<span class="doc-ic file">▤</span>'
@@ -5450,15 +5454,18 @@ function renderAnswers(){
          둘째 줄에 둔다. 옛 답변처럼 제목이 곧 요지면 되풀이하지 않는다. 근거는 이름을 늘어놓지 않고 개수만. */
       +     (gist&&gist.slice(0,24)!==String(a.title||"").trim().slice(0,24)?'<div class="ans-row-g">'+esc(gist)+'</div>':'')
       +     '<div class="ans-row-s">'+esc(ansDateOf(a))+(nc?' · 근거 '+nc+'건':'')
-      +       (a.mode==="help"?' · 참고 붙임':'')+(a.final?' · <b>고친 글 있음</b>':'')+'</div>'
+      +       (a.mode==="help"?' · 참고 붙임':'')+(!sameTxt?' · <b>고친 글 있음</b>':'')+'</div>'
       +   '</div>'
       +   '<span class="ans-row-go">'+(open?"▾":"›")+'</span>'
       +   '<button class="del doc-del" data-act="ans-del" data-id="'+esc(a.id)+'" title="삭제">✕</button>'
       + '</div>'
       + (open?'<div class="ans-row-open">'
       +   (a.question?'<div class="ans-sec"><span class="ans-sec-k">민원 내용</span><pre class="ans-body sm">'+esc(a.question)+'</pre></div>':'')
-      +   '<div class="ans-sec"><span class="ans-sec-k">'+(a.final?"초안":"답변")+'</span><pre class="ans-body">'+esc(a.draft||"")+'</pre></div>'
-      +   (a.final?'<div class="ans-sec"><span class="ans-sec-k">최종본</span><pre class="ans-body">'+esc(a.final)+'</pre></div>':'')
+      /* 처음 초안과 고친 글이 같으면 하나만 — 같은 글이 두 번 보이면 「어느 게 진짜냐」가 된다 */
+      +   (sameTxt
+            ? '<div class="ans-sec"><span class="ans-sec-k">답변</span><pre class="ans-body">'+esc(a.final||a.draft||"")+'</pre></div>'
+            : '<div class="ans-sec"><span class="ans-sec-k">처음 초안 <i class="ans-sec-n">다시 열어 고치기 전</i></span><pre class="ans-body">'+esc(a.draft||"")+'</pre></div>'
+            + '<div class="ans-sec"><span class="ans-sec-k">고친 글</span><pre class="ans-body">'+esc(a.final||"")+'</pre></div>')
       +   '<div class="ans-row-acts">'
       +     '<button class="btn quiet sm" data-act="ans-rcopy" data-id="'+esc(a.id)+'">복사</button>'
       +     '<button class="btn quiet sm" data-act="ans-rtxt" data-id="'+esc(a.id)+'">텍스트</button>'

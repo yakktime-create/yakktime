@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v150";
+var APP_VER="v151";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -5964,7 +5964,10 @@ document.getElementById("app").addEventListener("click",function(e){
       if(md&&confirm('"'+md.title+'"\n\n식약처 업무에서도 함께 삭제됩니다. 계속할까요?')) del("mfds",id);
       break; }
     case "s-toggle": { var it=S.schedule.find(function(x){return x.id===id;}); if(it){it.done=!it.done;render();dbUpdate("schedule",id,{done:it.done});} break; }
-    case "s-star": { var i2=S.schedule.find(function(x){return x.id===id;}); if(i2){i2.star=!i2.star;render();dbUpdate("schedule",id,{star:i2.star});} break; }
+    /* 별표를 누르면 그 줄이 **맨 위로 올라가** 손가락 밑에는 다른 줄이 온다 — 「안 눌렸다」로 보여 두 번 누르게
+     * 됐다(이랑님 지적). 눌린 것을 말로 알리고, 누르는 자리도 손가락 크기로 키웠다(.star). */
+    case "s-star": { var i2=S.schedule.find(function(x){return x.id===id;}); if(i2){ i2.star=!i2.star; render(); dbUpdate("schedule",id,{star:i2.star});
+      showToast(i2.star?"★ 맨 위로 올렸어요":"☆ 별표를 뺐어요"); } break; }
     case "s-del": del("schedule",id); break;
     /* 달을 넘기면 아래 날짜 패널도 그 달로 옮긴다.
      * 안 옮기면 달력엔 없는 날짜의 일정을 보고 있게 된다. */

@@ -459,7 +459,7 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 .row{gap:var(--sp-2);padding:10px 4px;border-radius:var(--r-sm);transition:background .12s;}
 .check{width:20px;height:20px;border-radius:var(--r-sm);}
 .row-text{line-height:var(--lh-snug);}
-.star{font-size:var(--fs-lg);padding:3px 4px;border-radius:var(--r-xs);}
+.star{font-size:var(--fs-lg);padding:3px 4px;border-radius:var(--r-xs);min-width:var(--tap);min-height:var(--tap);display:inline-grid;place-items:center;}
 
 /* --- 캘린더 --- */
 .cal-cell{border-radius:var(--r-md);padding:7px 6px;}

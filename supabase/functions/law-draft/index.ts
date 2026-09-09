@@ -4,6 +4,7 @@
 //  **AI 는 답변을 쓰지 않는다.** 두 가지만 만든다.
 //    summary  민원의 요지 한 문장  (「…에 관한 것으로 이해되며」의 빈칸)
 //    help     실무 참고 한두 문장   (mode 가 "help" 일 때만)
+//    title    「민원 답변」 목록에 보일 짧은 제목 — 핵심 낱말 두셋을 「·」로 이은 것 (8~24자)
 //    keys     근거 조문마다 「민원에 답하는 핵심 문장」 하나 — **원문에서 그대로 옮긴 것만**.
 //             서버가 원문과 대조해 없으면 빈 문자열로 만든다. 브라우저는 빈 것은 조문 전체를 넣는다.
 //
@@ -75,7 +76,7 @@ async function claude(apiKey: string, body: unknown) {
 
 const HEAD = `너는 대한민국 식품의약품안전처 공무원이 민원 답변을 쓰는 것을 돕는 도구다.
 답변 본문은 네가 쓰지 않는다. 조문 원문은 사람이 그대로 붙여 넣는다.
-너는 아래 세 가지만 만든다.`;
+너는 아래 네 가지만 만든다.`;
 
 const RULES = `${HEAD}
 
@@ -100,7 +101,11 @@ const RULES = `${HEAD}
     · **단정하지 않는다.** 「…하시면 절차가 빠릅니다」처럼 안내하는 말투.
     · 법령 해석을 새로 만들지 마라. 처분·판단·가부(可否)를 단정하지 마라.
 
-[3] keys — 근거 조문마다 **민원에 답하는 핵심 문장 하나**. 조문 순서대로, 조문 수와 같은 개수.
+[3] title — 목록에서 한눈에 알아볼 **짧은 제목**. 핵심 낱말 두셋을 「 · 」로 잇는다. 8~24자. 문장이 아니다.
+    좋은 예: 「보툴리눔 · 다른 의약품 · 2차 포장 공용」 「임상시험 의약품 · 위탁제조 신고」
+    나쁜 예: 「…에 관한 것」(summary 를 되풀이) / 「민원 답변」(아무 말도 아님) / 「신고」(너무 짧다)
+
+[4] keys — 근거 조문마다 **민원에 답하는 핵심 문장 하나**. 조문 순서대로, 조문 수와 같은 개수.
     · **조문 본문에서 한 문장을 글자 그대로 옮긴다.** 요약·바꿔 쓰기·이어 붙이기 금지.
       서버가 원문과 대조해서 한 글자라도 다르면 버린다 — 그러면 담당자는 조문 전체를 읽어야 한다.
     · 문장 첫머리의 「①」「1.」「가.」 같은 번호는 빼고 옮긴다. 문장 끝의 마침표까지 옮긴다.
@@ -120,9 +125,10 @@ const SCHEMA = {
   properties: {
     summary: { type: "string", description: "민원 요지 명사구 (…에 관한 것)" },
     help:    { type: "string", description: "실무 참고. mode!=help 이면 빈 문자열" },
+    title:   { type: "string", description: "핵심 낱말 두셋을 「 · 」로 이은 짧은 제목 (8~24자)" },
     keys:    { type: "array", items: { type: "string" }, description: "근거 조문마다 원문 그대로 옮긴 핵심 문장 하나. 없으면 빈 문자열" },
   },
-  required: ["summary", "help", "keys"],
+  required: ["summary", "help", "title", "keys"],
   additionalProperties: false,
 };
 
@@ -249,6 +255,7 @@ Deno.serve(async (req) => {
 
     return json({
       summary: nfc(String(out?.summary || "")).trim(),
+      title: nfc(String(out?.title || "")).replace(/\s+/g, " ").trim().slice(0, 40),
       help,
       keys,
       keysDropped: rawKeys.filter((k) => k).length - keys.filter((k) => k).length,

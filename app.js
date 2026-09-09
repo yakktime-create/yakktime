@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v156";
+var APP_VER="v157";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -5075,7 +5075,7 @@ function ansMake(){
     var v=r&&r.data;
     if(r&&r.error){ d.err=String(r.error.message||r.error); render(); return; }
     if(!v||v.error){ d.err=(v&&v.error)||"응답이 비어 있어요."; render(); return; }
-    d.summary=v.summary||""; d.help=v.help||""; d.krw=v.krw||0; d.made=true;
+    d.summary=v.summary||""; d.title=v.title||""; d.help=v.help||""; d.krw=v.krw||0; d.made=true;
     /* 조문마다 AI 가 짚고 서버가 원문과 대조한 핵심 문장. 없는 조는 "" → 그 조는 전체를 넣는다 */
     (v.keys||[]).forEach(function(k,i){ if(d.cites[i]) d.cites[i].key=k||""; });
     d.keysDropped=v.keysDropped||0;
@@ -5201,11 +5201,25 @@ function ansHwpx(mode){
 }
 
 /* ---------- 저장 ---------- */
+/* 목록 제목은 핵심 낱말 두셋(AI 가 낸 title). 없으면(옛 함수·되받기) 요지에서 「에 관한 것」을 떼고 40자에서 자른다. */
+function ansTitle(d){
+  var t=String(d.title||"").trim(); if(t.length>=6) return t.slice(0,40);
+  var sm=String(d.summary||"").replace(/\s*(?:에\s*관한\s*것|에\s*대한\s*것)\s*$/,"").trim();
+  var base=sm||String(d.q||"").trim()||"민원 답변";
+  return base.length>40?base.slice(0,39)+"…":base;
+}
+/* 저장된 답변을 다시 열 때 요지는 제목이 아니라 본문 첫 줄(「…은 X(으)로 이해되며」)에서 되찾는다 —
+   제목이 핵심 낱말이 된 뒤로 제목을 요지로 쓰면 「1. 귀하께서 주신 내용은 보툴리눔 · 2차 포장(으)로 이해되며」가 된다. */
+function ansSummaryOf(a){
+  var t=String(a.final||a.draft||"");
+  var m=/귀하께서\s*주신\s*내용은\s*([\s\S]{4,200}?)\(으\)로\s*이해되며/.exec(t);
+  return m?m[1].replace(/\s+/g," ").trim():String(a.title||"");
+}
 function ansSave(mode){
   var d=ansDraft; if(!d) return;
   var fin=(document.getElementById("ans-final")||{}).value;
   var item={
-    title:(d.summary||String(d.q||"").slice(0,40)||"민원 답변").slice(0,80),
+    title:ansTitle(d),
     question:String(d.q||""),
     cites:d.cites.map(function(c){ return {law:c.law,kind:c.kind,num:c.num,label:c.label}; }),
     mode:mode||d.mode||"plain",
@@ -5251,9 +5265,13 @@ function ansReopen(id){
                text:hit?hit.text:"", table:hit?hit.table:false,
                missing:!hit };
     });
-    ansDraft={ q:a.question||"", cites:cites, summary:a.title||"", help:"",
+    ansDraft={ q:a.question||"", cites:cites, summary:ansSummaryOf(a), title:a.title||"", help:"",
                mode:a.mode||"plain", busy:false, err:"", krw:0, id:a.id,
                made:true, final:a.final||"" };
+    /* 「다시 열어 고치기」에 글이 비어 있었다(이랑님 2026-09-09) — 옛 답변은 final 이 null 이라(고치지 않고 담으면
+       null 로 저장했다) 빈 칸이 열렸다. 저장된 초안(draft)을, 그것도 없으면 조문으로 다시 만든 글을 넣는다. */
+    if(!String(ansDraft.final||"").trim()) ansDraft.final=String(a.draft||"").trim()||ansText(ansDraft.mode);
+    ansDraft.gen=ansDraft.final;
     var lost=cites.filter(function(c){ return c.missing; }).length;
     if(lost) showToast("조문 "+lost+"건은 지금 올려둔 법령에서 못 찾았어요 — 글자가 빈 채로 열립니다.");
     render();

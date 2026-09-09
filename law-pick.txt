@@ -691,6 +691,7 @@ Deno.serve(async (req) => {
       // 제목에는 안 드러나서 낱말로 찾아 보탠 상위법 조문 수
       boosted,
       semantic,
+      gist: String(p1.gist || ""),
       words,
       dbg,
       krw: Math.round((usdOf(r1.usage, cfg) + usdOf(r2.usage, cfg)) * KRW),

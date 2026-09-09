@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v147";
+var APP_VER="v148";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -5994,10 +5994,15 @@ document.getElementById("app").addEventListener("click",function(e){
       var aid=parseInt(el.getAttribute("data-art-id"),10)||0;
       /* AI 가 고른 조라면 원문과 대조를 통과한 **근거 문장 하나만** 칠한다.
        * 낱말마다 칠하면 「제조소」가 스무 번 노래져 글을 못 읽는다. */
-      if(lawAsk&&lawAsk.picks){
-        var pk=null;
-        lawAsk.picks.forEach(function(x){ if(String(x.id)===String(aid)) pk=x; });
-        if(pk) lawTermList=pk.quote?[pk.quote]:[];
+      /* 근거 문장이 없으면(「비슷한 대목만」) 아무것도 안 칠해져 어디를 볼지 몰랐다(이랑님: 「여긴 형광펜
+       * 표시가 안 되네」). 그때는 AI 가 본문을 뒤진 낱말과 요지의 낱말을 칠한다. 뜻으로 찾은 결과(문장 Enter)를
+       * 열 때도 질문의 낱말을 칠한다 — 글에 있는 것만 노래지므로 없는 낱말은 조용히 지나간다. */
+      var pk=null;
+      if(lawAsk&&lawAsk.picks) lawAsk.picks.forEach(function(x){ if(String(x.id)===String(aid)) pk=x; });
+      if(pk){
+        lawTermList=pk.quote?[pk.quote]:(lawAsk.words||[]).concat(lawTerms(lawAsk.gist||"")).filter(function(w,i,a){ return w.length>=2&&a.indexOf(w)===i; }).slice(0,8);
+      } else if(lawSem&&!lawTermList.length){
+        lawTermList=lawSem.q.split(/\s+/).map(function(w){ return w.replace(/[^\w가-힣]/g,""); }).filter(function(w,i,a){ return w.length>=2&&a.indexOf(w)===i; }).slice(0,8);
       }
       openLawArticle(aid,id);
       break;

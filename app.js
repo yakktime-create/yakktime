@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v146";
+var APP_VER="v147";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3650,15 +3650,64 @@ function lawQBox(q){
 }
 
 var LAW_HIT_MAX=600;   /* 검색 결과 상한 — 닿으면 화면에 알린다 */
+
+/* ---------- 뜻으로 찾기 (AI 없이, 공짜) ----------
+ * 질문의 뜻 지문과 가까운 조문 20개를 보여준다. 낱말이 달라도 찾는다.
+ * 문장을 치고 Enter 를 누르면 이리로 온다. 낱말로 0건이어도 이리로 온다. */
+var lawSem=null;    /* {q, auto} — 지금 결과가 뜻으로 찾은 것일 때 */
+var SEM_HITS=20, SEM_FLOOR=0.3;
+function lawSemFits(q,terms){ return q.length>=14&&terms.length>=4; }
+function lawSemSearch(q,auto){
+  lawSem={q:q,auto:!!auto}; lawTermList=[]; lawSearching=true; renderLawResults();
+  sb.functions.invoke("law-embed",{body:{op:"query",q:q,k:SEM_HITS*2}}).then(function(r){
+    var d=r&&r.data;
+    if(!d||d.error) throw new Error((d&&d.error)||((r&&r.error&&r.error.message)||"응답이 비었어요"));
+    var rows=d.rows||[], only=lawOnlyIds();
+    if(only.length&&only.length<S.laws.length) rows=rows.filter(function(x){ return only.indexOf(String(x.law_id))>=0; });
+    rows=rows.filter(function(x){ return Number(x.sim)>=SEM_FLOOR; }).slice(0,SEM_HITS);
+    if(!rows.length){ lawSearching=false; lawHits=[]; renderLawResults(); return; }
+    var ids=rows.map(function(x){ return x.id; });
+    return withAuthRetry(function(){
+      return sb.from("law_articles").select("id,law_id,label,page,page_end,content"+(lawTblCol?",tbl":"")).in("id",ids);
+    }).then(function(res){
+      if(res.error) throw new Error(res.error.message);
+      var by={}; (res.data||[]).forEach(function(a){ by[String(a.id)]=a; });
+      var hits=[];
+      rows.forEach(function(x){
+        var a=by[String(x.id)]; if(!a) return;
+        var c=cleanPdfText(a.content||""), body=c.replace(/[┃│┨]/g," ").replace(/\s+/g," ").trim();
+        hits.push({ key:"a"+a.id, artId:a.id, lawId:a.law_id, art:a.label, page:a.page, pageEnd:a.page_end||a.page,
+                    table:false, total:1, spots:1, sim:Number(x.sim),
+                    snips:[{ where:"", full:lawPlain(c), text:body.slice(0,260)+(body.length>260?"…":"") }] });
+      });
+      /* 위계 → 법령 → 뜻이 가까운 순 (낱말 검색과 같은 묶음 모양) */
+      hits.sort(function(a,b){
+        var la=S.laws.find(function(l){ return l.id===a.lawId; }), lb=S.laws.find(function(l){ return l.id===b.lawId; });
+        var ka=la?lawKindOf(la).n:9, kb=lb?lawKindOf(lb).n:9; if(ka!==kb) return ka-kb;
+        var na=lawName(a.lawId), nb=lawName(b.lawId); if(na!==nb) return na<nb?-1:1;
+        return b.sim-a.sim;
+      });
+      lawSearching=false; lawCapped=false; lawHits=hits;
+      lawHelpOpen=false; lawListOpen=false; render();
+    });
+  }).catch(function(e){
+    lawSearching=false; lawHits=[]; renderLawResults();
+    showToast("뜻으로 찾지 못했어요: "+((e&&e.message)||"")+" — 낱말 두세 개로 다시 찾아보세요.",true);
+  });
+}
 var lawCapped=false;
 function lawSearch(){
   var q=nfc(val("law-q")||"").trim();
   /* AI 결과는 지우지 않는다 — 「조문을 더 보태려고」 낱말을 치는 흐름이다(이랑님: 「낱말 다시
    * 입력하면 밑에 떠 있던 AI 조문이 싹 다 날아간다」). 낱말 결과는 위에, AI 결과는 그 아래 남는다. */
-  lawQuery=q; lawSel={}; lawHits=null; lawOpen={}; lawAsking=false;
+  lawQuery=q; lawSel={}; lawHits=null; lawOpen={}; lawAsking=false; lawSem=null;
   lawTermList=lawTerms(q);
   if(!lawTermList.length){ renderLawResults(); showToast("두 글자 이상 입력해 주세요."); return; }
-  if(!S.laws.length){ renderLawResults(); showToast("먼저 법령 PDF를 올려주세요."); return; }
+  if(!S.laws.length){ renderLawResults(); showToast("먼저 법령을 받거나 올려주세요."); return; }
+  /* **문장이면 뜻으로 찾는다.** 낱말 다섯 개가 모두 든 조문은 있을 수 없어서 늘 「찾지 못했어요」였다
+   * (이랑님: 「문장으로 입력해서 엔터 누르면 너무 길어서 못 찾잖아」). 뜻 지문은 공짜고 AI 를 안 부른다.
+   * AI 는 지금처럼 「관련 조문 찾아줘」를 눌러야만 돈다. */
+  if(lawSemFits(q,lawTermList)){ lawSemSearch(q,false); return; }
   lawSearching=true; renderLawResults();
   function run(){
     return withAuthRetry(function(){
@@ -3686,6 +3735,8 @@ function lawSearch(){
     }
     lawCapped=(res.data||[]).length>=LAW_HIT_MAX;
     lawHits=buildLawHits(res.data||[],lawTermList);
+    /* 낱말로 하나도 없으면 뜻으로 한 번 더 — 「없어요」로 끝내지 않는다 */
+    if(!lawHits.length&&lawTermList.length>=2){ lawSemSearch(q,true); return; }
     /* 결과가 나오면 위쪽 부속(도움말·올려둔 목록)을 접는다. 안 그러면 결과를
      * 보려고 500px 넘게 굴려 내려가야 한다. 다시 펼치는 건 한 번 누르면 된다. */
     if(lawHits.length){ lawHelpOpen=false; lawListOpen=false; render(); return; }
@@ -4919,8 +4970,10 @@ function lawHelpHtml(){
     +     '<li><b>붙은 말 그대로</b> 찾으려면 따옴표로 묶어요. <code>"안전상비의약품"</code></li>'
     +     '<li>두 글자 이상이어야 찾아요. 최대 다섯 낱말.</li>'
     +     '<li>낱말 검색은 <b>법에 쓰인 말</b>로만 찾아요. <u>「타이레놀」로는 안 나옵니다</u> — '
-    +       '법에는 「안전상비의약품」이라고 적혀 있으니까요. '
-    +       '문장으로 물으면(「관련 조문 찾아줘」) <b>뜻으로도 찾으니</b> 낱말이 달라도 됩니다.</li>'
+    +       '법에는 「안전상비의약품」이라고 적혀 있으니까요.</li>'
+    +     '<li><b>문장을 치고 Enter</b> 를 누르면 낱말이 아니라 <b>뜻이 가까운 조문</b> 20개를 보여줘요. AI 를 안 부르니 0원이에요. '
+    +       '민원 글을 그대로 붙여넣어도 됩니다. 낱말로 하나도 안 나와도 뜻으로 한 번 더 찾아요.</li>'
+    +     '<li><b>「관련 조문 찾아줘」</b>(✦)를 누르면 AI 가 조문을 실제로 읽고 <b>인용해야 할 것을 골라</b> 줘요. 한 번에 100~200원.</li>'
     +   '</ul></div>'
 
     + '<div class="law-help-sec"><div class="law-help-t">② 결과 읽는 법</div>'
@@ -5718,8 +5771,10 @@ function renderLawResults(){
     return;
   }
   if(!lawHits.length){
-    el.innerHTML='<p class="empty">「'+esc(lawTermList.join(" + "))+'」를 찾지 못했어요.<br />'
-      +(lawTermList.length>1?'낱말을 줄이거나 ':'')+'띄어쓰기를 바꿔 보세요.</p>'+askPart;
+    el.innerHTML=(lawSem
+      ? '<p class="empty">「'+esc(lawSem.q.slice(0,40))+(lawSem.q.length>40?'…':'')+'」와 뜻이 닿는 조문을 못 찾았어요.<br />낱말 두세 개로 다시 찾아보세요.</p>'
+      : '<p class="empty">「'+esc(lawTermList.join(" + "))+'」를 찾지 못했어요.<br />'
+        +(lawTermList.length>1?'낱말을 줄이거나 ':'')+'띄어쓰기를 바꿔 보세요.</p>')+askPart;
     return;
   }
 
@@ -5729,9 +5784,12 @@ function renderLawResults(){
    * 있으면 어느 쪽이 대상인지 매번 헤아려야 한다. */
   var what=picked?("고른 "+picked+"곳"):"전부";
   var head='<div class="law-head">'
-    + '<div class="law-count"><b>'+lawHits.length+'</b>곳 · '+total+'건'
-    +   (lawCapped?' <span class="law-cap">'+LAW_HIT_MAX+'곳에서 끊었어요 — 낱말을 더 넣어 좁히세요</span>':'')
-    +   (lawTermList.length>1?' <span class="law-and">'+esc(lawTermList.join(" + "))+' 모두 포함</span>':'')+'</div>'
+    + (lawSem
+        ? '<div class="law-count"><b>'+lawHits.length+'</b>곳 <span class="law-and">뜻이 가까운 조문</span>'
+          + ' <span class="law-sem-note">'+(lawSem.auto?'낱말로는 없어서 뜻으로 찾았어요. ':'')+'AI 는 안 불렀어요(0원). 더 정확히 고르려면 위의 「관련 조문 찾아줘」.</span></div>'
+        : '<div class="law-count"><b>'+lawHits.length+'</b>곳 · '+total+'건'
+          +   (lawCapped?' <span class="law-cap">'+LAW_HIT_MAX+'곳에서 끊었어요 — 낱말을 더 넣어 좁히세요</span>':'')
+          +   (lawTermList.length>1?' <span class="law-and">'+esc(lawTermList.join(" + "))+' 모두 포함</span>':'')+'</div>')
     + '<div class="law-actions">'
     /* 하나뿐일 때 「모두 선택」은 말이 안 된다 */
     +   (lawHits.length>1

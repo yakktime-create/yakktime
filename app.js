@@ -238,12 +238,22 @@ function loadAll(){
   });
 }
 
+/* 새 항목의 열쇠(uuid)는 브라우저가 미리 만든다. 서버가 만들어 주기를 기다리면 그 사이 화면에는 id 가 「undefined」인
+ * 줄이 그려지고, 그 ✕ 를 누르면 「삭제 실패: invalid input syntax for type uuid: "undefined"」가 난다
+ * (이랑님 2026-09-09 「x 누르면 한 번에 안 지워짐」). 표 여섯 개(schedule·events·articles·mfds·laws·answers)는 전부 uuid 다. */
+function uuid(){
+  try{ if(window.crypto&&crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
+  var h="0123456789abcdef", out="", i;
+  for(i=0;i<36;i++){ out+=(i===8||i===13||i===18||i===23)?"-":(i===14?"4":(i===19?h[(Math.random()*4|0)+8]:h[Math.random()*16|0])); }
+  return out;
+}
 function dbInsert(table,item){
+  if(!item.id) item.id=uuid();
   var remote=toRemote(table,item);
   return withAuthRetry(function(){ return sb.from(table).insert(remote).select(); }).then(function(res){
     if(res.error){ showToast("저장 실패: "+res.error.message,true); return null; }
     /* 서버가 생성한 uuid를 로컬 아이템에 반영 */
-    if(res.data&&res.data[0]){ item.id=res.data[0].id; }
+    if(res.data&&res.data[0]&&res.data[0].id){ item.id=res.data[0].id; }
     return res.data?res.data[0]:null;
   });
 }
@@ -314,7 +324,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v159";
+var APP_VER="v160";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -568,11 +578,13 @@ function renderToday(){
   var dateStr=now.toLocaleDateString("ko-KR",{year:"numeric",month:"long",day:"numeric",weekday:"long"});
   var todayKey=keyOf(now);
   var tmrKey=keyOf(tomorrow());
-  /* due_date가 없는 예전 항목은 '오늘'로 본다 (마이그레이션 전 데이터 호환) */
+  /* 날짜 없는 할 일은 「언젠가」다(이랑님 2026-09-09 「언젠가 할 일도 따로 만들어야겠다 맨 밑에」).
+     2026-09-09 실측: 표에 due_date 가 비어 있는 줄은 0개라, 옛 항목이 「언젠가」로 옮겨 갈 일은 없다. */
   function dueOf(i){ return i.due||todayKey; }
-  /* 오늘 = 오늘 이하(지난 미완료도 이월). 내일 = 오늘보다 뒤 전부 → 사라지는 항목 없음 */
-  var todayItems=S.schedule.filter(function(i){ return dueOf(i)<=todayKey; });
-  var tmrItems  =S.schedule.filter(function(i){ return dueOf(i)>todayKey; });
+  /* 오늘 = 오늘 이하(지난 미완료도 이월). 앞으로 = 오늘보다 뒤. 언젠가 = 날짜 없음 → 사라지는 항목 없음 */
+  var todayItems=S.schedule.filter(function(i){ return i.due&&i.due<=todayKey; });
+  var tmrItems  =S.schedule.filter(function(i){ return i.due&&i.due>todayKey; });
+  var someItems =S.schedule.filter(function(i){ return !i.due; });
   var open=todayItems.filter(function(i){return !i.done;});
   var inProg=S.articles.filter(function(a){return a.status==="작성중";}).length;
   var mfdsOpen=S.mfds.filter(function(m){return m.status!=="완료";}).length;
@@ -614,6 +626,7 @@ function renderToday(){
   }
   var rows    = schedRows(todayItems,"아직 할 일이 없어요. 첫 항목을 추가해 하루를 시작해 보세요.");
   var tmrRows = schedRows(tmrItems,"앞으로 할 일은 아직 없어요.",true);
+  var someRows= schedRows(someItems,"날짜를 정하지 않은 할 일을 여기에 적어 두세요.");
   var tmrD=tomorrow();
   var tmrLabel=(tmrD.getMonth()+1)+"월 "+tmrD.getDate()+"일("+WD[tmrD.getDay()]+")";
   view().innerHTML='<div class="page">'
@@ -629,9 +642,13 @@ function renderToday(){
     + '</section>'
     + '<section class="card"><div class="card-head"><h2>앞으로 할 일</h2><span class="muted">'+tmrLabel+' 부터</span></div>'
     +   '<div class="add-row quick"><input class="input" id="new-s2" placeholder="앞으로 할 일을 적고 Enter (내일 날짜로 들어가요)" /><button class="btn" data-act="s-add" data-id="'+tmrKey+'" data-input="new-s2">+ 추가</button></div>'+tmrRows
+    + '</section>'
+    + '<section class="card"><div class="card-head"><h2>언젠가 할 일</h2><span class="muted">날짜 없이 · 항목을 누르면 수정</span></div>'
+    +   '<div class="add-row quick"><input class="input" id="new-s3" placeholder="언젠가 할 일을 적고 Enter" /><button class="btn" data-act="s-add" data-id="'+SOMEDAY+'" data-input="new-s3">+ 추가</button></div>'+someRows
     + '</section></div>';
   document.getElementById("new-s").addEventListener("keydown",function(e){ if(e.key==="Enter") addSchedule(todayKey,"new-s"); });
   document.getElementById("new-s2").addEventListener("keydown",function(e){ if(e.key==="Enter") addSchedule(tmrKey,"new-s2"); });
+  document.getElementById("new-s3").addEventListener("keydown",function(e){ if(e.key==="Enter") addSchedule(SOMEDAY,"new-s3"); });
 }
 
 /* 캘린더 입력창에서 고른 종류. 출장일 때만 「마지막 날」과 메모 칸이 나타난다 —
@@ -1068,9 +1085,10 @@ function markTerms(text,terms){
  * 되돌리고 싶어지면 화면만 다시 붙이면 된다. */
 
 /* ========== 액션 (id 없이 insert → 서버가 uuid 생성) ========== */
+var SOMEDAY="someday";   /* 「언젠가 할 일」의 날짜 표시 — 표에는 null 로 들어간다 */
 function addSchedule(dueKey,inputId){
   var v=(val(inputId||"new-s")||"").trim(); if(!v) return;
-  var item={text:v,done:false,star:false,due:dueKey||keyOf(new Date())};
+  var item={text:v,done:false,star:false,due:dueKey===SOMEDAY?null:(dueKey||keyOf(new Date()))};
   S.schedule.unshift(item); render(); dbInsert("schedule",item);
 }
 function addArticle(){ var t=(val("a-title")||"").trim(); if(!t) return; var item={title:t,status:segValue("a-status")||"기획",memo:(val("a-memo")||"").trim()}; S.articles.unshift(item); formOpen.articles=false; render(); dbInsert("articles",item); }

@@ -314,7 +314,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v151";
+var APP_VER="v152";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3276,6 +3276,39 @@ function lawApiImport(l){
     }).then(function(){ return {arts:arts.length,name:name}; });
   });
 }
+/* 개정판 확인 — 한 판에 한 번. 법제처 판마다 검색 한 번씩(돈 안 듦). 현행 판의 번호(mst)나 시행일이
+ * 우리가 받은 것과 다르면 l.newer 에 적어 두고 알림 한 줄을 띄운다. 버튼은 그때만 보인다. */
+var lawApiChecked=false;
+function lawApiCheckUpdates(){
+  if(lawApiChecked) return; lawApiChecked=true;
+  var todo=S.laws.filter(function(l){ return l.src==="api"&&l.mst; });
+  if(!todo.length) return;
+  var found=0, p=Promise.resolve();
+  todo.forEach(function(l){
+    p=p.then(function(){
+      return lawApiCall({op:"search",target:l.target==="admrul"?"admrul":"eflaw",q:l.name}).then(function(d){
+        var rows=(d.rows||[]).filter(function(r){ return lawBare(r.name)===lawBare(l.name)&&String(r.status||"")==="현행"; });
+        var cur=rows[0]; if(!cur) return;
+        if(String(cur.mst)!==String(l.mst)||String(cur.eff||"")>String(l.eff||"")){ l.newer={mst:String(cur.mst),eff:String(cur.eff||"")}; found++; }
+      },function(){});
+    });
+  });
+  p.then(function(){ if(found) render(); });
+}
+function lawApiNewer(){
+  if(lawBusy) return;
+  var todo=S.laws.filter(function(l){ return l.src==="api"&&l.newer; });
+  if(!todo.length) return;
+  lawBusy=true; render();
+  var k=0, fails=[];
+  function next(){
+    if(k>=todo.length){ lawBusy=false; lawApiChecked=false; render(); lawApiCheckUpdates();
+      showToast("✓ "+(todo.length-fails.length)+"개를 최신판으로 바꿨어요"); if(fails.length) alert("못 바꾼 것:\n\n"+fails.join("\n")); return; }
+    var l=todo[k++]; showToast("("+k+"/"+todo.length+") "+l.name+" 최신판 받는 중...");
+    lawApiImport(l).then(function(){ delete l.newer; next(); },function(err){ fails.push(l.name+" — "+((err&&err.message)||"실패")); next(); });
+  }
+  next();
+}
 /* 받을 수 있는 것을 한 번에 — 목록의 알림에서 부른다 */
 function lawApiAll(){
   if(lawBusy) return;
@@ -5699,6 +5732,12 @@ function renderLaws(){
       +   '별표의 표(행정처분 기준 등)를 칸 그대로 읽을 수 있어요.</div>'
       + '<button class="btn sm" data-act="law-api-all">법제처 판으로 바꾸기</button></div>';
     lawEmbedCheck();
+    /* 「조문 전부 다시 만들기」 버튼은 뺐다(이랑님: 「필요해?」). 개정은 앱이 스스로 확인해 새 판이 있을 때만 알린다. */
+    lawApiCheckUpdates();
+    var newer=items.filter(function(l){ return l.src==="api"&&l.newer; });
+    if(newer.length&&!lawBusy) list+='<div class="notice"><span class="notice-ic">!</span>'
+      + '<div>법제처에 <b>새 판</b>이 나왔어요 — '+esc(newer.map(function(l){ return l.name+"("+lawDate(l.newer.eff)+" 시행)"; }).join(" · "))+'. 받으면 조문이 최신판으로 바뀌어요.</div>'
+      + '<button class="btn sm" data-act="law-api-newer">최신판으로 바꾸기</button></div>';
     if(lawEmbStat&&!lawEmbStat.loading&&lawEmbStat.missing&&lawEmbStat.ready&&!lawBusy)
       list+='<div class="notice"><span class="notice-ic">!</span>'
         + '<div>뜻으로 찾을 준비가 안 된 조문이 <b>'+lawEmbStat.missing+'개</b> 있어요. 준비하면 <b>낱말이 달라도 뜻이 닿는 조문</b>을 AI 가 찾아요. 돈은 안 들어요.</div>'
@@ -5720,9 +5759,7 @@ function renderLaws(){
             + '<span class="law-head-sep">·</span>'
             + '<button class="link-btn" data-act="law-api-new"'+(lawBusy?" disabled":"")+'>＋ 법제처에서 받기</button>'
             + '<button class="link-btn quiet-link" data-act="law-upload"'+(lawBusy?" disabled":"")+'>PDF 올리기</button>'
-            + '<span class="law-head-sep">·</span>'
-            + '<button class="link-btn" data-act="law-build-all" data-id="all"'+(lawBusy?" disabled":"")+'>'
-            + (lawBusy?"만드는 중…":"조문 전부 다시 만들기")+'</button>'
+            + (lawBusy?'<span class="law-head-sep">·</span><span class="law-toggle-hint">처리 중…</span>':'')
             + '<button class="link-btn quiet-link" data-act="law-list">접기</button>'
           : '')
       + '</div>';
@@ -6075,6 +6112,7 @@ document.getElementById("app").addEventListener("click",function(e){
       break; }
     case "law-help": lawHelpToggle(); break;
     case "law-api-all": lawApiAll(); break;
+    case "law-api-newer": lawApiNewer(); break;
     case "law-embed-all": lawEmbedAll(); break;
     case "law-api-new": lawApiNew(); break;
     case "law-cand": lawApiPick(lawApiCands&&lawApiCands.rows[parseInt(id,10)]); break;

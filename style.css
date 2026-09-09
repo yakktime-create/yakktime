@@ -15,10 +15,10 @@
   --fs-2xs:10px;   /* 아이폰 달력 칩 전용. 되도록 쓰지 않는다 */
   --fs-xs:11px;    /* 배지 · 꼬리표 · 버전 */
   --fs-sm:12px;    /* 보조 설명 · 칩 */
-  --fs-md:13px;    /* 작은 본문 */
-  --fs-base:14px;  /* 기본 본문 */
-  --fs-lg:15px;    /* 강조 본문 · 입력칸 */
-  --fs-xl:17px;    /* 카드 제목 */
+  --fs-md:14px;    /* 작은 본문 · 보조 설명 (2026-09-09 13→14: 토스류 참고, 이랑님 요청) */
+  --fs-base:15px;  /* 기본 본문 (14→15) */
+  --fs-lg:16px;    /* 강조 본문 · 입력칸 · 카드 이름 (15→16) */
+  --fs-xl:18px;    /* 카드 제목 (17→18) */
   --fs-2xl:22px;   /* 페이지 제목 · 큰 숫자 */
   --fs-3xl:28px;   /* 인사말 */
 
@@ -32,7 +32,9 @@
   --r-xs:6px; --r-sm:8px; --r-md:12px; --r-lg:16px; --r-full:999px;
 
   /* 줄 간격 */
-  --lh-tight:1.4; --lh-snug:1.55; --lh-body:1.75; --lh-loose:1.9;
+  --lh-tight:1.35; --lh-snug:1.5; --lh-body:1.65; --lh-loose:1.85;
+  /* 한글 자간 — 시스템 글꼴은 살짝 좁혀야 단정하다(토스·당근이 그렇다) */
+  --ls-body:-0.01em; --ls-head:-0.02em;
 
   /* 그림자 — 높이 세 단계 */
   --sh-1:0 1px 2px rgba(30,42,36,.05);
@@ -50,7 +52,8 @@
 *{box-sizing:border-box;}
 html,body{margin:0;height:100%;}
 body{background:var(--paper);color:var(--ink);
-  font-family:-apple-system,"Apple SD Gothic Neo",system-ui,"Malgun Gothic",sans-serif;-webkit-font-smoothing:antialiased;}
+  font-family:-apple-system,"Apple SD Gothic Neo",system-ui,"Malgun Gothic",sans-serif;-webkit-font-smoothing:antialiased;
+  font-size:var(--fs-base);letter-spacing:var(--ls-body);line-height:var(--lh-body);}
 @media (prefers-reduced-motion: reduce){ *{transition:none!important;animation:none!important;} }
 #app{display:flex;min-height:100vh;}
 
@@ -76,7 +79,7 @@ body{background:var(--paper);color:var(--ink);
 
 .today-hero{padding-bottom:22px;border-bottom:1px solid var(--line);margin-bottom:22px;}
 .today-date{font-size:var(--fs-sm);color:var(--brass);font-weight:600;margin-bottom:9px;}
-.today-greet{font-size:var(--fs-3xl);font-weight:680;letter-spacing:-.02em;margin:0 0 8px;font-family:Georgia,"Times New Roman",serif;}
+.today-greet{font-size:var(--fs-3xl);font-weight:750;letter-spacing:var(--ls-head);margin:0 0 8px;line-height:var(--lh-tight);}
 .today-line{font-size:var(--fs-base);color:var(--muted);margin:0;}
 
 .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--sp-2);margin-bottom:20px;}
@@ -114,7 +117,7 @@ textarea.input{min-height:60px;resize:vertical;line-height:var(--lh-snug);width:
 .empty{text-align:center;color:var(--muted);font-size:var(--fs-md);padding:30px 10px;line-height:var(--lh-snug);}
 
 .page-head{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--sp-4);margin-bottom:22px;}
-.page-title{font-size:var(--fs-2xl);font-weight:680;letter-spacing:-.02em;margin:0 0 6px;font-family:Georgia,"Times New Roman",serif;}
+.page-title{font-size:var(--fs-2xl);font-weight:750;letter-spacing:var(--ls-head);margin:0 0 6px;line-height:var(--lh-tight);}
 /* 46ch 에서 접히므로 긴 부제는 「…다시 올리면 / 갱신돼요」처럼 어색하게 끊긴다.
    text-wrap:pretty 가 끊을 자리를 고른다(안 되는 브라우저는 지금과 같다). */
 /* 제목은 두 줄이 될 때 길이를 고르게 나눈다 */
@@ -129,7 +132,7 @@ h1,h2{text-wrap:balance;}
 
 /* Calendar */
 .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
-.cal-month{font-size:var(--fs-xl);font-weight:680;font-family:Georgia,serif;}
+.cal-month{font-size:var(--fs-xl);font-weight:750;letter-spacing:var(--ls-head);}
 .cal-arrow{background:none;border:1px solid var(--line);border-radius:var(--r-sm);width:32px;height:32px;cursor:pointer;color:var(--ink);font-size:var(--fs-lg);}
 /* 1fr 은 내용이 길면 칸을 밀어낸다. 막대가 칸 밖으로 나가야 해서 overflow 를
    풀었더니 긴 제목이 열 너비를 흔들었다. minmax(0,1fr) 로 못 늘어나게 막는다. */
@@ -187,7 +190,7 @@ h1,h2{text-wrap:balance;}
 /* Loading overlay */
 .loading-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:var(--paper);display:flex;align-items:center;justify-content:center;z-index:9999;transition:opacity .3s;}
 .loading-overlay.hide{opacity:0;pointer-events:none;}
-.loading-text{font-size:var(--fs-lg);color:var(--muted);font-family:Georgia,serif;}
+.loading-text{font-size:var(--fs-lg);color:var(--muted);}
 .loading-dot{display:inline-block;animation:dots 1.4s infinite;}
 @keyframes dots{0%,20%{opacity:0;}50%{opacity:1;}100%{opacity:0;}}
 .loading-dot:nth-child(2){animation-delay:.2s;}
@@ -589,7 +592,7 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
 .ask-extra{margin:var(--sp-1) 0 0;}
 .ans-save-btn{margin-left:auto;}
 .law-count{font-size:var(--fs-md);color:var(--muted);}
-.law-count b{color:var(--ink);font-size:var(--fs-base);}
+.law-count b{color:var(--ink);font-size:var(--fs-xl);font-weight:700;letter-spacing:var(--ls-head);}
 /* 결과가 상한에서 잘렸다는 표시 — 잘린 줄 모르는 것이 제일 위험하다 */
 .law-cap{font-size:var(--fs-2xs);font-weight:700;color:var(--brick);
   background:var(--warn-bg,#FBF0E6);border-radius:var(--r-full);padding:2px 9px;margin-left:6px;}
@@ -604,18 +607,18 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
    gap 과 margin-left:auto 가 죽어 「…에 관한 규칙시행규칙」처럼
    이름과 종류가 붙어 나왔다. */
 .law-group{display:flex;align-items:baseline;gap:var(--sp-3);
-  font-size:var(--fs-sm);font-weight:700;color:var(--blue-deep);background:var(--blue-soft);
-  border-radius:var(--r-sm);padding:7px 12px;margin:14px 0 8px;}
+  font-size:var(--fs-md);font-weight:700;color:var(--ink);letter-spacing:var(--ls-head);
+  border-radius:0;padding:2px 0 2px var(--sp-3);margin:var(--sp-5) 0 var(--sp-2);}
 /* 종류는 오른쪽 끝에, 이름보다 한 단계 조용하게 */
-.law-group-kind{margin-left:auto;flex-shrink:0;font-size:var(--fs-2xs);font-weight:650;
-  letter-spacing:.02em;opacity:.6;}
+.law-group-kind{margin-left:auto;flex-shrink:0;font-size:var(--fs-xs);font-weight:600;
+  letter-spacing:0;color:var(--muted);}
 .law-group.g0{border-left:3px solid var(--accent);}
 .law-group.g1,.law-group.g2{border-left:3px solid #6F9A8B;}
 .law-group.g3{border-left:3px solid var(--blue);}
 .law-group.g4{border-left:3px solid var(--brass);}
 .law-hits{display:flex;flex-direction:column;}
 .law-hit{display:flex;gap:var(--sp-3);background:var(--surface);border:1px solid var(--line);
-  border-radius:var(--r-md);padding:13px 14px;margin-bottom:8px;
+  border-radius:var(--r-lg);padding:var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-3);margin-bottom:var(--sp-3);
   transition:border-color .15s,box-shadow .15s,background .15s;}
 .law-pick{flex-shrink:0;cursor:pointer;padding:2px 0 0;}
 .law-snip+.law-snip{margin-top:9px;padding-top:9px;border-top:1px dashed var(--line);}
@@ -631,10 +634,10 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
 .law-hit.on{border-color:var(--blue);background:var(--blue-soft);}
 .law-check{width:17px;height:17px;flex-shrink:0;margin:2px 0 0;accent-color:var(--blue);cursor:pointer;}
 .law-hit-body{flex:1;min-width:0;}
-.law-snip{font-size:var(--fs-md);line-height:var(--lh-body);color:#43514A;word-break:break-all;}
+.law-snip{font-size:var(--fs-md);line-height:var(--lh-body);color:#43514A;word-break:keep-all;overflow-wrap:anywhere;}
 .law-snip mark{background:#F7E7A8;color:var(--ink);font-weight:700;
   border-radius:var(--r-xs);padding:1px 2px;}
-.law-meta{display:flex;align-items:center;gap:var(--sp-2);margin-bottom:10px;flex-wrap:wrap;}
+.law-meta{display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-2);flex-wrap:wrap;}
 .law-page{font-size:var(--fs-xs);font-weight:700;color:var(--blue-deep);background:var(--blue-soft);
   border-radius:var(--r-sm);padding:3px 9px;}
 .law-hit.on .law-page{background:#fff;}
@@ -708,10 +711,10 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
 
 /* 조문 표시 — 라벨이 길면 「전체 보기 · 이 쪽만 · PDF」가 다음 줄로 밀려
    오른쪽에 홀로 뜬다. 라벨 쪽이 줄어들게 하고 버튼 묶음은 안 줄어들게 둔다. */
-.law-art{font-size:var(--fs-xs);font-weight:700;color:#6B5518;background:#F7EFDF;
-  border-radius:var(--r-sm);padding:3px 9px;white-space:nowrap;
-  flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;}
-.law-hit.on .law-art{background:#fff;}
+/* 조 이름이 카드의 제목이다 — 알약이 아니라 굵은 글자로(2026-09-09). 알약이었을 때는 등급 알약·조 이름 알약·
+   「답변에 씀」 알약이 한 줄에 셋이라 무엇이 제목인지 안 보였다. 조 전체 보기 창의 머리줄(.lv-arts)은 그대로다. */
+.law-art{font-size:var(--fs-lg);font-weight:700;color:var(--ink);letter-spacing:var(--ls-head);
+  white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;line-height:var(--lh-tight);}
 .lv-arts{flex-shrink:0;padding:9px 16px;border-bottom:1px solid var(--line);
   background:var(--paper);font-size:var(--fs-sm);font-weight:650;color:#6B5518;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -1044,14 +1047,14 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
   padding:var(--sp-4);box-shadow:var(--sh-1);}
 .ask-head{display:flex;align-items:baseline;gap:var(--sp-3);flex-wrap:wrap;
   padding-bottom:var(--sp-3);border-bottom:1px solid var(--line);margin-bottom:var(--sp-3);}
-.ask-qt{font-weight:700;min-width:0;}
+.ask-qt{font-weight:700;min-width:0;font-size:var(--fs-lg);letter-spacing:var(--ls-head);line-height:var(--lh-snug);}
 .ask-cost{margin-left:auto;flex:none;font-size:var(--fs-xs);font-weight:700;color:var(--brass);
   background:var(--brass-soft);border-radius:var(--r-full);padding:2px 10px;}
-.ask-note{margin:0 0 var(--sp-3);font-size:var(--fs-md);color:var(--muted);line-height:var(--lh-snug);}
+.ask-note{margin:0 0 var(--sp-3);font-size:var(--fs-md);color:var(--muted);line-height:var(--lh-body);}
 .ask-none{margin:0 0 var(--sp-2);font-weight:600;}
 /* 등급이 무슨 뜻인지 결과 옆에 바로 — 사용법 안에만 두면 안 펼쳐 본다 */
 .ask-legend{display:flex;align-items:center;gap:var(--sp-1);flex-wrap:wrap;
-  margin:0 0 var(--sp-2);font-size:var(--fs-sm);color:var(--muted);line-height:var(--lh-snug);}
+  margin:0 0 var(--sp-2);font-size:var(--fs-sm);color:var(--muted);line-height:var(--lh-body);}
 .ask-legend b{color:var(--ink);font-weight:700;}
 .ask-legend span{font-weight:700;color:var(--accent);background:var(--accent-soft);
   border-radius:var(--r-xs);padding:1px 7px;}
@@ -1130,12 +1133,12 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .ask-art b{font-size:var(--fs-lg);}
 .ask-law{font-size:var(--fs-xs);color:var(--muted);background:var(--paper);
   border-radius:var(--r-full);padding:2px 8px;}
-.ask-why{margin-top:3px;font-size:var(--fs-md);color:var(--muted);line-height:var(--lh-snug);}
+.ask-why{margin-top:3px;font-size:var(--fs-md);color:#43514A;line-height:var(--lh-body);word-break:keep-all;overflow-wrap:anywhere;}
 /* 관련도 등급 — 말로 적고 색으로 한 번 더 갈라 준다.
    폭을 고정해 조 제목이 세로로 줄을 맞춘다 (등급마다 글자 수가 다르다). */
 /* 배지는 「답변서에 인용해야 하나」다 — 등급어가 아니라 할 일이 적혀 있다.
  * 글자 수가 5~6자로 달라 너비는 고정하지 않고 최소값만 준다. */
-.ask-score{flex:none;min-width:62px;text-align:center;font-size:var(--fs-2xs);font-weight:800;
+.ask-score{flex:none;text-align:center;font-size:var(--fs-xs);font-weight:700;letter-spacing:0;
   border-radius:var(--r-full);padding:3px 9px;white-space:nowrap;
   background:var(--paper);color:var(--muted);}
 .ask-score.n-1{background:var(--accent);color:#fff;}
@@ -1144,16 +1147,16 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .ask-item.r-2{border-left-color:var(--accent-soft);}
 /* 점수의 근거 — 「답 · 필수 · 분명」. 숫자 옆에 두면 줄이 복잡해져 아래에 작게 깐다. */
 .ask-parts{display:flex;gap:var(--sp-1);margin-top:4px;flex-wrap:wrap;}
-.ask-parts span{font-size:var(--fs-2xs);font-weight:700;color:var(--muted);
-  background:var(--paper);border-radius:var(--r-xs);padding:1px 7px;}
+.ask-parts span{font-size:var(--fs-xs);font-weight:600;color:var(--muted);
+  background:var(--paper);border-radius:var(--r-xs);padding:1px 7px;letter-spacing:0;}
 /* 조문 본문 앞부분 — 창을 열지 않고도 맞는지 가늠하라고 붙인다.
  * 원문과 대조를 통과한 **근거 문장**이면 왼쪽에 선을 긋고 글자를 진하게 한다. */
-.ask-head-txt{margin-top:6px;padding:8px 11px;background:var(--paper);
-  border-radius:var(--r-sm);font-size:var(--fs-sm);color:var(--muted);
-  line-height:var(--lh-snug);}
+.ask-head-txt{margin-top:var(--sp-2);padding:var(--sp-2) var(--sp-3);background:var(--paper);
+  border-radius:var(--r-sm);font-size:var(--fs-md);color:var(--muted);
+  line-height:var(--lh-body);word-break:keep-all;overflow-wrap:anywhere;}
 .ask-head-txt.is-quote{color:var(--ink);border-left:3px solid var(--accent-soft);}
-.ask-quote-tag{display:inline-block;margin-right:7px;font-size:var(--fs-2xs);
-  font-weight:800;color:var(--accent);vertical-align:1px;}
+.ask-quote-tag{display:inline-block;margin-right:7px;font-size:var(--fs-xs);
+  font-weight:700;color:var(--accent);vertical-align:1px;}
 /* 위계 머리말 — 낱말 검색의 법령 묶음 머리말과 같은 결로 */
 .ask-kindhead{list-style:none;display:flex;align-items:baseline;gap:var(--sp-2);
   margin:var(--sp-3) 0 6px;padding:5px 11px;border-radius:var(--r-sm);
@@ -1242,7 +1245,7 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .law-api-row{margin:calc(-1*var(--sp-2)) 0 var(--sp-4);font-size:var(--fs-sm);color:var(--muted);}
 /* 낱말 결과 아래에 남는 AI 결과 — 사이를 띄우고 한 단 낮춘다 */
 .ask-below{margin-top:var(--sp-6);padding-top:var(--sp-4);border-top:1px dashed var(--line);}
-.ask-gist{margin:0 0 var(--sp-3);padding:var(--sp-2) var(--sp-3);background:var(--accent-soft);border-radius:var(--r-sm);font-size:var(--fs-md);color:var(--ink);line-height:var(--lh-snug);}
+.ask-gist{margin:0 0 var(--sp-3);padding:var(--sp-3) var(--sp-4);background:var(--accent-soft);border-radius:var(--r-md);font-size:var(--fs-base);color:var(--ink);line-height:var(--lh-body);}
 .ask-gist .ask-dim{color:var(--muted);font-size:var(--fs-xs);}
 .ask-x{margin-left:auto;}
 .law-sem-note{display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:400;margin-top:2px;}
@@ -1274,8 +1277,8 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
   background:var(--brick-soft);border-radius:var(--r-full);padding:1px 8px;white-space:nowrap;}
 /* 「답변에 씀」 — 전에 「민원 답변」에 근거로 담은 조문. 「아직 시행 전」과 같은 자리·같은 꼴,
    색만 다르다(경고가 아니라 기억이니까). 낱말 검색 카드와 AI 결과 둘 다 쓴다. */
-.law-used{flex:none;font-size:var(--fs-2xs);font-weight:800;color:var(--accent);
-  background:var(--accent-soft);border-radius:var(--r-full);padding:1px 8px;white-space:nowrap;}
+.law-used{flex:none;font-size:var(--fs-xs);font-weight:700;color:var(--accent);
+  background:var(--accent-soft);border-radius:var(--r-full);padding:2px 8px;white-space:nowrap;letter-spacing:0;}
 /* 결과를 보는 중에는 올리기 배너를 한 줄로 — 지금 할 일이 아니다 */
 .upload-bar.slim{padding-top:8px;padding-bottom:8px;}
 .upload-bar.slim .import-bar-sub{display:none;}

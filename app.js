@@ -157,7 +157,7 @@ document.getElementById("login-email").addEventListener("keydown",function(e){ i
 
 /* ========== DB 레이어 (Supabase) — OPUS SQL 스키마 ========== */
 /* archive·docs 는 화면이 없어졌지만 표는 남겨 둔다 — 데이터와 백업이 보존된다 */
-var TABLES=["schedule","events","articles","mfds","archive","docs","laws","refs","answers","settings"];
+var TABLES=["schedule","events","articles","mfds","archive","docs","laws","refs","answers","settings","inspections","insp_items"];
 
 /*
  * OPUS SQL 컬럼명 매핑:
@@ -233,8 +233,12 @@ function loadAll(){
   });
   return Promise.all(promises).then(function(results){
     var bad=results.filter(function(r){ return r.failed; }).map(function(r){ return r.table; });
-    if(bad.length) setTimeout(function(){ showToast("일부 데이터를 못 읽었어요: "+bad.join(", "),true); },600);
+    if(bad.length&&navigator.onLine) setTimeout(function(){ showToast("일부 데이터를 못 읽었어요: "+bad.join(", "),true); },600);
     results.forEach(function(r){ S[r.table]=r.data; });
+    /* 통신이 없으면(현장) 실사 노트·일정은 기기에 적어 둔 것으로 채운다. 아직 못 올린 것도 얹는다. */
+    if(bad.length) inspApplyCache(bad);
+    if(!bad.length) inspCacheSave();
+    if(navigator.onLine) setTimeout(inspFlush,800);
   });
 }
 
@@ -274,7 +278,7 @@ function dbDelete(table,id){
 }
 
 /* ========== 전역 상태 ========== */
-var S={ schedule:[], events:[], articles:[], mfds:[], archive:[], docs:[], laws:[], refs:[], answers:[], settings:[] };
+var S={ schedule:[], events:[], articles:[], mfds:[], archive:[], docs:[], laws:[], refs:[], answers:[], settings:[], inspections:[], insp_items:[] };
 /* 설정 표 — 기기(아이패드·맥)가 달라도 같아야 하는 작은 값. 「AI에게 알려둔 우리 과 규칙」·답변 형식.
  * localStorage 는 기기마다 달라서 맥에서 적은 규칙이 아이패드엔 없었다(2026-09-10). */
 function setGet(k){ var r=(S.settings||[]).find(function(x){ return x.key===k; }); return r?String(r.value||""):""; }
@@ -295,6 +299,7 @@ var TAB_LIST=[
   {group:"업무"},
   {id:"articles",label:"기고글",sub:"서울시약사회"},
   {id:"mfds",label:"식약처 업무"},
+  {id:"insp",label:"실태조사"},
   {group:"자료"},
   {id:"laws",label:"법령"},
   {id:"answers",label:"민원 답변"}
@@ -332,7 +337,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v164";
+var APP_VER="v165";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6208,6 +6213,24 @@ document.getElementById("app").addEventListener("click",function(e){
     case "ans-save": ansSave(id); break;
     case "ans-open": ansOpenId=(ansOpenId===id)?null:id; render(); break;
     case "ans-jump": ansOpenId=id; active="answers"; render(); break;
+    /* 실태조사 노트 */
+    case "insp-new": inspNewOpen=!inspNewOpen; if(inspNewOpen) inspLoadTpl().then(function(){ render(); },function(){}); render(); break;
+    case "insp-newarea": { var ai=inspNewAreas.indexOf(id); if(ai>=0) inspNewAreas.splice(ai,1); else inspNewAreas.push(id); el.classList.toggle("on"); break; }
+    case "insp-create": inspCreate(); break;
+    case "insp-open": inspOpenId=id; inspPage=inspPage||"d1"; inspExpand={}; render(); break;
+    case "insp-back": inspOpenId=null; render(); break;
+    case "insp-page": inspPage=id; inspExpand={}; render(); window.scrollTo(0,0); break;
+    case "insp-done": { var it1=inspItem(id); if(it1){ it1.done=!it1.done; inspSave(it1); render(); } break; }
+    case "insp-expand": { if(window.getSelection&&String(window.getSelection()).length) break; inspExpand[id]=!inspExpand[id]; render(); var ta=document.querySelector('.insp-memo[data-id="'+id+'"]'); if(ta&&inspExpand[id]) ta.focus(); break; }
+    case "insp-add": inspAdd(id); break;
+    case "insp-tofind": inspToFind(id); break;
+    case "insp-grade": { var it2=inspItem(id); if(it2){ it2.grade=el.getAttribute("data-g"); inspSave(it2); render(); } break; }
+    case "insp-bld": { var it3=inspItem(id); if(it3){ var g=el.getAttribute("data-g"); it3.building=(it3.building===g)?null:g; inspSave(it3); render(); } break; }
+    case "insp-del": { var it4=inspItem(id); if(!it4) break; S.insp_items=S.insp_items.filter(function(x){ return x.id!==id; }); inspWrite("delete","insp_items",it4); render();
+      showUndoToast("한 줄을 지웠어요",function(){ S.insp_items.push(it4); inspSave(it4); render(); }); break; }
+    case "insp-area": { var ins=S.inspections.find(function(x){ return x.id===inspOpenId; }); if(!ins) break; ins.areas=ins.areas||[]; var k=ins.areas.indexOf(id); if(k>=0) ins.areas.splice(k,1); else ins.areas.push(id); inspWrite("upsert","inspections",ins); render(); break; }
+    case "insp-status": { var ins2=S.inspections.find(function(x){ return x.id===id; }); if(ins2){ ins2.status=ins2.status==="끝남"?"진행":"끝남"; inspWrite("upsert","inspections",ins2); render(); } break; }
+    case "insp-copyfind": inspCopyFinds(); break;
     case "ans-del": ansDel(id); break;
     case "ans-edit": ansReopen(id); break;
     case "ans-rcopy": { var rt=ansRowText(id);
@@ -6256,6 +6279,7 @@ function render(){
   else if(active==="mfds") renderMfds();
   else if(active==="laws") renderLaws();
   else if(active==="answers") renderAnswers();
+  else if(active==="insp") renderInsp();
 }
 
 /* 앱 시작 (로그인 후 호출) */
@@ -6292,3 +6316,257 @@ ensureSession().then(function(session){
   hideLoading();
   showLogin();
 });
+
+/* ========== 실태조사 노트 (v165 · 2026-09-10) ==========
+ * 실사 한 건 = 노트 한 권. 페이지 아홉 장(준비·1~3일차·내 담당·방·서류·질문·발견)을 손가락으로 넘긴다.
+ * 본(insp_template.json)을 복사해 시작한다 — 이랑님 체크리스트 + 별첨 1-5 실태조사(GMP) 45항목.
+ * 현장은 통신이 끊긴다: 체크·메모는 기기(localStorage)에 먼저 적히고, 못 올린 것은 줄을 서 있다가
+ * 통신이 돌아오면 올라간다(inspQ). 화면 위 「저장 대기 N」이 그 줄이다. 앱 껍데기는 sw.js 가 캐시한다. */
+var INSP_PAGES=[["prep","준비"],["d1","1일차"],["d2","2일차"],["d3","3일차"],["mine","내 담당"],["rooms","방"],["docs","서류"],["questions","질문"],["findings","발견"]];
+var INSP_PAGE_LABEL={}; INSP_PAGES.forEach(function(p){ INSP_PAGE_LABEL[p[0]]=p[1]; });
+var inspOpenId=null, inspPage="d1", inspTpl=null, inspNewOpen=false, inspExpand={}, inspNewAreas=["압축공기·가스"], inspTimers={};
+
+function inspItems(id){ return (S.insp_items||[]).filter(function(x){ return x.insp_id===id; }).sort(function(a,b){ return (a.seq||0)-(b.seq||0); }); }
+function inspLoadTpl(){
+  if(inspTpl) return Promise.resolve(inspTpl);
+  return fetch("insp_template.json?v="+APP_VER).then(function(r){ return r.json(); }).then(function(t){
+    inspTpl=t; try{ localStorage.setItem("insp_tpl",JSON.stringify(t)); }catch(e){} return t;
+  }).catch(function(){
+    try{ var c=localStorage.getItem("insp_tpl"); if(c){ inspTpl=JSON.parse(c); return inspTpl; } }catch(e){}
+    throw new Error("체크리스트 본을 못 불러왔어요. 통신이 되는 곳에서 한 번 열어 주세요.");
+  });
+}
+
+/* --- 오프라인: 기기 저장 + 올릴 줄 --- */
+var inspQ=(function(){ try{ return JSON.parse(localStorage.getItem("insp_queue")||"[]"); }catch(e){ return []; } })();
+function inspQSave(){ try{ localStorage.setItem("insp_queue",JSON.stringify(inspQ)); }catch(e){} }
+function inspCacheSave(){ try{ localStorage.setItem("insp_cache",JSON.stringify({inspections:S.inspections||[],insp_items:S.insp_items||[],events:S.events||[]})); }catch(e){} }
+function inspCache(){ try{ return JSON.parse(localStorage.getItem("insp_cache")||"null"); }catch(e){ return null; } }
+function inspQPush(w){ inspQ=inspQ.filter(function(x){ return !(x.table===w.table&&x.id===w.id&&x.op===w.op); }); inspQ.push(w); inspQSave(); inspBadge(); }
+function inspWrite(op,table,item){
+  inspCacheSave();
+  var w={op:op,table:table,item:item,id:item.id};
+  if(!navigator.onLine){ inspQPush(w); return Promise.resolve(); }
+  var p=op==="delete"
+    ? withAuthRetry(function(){ return sb.from(table).delete().eq("id",item.id); })
+    : withAuthRetry(function(){ return sb.from(table).upsert(toRemote(table,item)); });
+  return p.then(function(res){ if(res&&res.error) inspQPush(w); },function(){ inspQPush(w); });
+}
+function inspFlush(){
+  if(!inspQ.length||!navigator.onLine) return;
+  var q=inspQ.slice(); inspQ=[]; inspQSave();
+  var p=Promise.resolve();
+  q.forEach(function(w){ p=p.then(function(){ return inspWrite(w.op,w.table,w.item); }); });
+  p.then(function(){ inspBadge(); if(!inspQ.length&&q.length) showToast("✓ 현장에서 적은 "+q.length+"건을 올렸어요"); });
+}
+window.addEventListener("online",function(){ setTimeout(inspFlush,1500); });
+function inspBadge(){ var b=document.getElementById("insp-q"); if(b){ b.textContent=inspQ.length?"저장 대기 "+inspQ.length:""; b.style.display=inspQ.length?"":"none"; } }
+/* 읽어 오지 못한 표(오프라인)는 기기에 적어 둔 것으로 채운다 — loadAll 이 부른다 */
+function inspApplyCache(failedTables){
+  var c=inspCache(); if(!c) return;
+  ["inspections","insp_items","events"].forEach(function(t){ if(failedTables.indexOf(t)>=0&&Array.isArray(c[t])) S[t]=c[t]; });
+  /* 아직 못 올린 것은 서버 것보다 새것이다 — 그걸로 덮는다 */
+  inspQ.forEach(function(w){
+    if(w.op!=="upsert"||!S[w.table]) return;
+    var i=S[w.table].findIndex(function(x){ return x.id===w.id; });
+    if(i>=0) S[w.table][i]=w.item; else S[w.table].push(w.item);
+  });
+}
+
+/* --- 화면 --- */
+function inspProgress(insp){
+  var it=inspItems(insp.id).filter(function(x){ return x.kind==="task"||x.kind==="doc"||x.kind==="q"; });
+  var d=it.filter(function(x){ return x.done; }).length;
+  return {done:d,total:it.length,finds:inspItems(insp.id).filter(function(x){ return x.kind==="find"; }).length};
+}
+function inspDates(insp){
+  if(!insp.start_date) return "";
+  var a=insp.start_date, b=insp.end_date||a;
+  return shortDate(a)+(b!==a?" ~ "+shortDate(b):"");
+}
+function inspBuildingTags(insp){
+  return (insp.buildings||[]).map(function(b){ return '<span class="insp-b">'+esc(b.name)+' <i>'+esc(b.mode||"")+'</i></span>'; }).join(" ");
+}
+function inspNewHtml(){
+  var areas=(inspTpl&&inspTpl.areas)||["유틸리티","압축공기·가스","셀뱅크","제조","제조기록서","공정밸리데이션","적격성평가","일탈","세척밸리데이션","시험","교육"];
+  if(!inspNewOpen) return '<div class="add-row quick"><button class="btn" data-act="insp-new">＋ 새 실사 노트</button><span class="muted">본(바이오 3일)을 복사해서 시작해요</span></div>';
+  return '<div class="card composer insp-new">'
+    + '<input class="input" id="insp-title" placeholder="업체 · 제조소 (예: ○○바이오 오송)" />'
+    + '<div class="insp-new-row"><label>시작일 <input class="input" type="date" id="insp-start" value="'+keyOf(new Date())+'" /></label>'
+    +   '<label>일수 <input class="input insp-days" type="number" id="insp-days" value="3" min="1" max="10" /></label></div>'
+    + '<input class="input" id="insp-buildings" placeholder="건물 (예: 633 변경만, 636 전체)" value="633 변경만, 636 전체" />'
+    + '<input class="input" id="insp-partner" placeholder="같이 가는 사람 (예: 김해인 선생님 — 3일차 공유)" />'
+    + '<div class="insp-areas"><span class="muted">내 담당</span>'+areas.map(function(a){ return '<button class="chip'+(inspNewAreas.indexOf(a)>=0?" on":"")+'" data-act="insp-newarea" data-id="'+esc(a)+'">'+esc(a)+'</button>'; }).join("")+'</div>'
+    + '<div class="composer-foot"><span class="muted">캘린더에 일정이 같이 들어가요</span><button class="btn quiet sm" data-act="insp-new">닫기</button><button class="btn sm" data-act="insp-create">노트 만들기</button></div>'
+    + '</div>';
+}
+function inspListHtml(list){
+  if(!list.length) return '<div class="empty-box"><p>아직 실사 노트가 없어요. 위에서 하나 만들어 보세요.</p></div>';
+  return '<div class="insp-list">'+list.map(function(x){
+    var p=inspProgress(x), pct=p.total?Math.round(p.done/p.total*100):0;
+    return '<div class="card insp-card'+(x.status==="끝남"?" done":"")+'" data-act="insp-open" data-id="'+esc(x.id)+'">'
+      + '<div class="insp-card-t"><span>'+esc(x.title)+'</span><span class="meta-pill'+(x.status==="끝남"?"":" accent")+'">'+esc(x.status||"진행")+'</span></div>'
+      + '<div class="insp-card-s">'+esc(inspDates(x))+(x.partner?' · '+esc(x.partner):'')+(x.areas&&x.areas.length?' · '+esc(x.areas.join("·"))+' 담당':'')+'</div>'
+      + '<div class="insp-card-s">'+inspBuildingTags(x)+'</div>'
+      + '<div class="insp-bar"><i style="width:'+pct+'%"></i></div>'
+      + '<div class="insp-card-s">체크 '+p.done+'/'+p.total+' · 발견 '+p.finds+'</div>'
+      + '</div>';
+  }).join("")+'</div>';
+}
+function inspRowHtml(x,insp){
+  var open=!!inspExpand[x.id], custom=!x.src, free=(x.kind==="room"||x.kind==="find");
+  var tags=(x.building?'<span class="insp-b">'+esc(x.building)+'</span>':'')+(x.area?'<span class="insp-a">'+esc(x.area)+'</span>':'');
+  if(free){
+    return '<li class="insp-row free" data-id="'+esc(x.id)+'">'
+      + '<div class="insp-body">'
+      +   '<div class="insp-free-h"><input class="insp-title-in" data-id="'+esc(x.id)+'" value="'+esc(x.text)+'" placeholder="'+(x.kind==="room"?"방 이름":"무엇이 이상한가")+'" />'
+      +     (x.kind==="find"?'<span class="insp-grades">'+["보완 예상","참고"].map(function(g){ return '<button class="chip'+(x.grade===g?" on":"")+'" data-act="insp-grade" data-id="'+esc(x.id)+'" data-g="'+g+'">'+g+'</button>'; }).join("")
+      +       (insp.buildings||[]).map(function(b){ return '<button class="chip'+(x.building===b.name?" on":"")+'" data-act="insp-bld" data-id="'+esc(x.id)+'" data-g="'+esc(b.name)+'">'+esc(b.name)+'</button>'; }).join("")+'</span>':'')
+      +     '<button class="del" data-act="insp-del" data-id="'+esc(x.id)+'" title="지우기">✕</button></div>'
+      +   (x.kind==="find"?'<input class="insp-ref-in" data-id="'+esc(x.id)+'" value="'+esc(x.ref||"")+'" placeholder="근거 (예: PIC/S Annex 1 · ICH Q9 · 규칙 별표 1 3.5)" />':'')
+      +   '<textarea class="insp-memo" data-id="'+esc(x.id)+'" rows="2" placeholder="'+(x.kind==="room"?"이 방의 특징 — 등급, 설비, 눈에 띈 것":"본 것 · 들은 것 · 서류 번호")+'">'+esc(x.memo||"")+'</textarea>'
+      + '</div></li>';
+  }
+  return '<li class="insp-row'+(x.done?" done":"")+(open?" open":"")+'" data-id="'+esc(x.id)+'">'
+    + '<button class="check'+(x.done?" on":"")+'" data-act="insp-done" data-id="'+esc(x.id)+'">✓</button>'
+    + '<div class="insp-body" data-act="insp-expand" data-id="'+esc(x.id)+'">'
+    +   '<div class="insp-text">'+esc(x.text)+' '+tags+'</div>'
+    +   (x.hint?'<div class="insp-hint">'+esc(x.hint)+'</div>':'')
+    +   (!open&&x.memo?'<div class="insp-memo-pv">📝 '+esc(x.memo)+'</div>':'')
+    + '</div>'
+    + (open?'<div class="insp-exp"><textarea class="insp-memo" data-id="'+esc(x.id)+'" rows="2" placeholder="메모 — 본 것 · 답변 · 서류 번호">'+esc(x.memo||"")+'</textarea>'
+        + '<div class="insp-exp-acts"><button class="link-btn" data-act="insp-tofind" data-id="'+esc(x.id)+'">발견으로 옮기기 →</button>'
+        + (custom?'<button class="link-btn quiet-link" data-act="insp-del" data-id="'+esc(x.id)+'">지우기</button>':'')+'</div></div>':'')
+    + '</li>';
+}
+function inspSectionsHtml(items,insp,showPage){
+  if(!items.length) return '<div class="empty-box sm"><p>여기엔 아직 아무것도 없어요.</p></div>';
+  var order=[], by={};
+  items.forEach(function(x){ var k=(showPage?INSP_PAGE_LABEL[x.page]+" · ":"")+(x.section||""); if(!by[k]){ by[k]=[]; order.push(k); } by[k].push(x); });
+  return order.map(function(k){
+    var rows=by[k], n=rows.filter(function(x){ return x.done; }).length, cnt=rows.filter(function(x){ return x.kind!=="room"&&x.kind!=="find"; }).length;
+    return '<section class="insp-sec"><div class="insp-sec-h"><span>'+esc(k)+'</span>'+(cnt?'<span class="muted">'+n+'/'+cnt+'</span>':'')+'</div><ul class="list">'
+      + rows.map(function(x){ return inspRowHtml(x,insp); }).join("")+'</ul></section>';
+  }).join("");
+}
+function inspAddRowHtml(page){
+  var ph={rooms:"방 이름 (예: 633-2F 배양실) — Enter",findings:"발견 한 줄 — Enter 하면 아래에 생겨요",docs:"서류 한 줄 더 — Enter",questions:"질문 한 줄 더 — Enter",prep:"할 일 한 줄 더 — Enter",d1:"할 일 한 줄 더 — Enter",d2:"할 일 한 줄 더 — Enter",d3:"할 일 한 줄 더 — Enter"}[page];
+  if(!ph) return "";
+  return '<div class="add-row quick insp-add"><input class="input" id="insp-add" placeholder="'+ph+'" /><button class="btn sm" data-act="insp-add" data-id="'+page+'">＋</button></div>';
+}
+function inspNoteHtml(insp){
+  var all=inspItems(insp.id), pg=inspPage, body="";
+  var counts={}; INSP_PAGES.forEach(function(p){ var it=all.filter(function(x){ return x.page===p[0]&&x.kind!=="room"&&x.kind!=="find"; }); counts[p[0]]=it.length?it.filter(function(x){ return x.done; }).length+"/"+it.length:""; });
+  var mine=all.filter(function(x){ return x.area&&(insp.areas||[]).indexOf(x.area)>=0&&x.kind!=="room"&&x.kind!=="find"; });
+  counts.mine=mine.length?mine.filter(function(x){ return x.done; }).length+"/"+mine.length:"";
+  counts.rooms=String(all.filter(function(x){ return x.kind==="room"; }).length||"");
+  counts.findings=String(all.filter(function(x){ return x.kind==="find"; }).length||"");
+  if(pg==="mine"){
+    var areas=(inspTpl&&inspTpl.areas)||[];
+    (insp.areas||[]).forEach(function(a){ if(areas.indexOf(a)<0) areas=areas.concat([a]); });
+    body='<div class="insp-areas"><span class="muted">담당 영역 — 켜 두면 여기 모여요</span>'+areas.map(function(a){ return '<button class="chip'+((insp.areas||[]).indexOf(a)>=0?" on":"")+'" data-act="insp-area" data-id="'+esc(a)+'">'+esc(a)+'</button>'; }).join("")+'</div>'
+      + inspSectionsHtml(mine,insp,true);
+  } else {
+    var items=all.filter(function(x){ return x.page===pg; });
+    body=inspAddRowHtml(pg)+inspSectionsHtml(items,insp,false);
+    if(pg==="findings"&&items.length) body+='<div class="insp-foot-acts"><button class="btn quiet sm" data-act="insp-copyfind">발견 전부 복사</button><span class="muted">검토서에 붙일 때 — 한글 내보내기는 다음 판에</span></div>';
+  }
+  return '<div class="insp-head">'
+    + '<button class="link-btn" data-act="insp-back">← 실태조사</button>'
+    + '<div class="insp-head-t"><b>'+esc(insp.title)+'</b><span class="muted">'+esc(inspDates(insp))+(insp.partner?' · '+esc(insp.partner):'')+'</span><div class="insp-head-b">'+inspBuildingTags(insp)+'</div></div>'
+    + '<span class="insp-q" id="insp-q" style="display:none"></span>'
+    + '<button class="link-btn quiet-link" data-act="insp-status" data-id="'+esc(insp.id)+'">'+(insp.status==="끝남"?"다시 진행으로":"끝남으로")+'</button>'
+    + '</div>'
+    + '<div class="insp-tabs">'+INSP_PAGES.map(function(p){ return '<button class="insp-tab'+(pg===p[0]?" on":"")+'" data-act="insp-page" data-id="'+p[0]+'">'+p[1]+(counts[p[0]]?'<i>'+counts[p[0]]+'</i>':'')+'</button>'; }).join("")+'</div>'
+    + '<div class="insp-page">'+body+'</div>';
+}
+function renderInsp(){
+  var list=(S.inspections||[]).slice().sort(function(a,b){ return String(b.start_date||"").localeCompare(String(a.start_date||"")); });
+  var cur=inspOpenId?list.find(function(x){ return x.id===inspOpenId; }):null;
+  if(!inspTpl) inspLoadTpl().then(function(){ if(active==="insp"&&!inspOpenId) render(); },function(){});
+  if(!cur){
+    inspOpenId=null;
+    view().innerHTML='<div class="page">'+pageHead2("실태조사","실사 한 건이 노트 한 권이에요. 현장에서 통신이 끊겨도 체크와 메모는 되고, 돌아오면 저장돼요.",list.length?[pill("실사 "+list.length+"건")]:null)
+      + inspNewHtml()+inspListHtml(list)+'</div>';
+    var t=document.getElementById("insp-title"); if(t&&inspNewOpen&&!t.value) t.focus();
+    return;
+  }
+  view().innerHTML='<div class="page insp-note">'+inspNoteHtml(cur)+'</div>';
+  inspBadge(); wireInspNote(cur);
+}
+function inspSave(item){ inspWrite("upsert","insp_items",item); }
+function inspItem(id){ return (S.insp_items||[]).find(function(x){ return x.id===id; }); }
+function wireInspNote(insp){
+  var root=view();
+  /* 메모·이름·근거 — 글쇠마다 저장하지 않고 잠깐 모아서 */
+  function wire(sel,field){
+    Array.prototype.forEach.call(root.querySelectorAll(sel),function(el){
+      el.addEventListener("input",function(){
+        var it=inspItem(el.getAttribute("data-id")); if(!it) return;
+        it[field]=el.value; clearTimeout(inspTimers[it.id+field]);
+        inspTimers[it.id+field]=setTimeout(function(){ inspSave(it); },700);
+      });
+    });
+  }
+  wire(".insp-memo","memo"); wire(".insp-title-in","text"); wire(".insp-ref-in","ref");
+  var add=document.getElementById("insp-add");
+  if(add) add.addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); inspAdd(inspPage); } });
+  /* 길게 누르면 발견으로 — 손가락용 */
+  Array.prototype.forEach.call(root.querySelectorAll('.insp-body[data-act="insp-expand"]'),function(el){
+    var t=null;
+    el.addEventListener("touchstart",function(){ t=setTimeout(function(){ t=null; inspToFind(el.getAttribute("data-id")); },600); },{passive:true});
+    ["touchend","touchmove","touchcancel"].forEach(function(ev){ el.addEventListener(ev,function(){ if(t){ clearTimeout(t); t=null; } },{passive:true}); });
+  });
+}
+function inspAdd(page){
+  var el=document.getElementById("insp-add"); var v=(el&&el.value||"").trim(); if(!v) return;
+  var insp=S.inspections.find(function(x){ return x.id===inspOpenId; }); if(!insp) return;
+  var kind=page==="rooms"?"room":page==="findings"?"find":page==="docs"?"doc":page==="questions"?"q":"task";
+  var seq=Math.max.apply(null,[0].concat(inspItems(insp.id).map(function(x){ return x.seq||0; })))+1;
+  var it={id:uuid(),insp_id:insp.id,page:page,section:(kind==="room"||kind==="find")?null:"직접 적음",seq:seq,kind:kind,text:v,hint:null,building:null,area:null,done:false,memo:null,grade:kind==="find"?"참고":null,ref:null,src:null};
+  S.insp_items.push(it); inspSave(it); render();
+  if(kind==="room"||kind==="find"){ var m=document.querySelector('.insp-memo[data-id="'+it.id+'"]'); if(m) m.focus(); }
+  else { var a=document.getElementById("insp-add"); if(a) a.focus(); }
+}
+function inspToFind(id){
+  var src=inspItem(id); if(!src||src.kind==="find") return;
+  var seq=Math.max.apply(null,[0].concat(inspItems(src.insp_id).map(function(x){ return x.seq||0; })))+1;
+  var it={id:uuid(),insp_id:src.insp_id,page:"findings",section:null,seq:seq,kind:"find",text:src.text,hint:null,building:src.building||null,area:src.area||null,done:false,memo:src.memo||null,grade:"참고",ref:null,src:"←"+INSP_PAGE_LABEL[src.page]};
+  S.insp_items.push(it); inspSave(it); inspPage="findings"; render();
+  var m=document.querySelector('.insp-memo[data-id="'+it.id+'"]'); if(m) m.focus();
+  showToast("발견 페이지로 옮겼어요");
+}
+function inspCreate(){
+  var title=(val("insp-title")||"").trim(); if(!title){ showToast("업체·제조소 이름을 적어 주세요."); return; }
+  var start=val("insp-start")||keyOf(new Date()), days=Math.max(1,parseInt(val("insp-days")||"3",10)||3);
+  var d=new Date(start+"T00:00:00"); d.setDate(d.getDate()+days-1); var end=keyOf(d);
+  var buildings=(val("insp-buildings")||"").split(/[,、]/).map(function(s){ s=s.trim(); if(!s) return null; var m=/^(\S+)\s*(.*)$/.exec(s); return {name:m[1],mode:m[2]||""}; }).filter(Boolean);
+  var partner=(val("insp-partner")||"").trim()||null;
+  inspLoadTpl().then(function(t){
+    var insp={id:uuid(),title:title,site:null,start_date:start,end_date:end,buildings:buildings,areas:inspNewAreas.slice(),partner:partner,status:"진행",notes:null};
+    var items=t.items.map(function(x,i){ return {id:uuid(),insp_id:insp.id,page:x.page,section:x.section||null,seq:i+1,kind:x.kind||"task",text:x.text,hint:x.hint||null,building:x.building||null,area:x.area||null,done:false,memo:null,grade:null,ref:null,src:x.src||"본"}; });
+    S.inspections=S.inspections||[]; S.insp_items=S.insp_items||[];
+    S.inspections.unshift(insp); S.insp_items=S.insp_items.concat(items); inspCacheSave();
+    var ev={id:uuid(),key:start,until:end,title:"실태조사 · "+title,place:null,time:null,memo:(partner?partner+" 동행":null)};
+    S.events.push(ev);
+    if(navigator.onLine){
+      dbInsert("inspections",insp).then(function(){
+        return withAuthRetry(function(){ return sb.from("insp_items").insert(items.map(function(x){ return toRemote("insp_items",x); })); });
+      }).then(function(res){ if(res&&res.error){ showToast("항목을 못 올렸어요 — 통신이 되면 다시 올려요",true); items.forEach(function(x){ inspQPush({op:"upsert",table:"insp_items",item:x,id:x.id}); }); } });
+      dbInsert("events",ev);
+    } else {
+      inspQPush({op:"upsert",table:"inspections",item:insp,id:insp.id});
+      items.forEach(function(x){ inspQPush({op:"upsert",table:"insp_items",item:x,id:x.id}); });
+      inspQPush({op:"upsert",table:"events",item:ev,id:ev.id});
+    }
+    inspOpenId=insp.id; inspPage="prep"; inspNewOpen=false; render();
+    showToast("✓ 노트를 만들었어요 — 항목 "+items.length+"개, 캘린더에 일정도 넣었어요");
+  },function(e){ showToast(e.message,true); });
+}
+function inspCopyFinds(){
+  var insp=S.inspections.find(function(x){ return x.id===inspOpenId; }); if(!insp) return;
+  var fs=inspItems(insp.id).filter(function(x){ return x.kind==="find"; });
+  var t=fs.map(function(x,i){ return (i+1)+". ["+(x.grade||"참고")+(x.building?" · "+x.building:"")+"] "+x.text+(x.ref?" (근거: "+x.ref+")":"")+(x.memo?"\n   "+x.memo.replace(/\n/g,"\n   "):""); }).join("\n");
+  var done=function(){ showToast("✓ 발견 "+fs.length+"건을 복사했어요"); };
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done,function(){ lawCopyFallback(t,done); }); else lawCopyFallback(t,done);
+}

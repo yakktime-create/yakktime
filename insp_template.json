@@ -1,0 +1,1541 @@
+{
+"name": "바이오 실태조사 3일",
+"version": "2026-09-10",
+"areas": [
+"유틸리티",
+"압축공기·가스",
+"셀뱅크",
+"제조",
+"제조기록서",
+"공정밸리데이션",
+"적격성평가",
+"일탈",
+"세척밸리데이션",
+"시험",
+"교육",
+"품질체계",
+"제조소총람",
+"보관소",
+"운송"
+],
+"pages": [
+[
+"prep",
+"준비"
+],
+[
+"d1",
+"1일차"
+],
+[
+"d2",
+"2일차"
+],
+[
+"d3",
+"3일차"
+],
+[
+"mine",
+"내 담당"
+],
+[
+"rooms",
+"방"
+],
+[
+"docs",
+"서류"
+],
+[
+"questions",
+"질문"
+],
+[
+"findings",
+"발견"
+]
+],
+"items": [
+{
+"page": "prep",
+"section": "챙길 것",
+"text": "명함",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "챙길 것",
+"text": "노트북에 내 담당(압축공기·가스) 자료 미리 저장",
+"hint": "현장 통신이 막힐 수 있다",
+"building": "",
+"area": "압축공기·가스",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "출력물",
+"text": "이전 검토서(백본 보고서)",
+"hint": "투어용. 🟢 = 보완 나간 항목 → 반영 여부 현장 확인 / 밑줄 = 참고만",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "출력물",
+"text": "제조방법",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "출력물",
+"text": "별규 (원액)",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "출력물",
+"text": "기시 (완제)",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "출력물",
+"text": "아젠다",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "출력물",
+"text": "업무 분장표",
+"hint": "내 담당이 늘 수 있다 → 「내 담당」 페이지에서 영역을 켠다",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "사전 확인",
+"text": "허가 여부 확인 → PV 배치 요청 방식 결정",
+"hint": "허가 완료·상업 생산 중이면 가장 최근 3배치, 허가 전이면 PV 3배치",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "사전 확인",
+"text": "김해인 선생님과 3일차 분담·공유 방식 합의",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "사전 확인",
+"text": "자율점검 결과는 요구하지 않는다",
+"hint": "업체가 어차피 안 보여준다",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "사전 확인",
+"text": "보완 설명회의 대상인지 확인",
+"hint": "신약, 비용 많이 낸 바이오시밀러는 있다 → 대상이면 업체 보완자료 제출 뒤 설명 준비",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "사전 확인",
+"text": "검토서 원칙 되새기기",
+"hint": "이전에 안 본 것 위주로 새로 쓴다. 이전 검토서를 재사용해도 「확인했다」 복붙 금지 — 이번에 실제 확인한 것만 남기고 미확인은 삭제",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "사전 확인",
+"text": "검토서 쓰다 보완 나갈 것 같으면 즉시 공유",
+"hint": "팀장·선임에게 바로 말한다",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "사전미팅",
+"text": "제조방법(허가사항) — 현장·BMR과 비교 기준",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "사전미팅",
+"text": "기시(완제) · 별규(원액)",
+"hint": "원액 + 버퍼 = 완제라 시험방법이 거의 같다 → 차이점만 확인",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "사전미팅",
+"text": "아젠다·업무 분장 확정, 633/636 투어 순서 확인",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "prep",
+"section": "사전미팅",
+"text": "압축공기·가스 공급원이 633·636 공용인지 제조소 담당자에게 먼저 질문",
+"hint": "공용이면 중복 검토에 힘 빼지 말 것",
+"building": "",
+"area": "압축공기·가스",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오전 — 유틸리티 투어 (윤아와 동행)",
+"text": "정제수/WFI: 루프 순환 온도, 데드레그, 샘플링 포인트, 경향분석 자료",
+"hint": "",
+"building": "",
+"area": "유틸리티",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오전 — 유틸리티 투어 (윤아와 동행)",
+"text": "HVAC: 차압 표시, 등급별 압력 캐스케이드, 필터 교체 이력",
+"hint": "",
+"building": "",
+"area": "유틸리티",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오전 — 유틸리티 투어 (윤아와 동행)",
+"text": "청정증기: 품질시험 주기",
+"hint": "",
+"building": "",
+"area": "유틸리티",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오전 — 유틸리티 투어 (윤아와 동행)",
+"text": "압축공기·가스 — 구조(배관도, 사용점), 품질시험 항목·주기",
+"hint": "건물 간 공용 여부 먼저",
+"building": "",
+"area": "압축공기·가스",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오전 — 유틸리티 투어 (윤아와 동행)",
+"text": "압축공기·가스 — 밸리데이션 자료 요청",
+"hint": "633도 이전에 미확인, 636은 신규 → 둘 다",
+"building": "",
+"area": "압축공기·가스",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오전 — 유틸리티 투어 (윤아와 동행)",
+"text": "압축공기·가스 — 사용점 필터(0.2μm 등) 완결성 시험 주기",
+"hint": "",
+"building": "",
+"area": "압축공기·가스",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오전 — 유틸리티 투어 (윤아와 동행)",
+"text": "압축공기·가스 — 품질 규격: 유분·수분(이슬점)·입자·미생물, 기준 근거(ISO 8573 등)",
+"hint": "",
+"building": "",
+"area": "압축공기·가스",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오전 — 유틸리티 투어 (윤아와 동행)",
+"text": "압축공기·가스 — 제품 접촉 여부에 따른 등급 구분",
+"hint": "",
+"building": "",
+"area": "압축공기·가스",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오전 — 유틸리티 투어 (윤아와 동행)",
+"text": "압축공기·가스 — 경고/조치 한계 이탈 이력, 알람 대응 기록",
+"hint": "",
+"building": "",
+"area": "압축공기·가스",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오전 — 유틸리티 투어 (윤아와 동행)",
+"text": "압축공기·가스 — 재밸리데이션 주기, 변경관리 연계",
+"hint": "",
+"building": "",
+"area": "압축공기·가스",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오전 — 유틸리티 투어 (윤아와 동행)",
+"text": "알람 발생 시 조치 기록 (누가, 언제, 어떻게)",
+"hint": "",
+"building": "",
+"area": "유틸리티",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오전 — 유틸리티 투어 (윤아와 동행)",
+"text": "636동 유틸리티는 신규라 전부 본다",
+"hint": "",
+"building": "636",
+"area": "유틸리티",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오전 — 유틸리티 투어 (윤아와 동행)",
+"text": "633동은 변경사항 위주로 본다",
+"hint": "8월 초 이전 조사에서 확인한 건물",
+"building": "633",
+"area": "유틸리티",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오후 — 유틸리티(계속) + 셀뱅크 투어",
+"text": "MCB/WCB 보관 조건 (LN2 온도 모니터링, 알람, 백업 전원)",
+"hint": "",
+"building": "",
+"area": "셀뱅크",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오후 — 유틸리티(계속) + 셀뱅크 투어",
+"text": "이중 보관 여부",
+"hint": "",
+"building": "",
+"area": "셀뱅크",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오후 — 유틸리티(계속) + 셀뱅크 투어",
+"text": "출입 통제 및 입출고 기록",
+"hint": "",
+"building": "",
+"area": "셀뱅크",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오후 — 유틸리티(계속) + 셀뱅크 투어",
+"text": "셀뱅크 특성분석/안정성 시험 주기",
+"hint": "",
+"building": "",
+"area": "셀뱅크",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오후 — 서류 검토 시작",
+"text": "제조기록서(BMR) 검토 시작",
+"hint": "시간 오래 걸림, 2일차로 이어짐",
+"building": "",
+"area": "제조기록서",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오후 — 서류 검토 시작",
+"text": "PV 배치 요청",
+"hint": "원칙 3배치. 허가 완료·상업 생산 중 → 가장 최근 3배치(제조방법과 비교하니 최신본이 유리). 허가 전 → PV 3배치. 일탈 검토 목적이면 오래된 배치 무방",
+"building": "",
+"area": "공정밸리데이션",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d1",
+"section": "오후 — 서류 검토 시작",
+"text": "일탈 리스트 요청 (1일차 마지막)",
+"hint": "제시본은 타이틀만 → Criticality 표시해서 다음날 제출 요청. 기간 명시(최근 1~2년 또는 대상 배치)",
+"building": "",
+"area": "일탈",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d2",
+"section": "오전 — 제조 투어",
+"text": "원액(DS) 공정 흐름: 접종 → 배양 → 하베스트 → 정제 → 원액 보관",
+"hint": "",
+"building": "",
+"area": "제조",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d2",
+"section": "오전 — 제조 투어",
+"text": "BSC/클린벤치 작업자 행동, 무균 조작",
+"hint": "",
+"building": "",
+"area": "제조",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d2",
+"section": "오전 — 제조 투어",
+"text": "라인 클리어런스, 상태 표시",
+"hint": "",
+"building": "",
+"area": "제조",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d2",
+"section": "오전 — 제조 투어",
+"text": "단회용 자재 관리, 완결성 시험",
+"hint": "",
+"building": "",
+"area": "제조",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d2",
+"section": "오전 — 제조 투어",
+"text": "633동: 이전 검토서 🟢 보완 반영 + 변경사항",
+"hint": "",
+"building": "633",
+"area": "제조",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d2",
+"section": "오전 — 제조 투어",
+"text": "636동: 전체",
+"hint": "",
+"building": "636",
+"area": "제조",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d2",
+"section": "오후 — 서류",
+"text": "BMR 계속 (제조방법 vs 실제 기록 비교)",
+"hint": "",
+"building": "",
+"area": "제조기록서",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d2",
+"section": "오후 — 서류",
+"text": "PV 보고서",
+"hint": "",
+"building": "",
+"area": "공정밸리데이션",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d2",
+"section": "오후 — 서류",
+"text": "적격성평가(IQ/OQ/PQ) — 신규(636동)·변경 장비 위주",
+"hint": "",
+"building": "636",
+"area": "적격성평가",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d2",
+"section": "오후 — 서류",
+"text": "크리티컬 일탈 지목 → 업체 통보",
+"hint": "Criticality 표시 리스트에서 상세 검토할 건 몇 개 선정 → 3일차",
+"building": "",
+"area": "일탈",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d3",
+"section": "자율 검토 — 김해인 선생님과 겹침, 상호 공유",
+"text": "일탈 상세 (2일차 지목 건): 근본원인, CAPA, 영향 배치, 마감 여부",
+"hint": "",
+"building": "",
+"area": "일탈",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d3",
+"section": "자율 검토 — 김해인 선생님과 겹침, 상호 공유",
+"text": "PV 잔여분",
+"hint": "",
+"building": "",
+"area": "공정밸리데이션",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d3",
+"section": "자율 검토 — 김해인 선생님과 겹침, 상호 공유",
+"text": "적격성평가 잔여분",
+"hint": "",
+"building": "",
+"area": "적격성평가",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d3",
+"section": "자율 검토 — 김해인 선생님과 겹침, 상호 공유",
+"text": "세척밸리데이션: 잔류 허용기준 근거, worst case 선정, 샘플링 위치, 재밸리데이션 주기",
+"hint": "",
+"building": "",
+"area": "세척밸리데이션",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d3",
+"section": "자율 검토 — 김해인 선생님과 겹침, 상호 공유",
+"text": "김해인 선생님과 발견사항 교차 확인 → 중복/누락 정리",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d3",
+"section": "자율 검토 — 김해인 선생님과 겹침, 상호 공유",
+"text": "검토서 초안 정리, 보완 예상 건은 즉시 공유",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d3",
+"section": "조사 후",
+"text": "검토서 작성 — 이전 검토서와 병합 원칙 (미확인 삭제)",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d3",
+"section": "조사 후",
+"text": "보완 예상 건 정리 → 팀 공유",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "d3",
+"section": "조사 후",
+"text": "보완 설명회의 대상이면 업체 보완자료 제출 후 설명 자료 준비",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "task",
+"src": ""
+},
+{
+"page": "docs",
+"section": "사전미팅",
+"text": "제조방법, 기시(완제), 별규(원액), 아젠다, 업무분장",
+"hint": "출력해서 지참",
+"building": "",
+"area": "",
+"kind": "doc",
+"src": ""
+},
+{
+"page": "docs",
+"section": "1일차 오전",
+"text": "압축공기·가스 밸리데이션 (633·636)",
+"hint": "내 담당. 공용 여부 먼저 확인",
+"building": "",
+"area": "압축공기·가스",
+"kind": "doc",
+"src": ""
+},
+{
+"page": "docs",
+"section": "1일차 오후",
+"text": "제조기록서 (지정 배치)",
+"hint": "최근 3배치 or PV 3배치",
+"building": "",
+"area": "",
+"kind": "doc",
+"src": ""
+},
+{
+"page": "docs",
+"section": "1일차 마지막",
+"text": "일탈 리스트",
+"hint": "Criticality 표시 → 2일차 제출",
+"building": "",
+"area": "",
+"kind": "doc",
+"src": ""
+},
+{
+"page": "docs",
+"section": "2일차",
+"text": "PV 보고서, 적격성평가 보고서",
+"hint": "636동 신규 장비 우선",
+"building": "",
+"area": "",
+"kind": "doc",
+"src": ""
+},
+{
+"page": "docs",
+"section": "2일차 오후",
+"text": "크리티컬 일탈 상세 (선정 건)",
+"hint": "3일차 검토",
+"building": "",
+"area": "",
+"kind": "doc",
+"src": ""
+},
+{
+"page": "docs",
+"section": "3일차",
+"text": "세척밸리데이션 보고서",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "doc",
+"src": ""
+},
+{
+"page": "docs",
+"section": "필요시",
+"text": "원액 생산 실적, 작업자·시험자 교육 기록, SOP",
+"hint": "계획서 열람 가능하면 SOP 번호만 기재해도 됨",
+"building": "",
+"area": "",
+"kind": "doc",
+"src": ""
+},
+{
+"page": "questions",
+"section": "공통 (모든 영역)",
+"text": "이 활동의 근거 SOP는? 최신 개정판인가? 개정 사유는?",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "공통 (모든 영역)",
+"text": "이 기록은 누가, 언제, 실시간으로 작성했나? (ALCOA+)",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "공통 (모든 영역)",
+"text": "수정 흔적에 사유·서명·날짜가 있는가?",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "공통 (모든 영역)",
+"text": "이 장비/시스템의 마지막 적격성평가·교정 일자는?",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "공통 (모든 영역)",
+"text": "최근 이 영역에서 발생한 일탈은? 어떻게 종결됐나?",
+"hint": "",
+"building": "",
+"area": "",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "공통 (모든 영역)",
+"text": "(633동) 8월 이후 변경된 사항이 있나? 변경관리 번호는?",
+"hint": "",
+"building": "633",
+"area": "",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "압축공기·가스",
+"text": "633·636동 압축공기·가스 공급원은 공용인가, 별도인가?",
+"hint": "",
+"building": "",
+"area": "압축공기·가스",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "압축공기·가스",
+"text": "품질 규격(유분·수분·입자·미생물) 기준의 근거 문서는?",
+"hint": "",
+"building": "",
+"area": "압축공기·가스",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "압축공기·가스",
+"text": "밸리데이션은 언제, 어떤 범위로 수행했나? 636동 신규 사용점은 포함됐나?",
+"hint": "",
+"building": "636",
+"area": "압축공기·가스",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "압축공기·가스",
+"text": "사용점 필터 교체·완결성 시험 주기와 기록은?",
+"hint": "",
+"building": "",
+"area": "압축공기·가스",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "압축공기·가스",
+"text": "규격 이탈 시 제품 영향평가 절차는?",
+"hint": "",
+"building": "",
+"area": "압축공기·가스",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "유틸리티 (수계·HVAC)",
+"text": "정제수/WFI 경고/조치 한계 설정 근거와 초과 시 조치 사례는?",
+"hint": "",
+"building": "",
+"area": "유틸리티",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "유틸리티 (수계·HVAC)",
+"text": "HVAC 차압 이탈 시 알람 → 조치 흐름과 기록은?",
+"hint": "",
+"building": "",
+"area": "유틸리티",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "유틸리티 (수계·HVAC)",
+"text": "유틸리티 재밸리데이션 주기와 근거는?",
+"hint": "",
+"building": "",
+"area": "유틸리티",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "셀뱅크",
+"text": "MCB/WCB 소진 현황과 재제조 계획은?",
+"hint": "",
+"building": "",
+"area": "셀뱅크",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "셀뱅크",
+"text": "LN2 탱크 온도 이탈 시 알람 수신자·대응 시간은?",
+"hint": "",
+"building": "",
+"area": "셀뱅크",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "셀뱅크",
+"text": "바이알 출고 승인 절차와 기록은?",
+"hint": "",
+"building": "",
+"area": "셀뱅크",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "제조 (원액)",
+"text": "배치 간 세척·멸균 상태를 어떻게 표시·확인하나?",
+"hint": "",
+"building": "",
+"area": "제조",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "제조 (원액)",
+"text": "CPP 이탈 시 즉시 조치 기준은?",
+"hint": "",
+"building": "",
+"area": "제조",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "제조 (원액)",
+"text": "제조방법(허가사항)과 실제 BMR이 다른 부분이 있는가? 변경관리 승인은?",
+"hint": "",
+"building": "",
+"area": "제조",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "제조 (원액)",
+"text": "작업자 무균 조작 자격 유효기간은?",
+"hint": "",
+"building": "",
+"area": "제조",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "제조기록서(BMR)",
+"text": "배치 번호·수율·중간체 보관 시간이 허가된 범위 안인가?",
+"hint": "",
+"building": "",
+"area": "제조기록서",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "제조기록서(BMR)",
+"text": "인라인 검사 원자료(printout, 전자기록)와 BMR 수기 기록이 일치하나?",
+"hint": "",
+"building": "",
+"area": "제조기록서",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "제조기록서(BMR)",
+"text": "검토·승인 서명 시점이 작업 완료 후 합리적 시간 내인가?",
+"hint": "",
+"building": "",
+"area": "제조기록서",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "공정밸리데이션(PV)",
+"text": "PV 계획서 합격 기준은 사전 승인됐나? 사후 변경은?",
+"hint": "",
+"building": "",
+"area": "공정밸리데이션",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "공정밸리데이션(PV)",
+"text": "3배치 모두 합격했나? 미합격·일탈 처리 방식은?",
+"hint": "",
+"building": "",
+"area": "공정밸리데이션",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "공정밸리데이션(PV)",
+"text": "이후 지속적 공정검증(CPV) 계획이 있는가?",
+"hint": "",
+"building": "",
+"area": "공정밸리데이션",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "적격성평가",
+"text": "변경관리와 연계되어 재적격성평가가 수행됐나?",
+"hint": "",
+"building": "",
+"area": "적격성평가",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "적격성평가",
+"text": "636동 신규 장비 IQ/OQ/PQ 완료 여부, 미충족 항목 처리 기록은?",
+"hint": "",
+"building": "636",
+"area": "적격성평가",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "일탈",
+"text": "등급(Critical/Major/Minor) 분류 기준 SOP는?",
+"hint": "",
+"building": "",
+"area": "일탈",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "일탈",
+"text": "근본원인 분석 도구를 실제로 사용했나, 형식적인가?",
+"hint": "",
+"building": "",
+"area": "일탈",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "일탈",
+"text": "CAPA 효과성 확인은 누가, 언제 했나?",
+"hint": "",
+"building": "",
+"area": "일탈",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "일탈",
+"text": "종결 기한 초과 건은 몇 건이고 사유는?",
+"hint": "",
+"building": "",
+"area": "일탈",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "세척밸리데이션",
+"text": "잔류 허용기준(MACO/HBEL) 산출 근거는?",
+"hint": "",
+"building": "",
+"area": "세척밸리데이션",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "세척밸리데이션",
+"text": "worst case 제품·장비 선정 근거는?",
+"hint": "",
+"building": "",
+"area": "세척밸리데이션",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "세척밸리데이션",
+"text": "스왑/린스 회수율 시험 결과는?",
+"hint": "",
+"building": "",
+"area": "세척밸리데이션",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "세척밸리데이션",
+"text": "캠페인 생산 시 최대 배치 수·dirty hold time 설정 근거는?",
+"hint": "",
+"building": "",
+"area": "세척밸리데이션",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "시험 (원액·완제)",
+"text": "원액 별규와 완제 기시의 시험항목 차이는 무엇이고 그 근거는?",
+"hint": "",
+"building": "",
+"area": "시험",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "시험 (원액·완제)",
+"text": "시험자 자격 인정·교육 기록이 시험법과 연결되어 있나?",
+"hint": "",
+"building": "",
+"area": "시험",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "교육",
+"text": "작업자·시험자 교육 이력이 담당 업무·SOP와 연결되어 있나?",
+"hint": "",
+"building": "",
+"area": "교육",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "교육",
+"text": "SOP 개정 후 교육 완료 전 작업 투입 사례는 없는가?",
+"hint": "",
+"building": "",
+"area": "교육",
+"kind": "q",
+"src": "내 질문 목록"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 1. 제조소총람",
+"text": "1-1 신청 품목의 제조소 수와 공정별 제조소(명칭·소재지)",
+"hint": "총람의 공정별 제조소 표와 허가신청서가 같은가. 633·636동이 총람에 어떻게 구분돼 있나",
+"building": "",
+"area": "제조소총람",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 1. 제조소총람",
+"text": "1-1 신기술·신공정(실시간 출하, 연속공정 등) 적용 여부",
+"hint": "적용했다면 그 공정의 밸리데이션·관리 방식은 별도인가",
+"building": "",
+"area": "제조소총람",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 1. 제조소총람",
+"text": "1-2 [무균] 오염관리전략(CCS) 수립·관리",
+"hint": "CCS 문서가 있나, 최근 검토일, 636동 신규 구역이 CCS에 반영됐나(GMP 고시 별표 1)",
+"building": "",
+"area": "품질체계",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 2. 품질(보증)체계",
+"text": "2-1 역가·독성 평가를 포함한 QRM으로 교차오염 위험 평가·관리",
+"hint": "교차오염 위험평가서에 이 품목이 있나, 전용·캠페인·세척 중 어느 대책인가, 평가 근거(HBEL)",
+"building": "",
+"area": "품질체계",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 2. 품질(보증)체계",
+"text": "2-1 소독제 적합성·효과성 입증 자료(표면 재료별)",
+"hint": "소독제 효력시험 보고서, 재료 대표성, 로테이션 주기",
+"building": "",
+"area": "품질체계",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 2. 품질(보증)체계",
+"text": "2-2 보관소 온·습도 모니터링과 mapping test 근거",
+"hint": "mapping 보고서(계절·부하 조건), 센서 위치가 worst point인가, 알람 이력",
+"building": "",
+"area": "보관소",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 2. 품질(보증)체계",
+"text": "2-3 [바이오] 생물원료(사용균주 등) 보존·계대배양 기록",
+"hint": "셀뱅크 계대 기록, 세대수 한계, 보존 위치·수량 대장",
+"building": "",
+"area": "셀뱅크",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 2. 품질(보증)체계",
+"text": "2-4 [첨단바이오] 인체세포등 추적 체계와 기록 보존(30년)",
+"hint": "해당 시에만",
+"building": "",
+"area": "품질체계",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 3. 제조 및 품질관리 기록서",
+"text": "3-1 허가신청사항에 부합하는 3배치 이상의 제조기록서",
+"hint": "요청한 배치(최근 3 또는 PV 3)의 BMR — 제조방법과 공정변수·수율·유지시간 대조",
+"building": "",
+"area": "제조기록서",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 3. 제조 및 품질관리 기록서",
+"text": "3-2 포장 전 반제품 시험으로 출하 승인 시 포장 전·후 동등성 검토 자료",
+"hint": "해당하면 전·후 시험 결과 비교 자료",
+"building": "",
+"area": "시험",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-1 중요 시설·장비의 OQ/PQ 계획서·보고서(실제 가동 조건 포괄)",
+"hint": "636동 신규 장비 목록 → IQ/OQ/PQ 완료 여부, 미충족 항목 처리. 가동 범위가 실제 공정 범위를 덮나",
+"building": "",
+"area": "적격성평가",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-1 중요 변경 후 추가 적격성평가 실시 여부",
+"hint": "633동 8월 이후 변경 건의 변경관리 번호와 재적격성평가 연계",
+"building": "",
+"area": "적격성평가",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-2 허가신청사항(CPP·IPC)에 부합하는 제조·포장공정 밸리데이션 완료",
+"hint": "PV 보고서의 CPP 범위 = 제조방법의 범위인가, 미완료면 완료 예정일",
+"building": "",
+"area": "공정밸리데이션",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-2 용량 브라켓팅/매트릭스 적용 여부",
+"hint": "완제 용량이 여럿이면 어떤 방법으로 묶었나, 근거",
+"building": "",
+"area": "공정밸리데이션",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-2 복수 원료(API)·중간체 제조원의 변동성을 고려한 PV",
+"hint": "제조원이 둘 이상이면 각각 PV 배치에 들어갔나",
+"building": "",
+"area": "공정밸리데이션",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-2 제조단위(batch size)별 PV 수행",
+"hint": "배치 규모가 여럿이면 각각 했나, 안 했으면 근거",
+"building": "",
+"area": "공정밸리데이션",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-2 복수 제조설비 각각 사용한 PV",
+"hint": "설비가 여럿(라인·배양기)이면 모두 PV에 썼나",
+"building": "",
+"area": "공정밸리데이션",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-2 포장단위별 포장공정 밸리데이션",
+"hint": "포장단위마다 했나",
+"building": "",
+"area": "공정밸리데이션",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-2 [무균] 무균공정모의시험(APS) — 일상 조작·최악조건 간섭 반영",
+"hint": "APS 계획서의 간섭(intervention) 목록이 실제 BMR의 조작을 덮나, 최근 APS 결과·주기(6개월)",
+"building": "",
+"area": "제조",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-2 [무균] 멸균필터 밸리데이션",
+"hint": "필터 적합성(박테리아 챌린지·적합성·추출물), 사용 전후 완결성 시험 기록",
+"building": "",
+"area": "제조",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-2 [무균] 최종멸균 공정 밸리데이션",
+"hint": "해당 시 멸균 사이클 밸리데이션(worst load, F0)",
+"building": "",
+"area": "제조",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-2 공정 중 반제품 유지시간(hold time) 설정 근거",
+"hint": "hold time 연구 보고서, BMR 실제 유지시간이 한도 안인가",
+"building": "",
+"area": "공정밸리데이션",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-3 시험방법 밸리데이션 자료(기술이전 자료 포함)",
+"hint": "해당 제조소 시험실에서 한 밸리데이션인가, 이전받은 방법이면 이전 보고서",
+"building": "",
+"area": "시험",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-4 세척 밸리데이션 완료(효과·재현성)",
+"hint": "세척 밸리데이션 보고서, 미완료면 완료 시기",
+"building": "",
+"area": "세척밸리데이션",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-4 접촉 설비 전부에 대한 품목별 세척 밸리데이션 또는 worst case 근거",
+"hint": "worst case 제품 선정 매트릭스(용해도·독성·세척 난이도), 설비 그룹화 동등성 근거",
+"building": "",
+"area": "세척밸리데이션",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-4 세척 전 유지시간(DHT) 밸리데이션",
+"hint": "DHT 설정 근거, BMR의 실제 DHT",
+"building": "",
+"area": "세척밸리데이션",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-4 세척 후 유지시간(CHT) 밸리데이션",
+"hint": "CHT 설정 근거",
+"building": "",
+"area": "세척밸리데이션",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-4 캠페인 생산 시 세척 방법·빈도 밸리데이션",
+"hint": "최대 배치 수 근거",
+"building": "",
+"area": "세척밸리데이션",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-4 주성분 잔류 시험항목(HPLC·TOC·전도도 등) 선정 근거와 독성 기반 한도(HBEL/MACO)",
+"hint": "한도 산출식과 PDE 출처",
+"building": "",
+"area": "세척밸리데이션",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-4 세척제 잔류 시험항목·한도",
+"hint": "세척제 성분 규명, 한도 근거",
+"building": "",
+"area": "세척밸리데이션",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-4 잔류량 시험방법 밸리데이션(정확성·정밀성·검출한계·정량한계)",
+"hint": "해당 파라미터 보고서",
+"building": "",
+"area": "세척밸리데이션",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-4 재질별 검체 채취(스왑·린스) 회수율 평가",
+"hint": "접촉 재질 목록과 재질별 회수율, 회수율이 낮은 재질의 보정",
+"building": "",
+"area": "세척밸리데이션",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 4. 밸리데이션",
+"text": "4-5 한국행 운송 밸리데이션(최악 조건·경로)",
+"hint": "해외 제조소일 때. 다른 품목 자료를 쓰면 위험평가 유무",
+"building": "",
+"area": "운송",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 5. 제조지원설비",
+"text": "5-1 공기조화장치(HVAC) 밸리데이션 완료",
+"hint": "636동 HVAC 밸리데이션 보고서, 미완료면 단계·예상 완료 시점",
+"building": "",
+"area": "유틸리티",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 5. 제조지원설비",
+"text": "5-1 밸리데이션에 근거한 환경 모니터링 프로그램(검체 위치·빈도·배양 조건)과 정기 검토",
+"hint": "EM 위치 선정 근거(위험평가), 최근 검토 기록",
+"building": "",
+"area": "유틸리티",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 5. 제조지원설비",
+"text": "5-1 A·B등급 구역 6개월 이내 재적격성평가",
+"hint": "최근 재적격성평가 일자",
+"building": "",
+"area": "유틸리티",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 5. 제조지원설비",
+"text": "5-2 정제수시스템 밸리데이션 완료",
+"hint": "보고서, 3단계(phase) 완료 여부",
+"building": "",
+"area": "유틸리티",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 5. 제조지원설비",
+"text": "5-2 [무균] 주사용수(WFI) 시스템 밸리데이션 완료",
+"hint": "보고서, 루프 온도·경향",
+"building": "",
+"area": "유틸리티",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 5. 제조지원설비",
+"text": "5-2 [무균] 청정증기 시스템 밸리데이션 완료",
+"hint": "보고서, 품질시험 주기",
+"building": "",
+"area": "유틸리티",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 5. 제조지원설비",
+"text": "5-3 압축공기시스템 밸리데이션 완료",
+"hint": "보고서 범위에 633·636 사용점이 다 있나, 규격(ISO 8573: 유분·수분·입자)·미생물, 사용점 필터 완결성. 미완료면 단계·예상 완료 시점",
+"building": "",
+"area": "압축공기·가스",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 5. 제조지원설비",
+"text": "5-4 제품 직접 접촉 질소가스시스템 밸리데이션 완료",
+"hint": "질소 사용점 목록, 순도·유분·입자·미생물 규격, 필터 관리. 미완료면 단계·예상 완료 시점",
+"building": "",
+"area": "압축공기·가스",
+"kind": "q",
+"src": "별첨 1-5"
+},
+{
+"page": "questions",
+"section": "별첨 1-5 · 5. 제조지원설비",
+"text": "5-5 기타 제품 접촉 가스(산소·CO₂ 등) 시스템 밸리데이션 완료",
+"hint": "배양용 CO₂·O₂가 제품 접촉인지, 규격·필터",
+"building": "",
+"area": "압축공기·가스",
+"kind": "q",
+"src": "별첨 1-5"
+}
+]
+}

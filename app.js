@@ -237,6 +237,7 @@ function loadAll(){
     results.forEach(function(r){ S[r.table]=r.data; });
     /* 통신이 없으면(현장) 실사 노트·일정은 기기에 적어 둔 것으로 채운다. 아직 못 올린 것도 얹는다. */
     if(bad.length) inspApplyCache(bad);
+    var dd=inspDedupe(); if(dd) console.log("실사 노트 같은 줄 "+dd+"개 정리");
     if(!bad.length) inspCacheSave();
     if(navigator.onLine) setTimeout(inspFlush,800);
   });
@@ -337,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v167";
+var APP_VER="v168";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -5134,7 +5135,7 @@ function ansCitesAll(then){
       }
       var k=lawBare(c.lawName)+"|"+ansNumOf(c.art); if(seen[k]) return; seen[k]=1;
       out.push({ law:c.lawName, kind:lo?lawKindOf(lo).t:(c.ai&&c.ai.kind)||"", num:ansNumOf(c.art), label:nfc(c.art||""),
-                 text:text, quote:nfc((c.ai&&c.ai.quote)||""), table:table, artId:c.artId, pick:lawKeyPick[String(c.artId)]||"" });
+                 text:text, quote:nfc((c.ai&&c.ai.quote)||""), table:table, artId:c.artId, lawId:c.lawId, pick:lawKeyPick[String(c.artId)]||"" });
     });
     if(!out.length){ showToast("담아 갈 조문이 없어요."); return; }
     then(out,q);
@@ -5362,6 +5363,27 @@ function ansTitle(d){
   var base=sm||String(d.q||"").trim()||"민원 답변";
   return base.length>40?base.slice(0,39)+"…":base;
 }
+/* 저장된 글에서 「가. 「법령」 조항에서, <문장>고 규정하고 있습니다.」의 <문장>을 되찾는다. 편람식 「조항에 따라 <문장>.」도.
+ * 되찾은 문장은 조문 원문에 있어야만 쓴다(빈칸 빼고 대조). */
+function ansKeyFromSaved(saved,c){
+  if(!saved||!c.text) return "";
+  var lab=String(c.label||c.num||""), lines=saved.split("\n"), i, L, m, key="";
+  var esc_=function(t){ return t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"); };
+  var re1=new RegExp(esc_(lab)+"\\s*에서,\\s*(?:「)?([\\s\\S]{12,600}?)(?:」)?(?:이라|라)?(?:고|을|를)\\s*규정하고\\s*있습니다");
+  var re2=new RegExp(esc_(lab)+"\\s*에\\s*따라\\s*([\\s\\S]{12,600}?)\\.?$");
+  for(i=0;i<lines.length;i++){
+    L=lines[i].trim(); if(L.indexOf(lab)<0) continue;
+    m=re1.exec(L)||re2.exec(L); if(m){ key=m[1].trim(); break; }
+  }
+  if(!key) return "";
+  var bare=function(t){ return String(t).replace(/\s+/g,""); };
+  var k=bare(key), t=bare(c.text);
+  if(t.indexOf(k)>=0) return key;
+  /* 존댓말로 바뀐 꼬리(합니다→한다)만 다를 수 있다 — 앞 30자로 찾아 원문 문장을 되돌린다 */
+  var head=k.slice(0,30), at=t.indexOf(head); if(at<0) return "";
+  var sent=/[^.]*\./.exec(String(c.text).replace(/\s+/g," ").slice(String(c.text).replace(/\s+/g," ").replace(/\s+/g,"").indexOf(head)));
+  return sent?sent[0].trim():"";
+}
 /* 저장된 답변을 다시 열 때 요지는 제목이 아니라 본문 첫 줄(「…은 X(으)로 이해되며」)에서 되찾는다 —
    제목이 핵심 낱말이 된 뒤로 제목을 요지로 쓰면 「1. 귀하께서 주신 내용은 보툴리눔 · 2차 포장(으)로 이해되며」가 된다. */
 function ansSummaryOf(a){
@@ -5414,14 +5436,18 @@ function ansReopen(id){
     var by={};
     if(!res.error) (res.data||[]).forEach(function(r){
       var nm=lawName(r.law_id);
-      by[nm+"|"+ansNumOf(r.label)]={label:nfc(r.label||""),text:lawPlain(cleanPdfText(nfc(r.content||""))),table:!!r.tbl};
+      by[nm+"|"+ansNumOf(r.label)]={id:r.id,lawId:r.law_id,label:nfc(r.label||""),text:lawPlain(cleanPdfText(nfc(r.content||""))),table:!!r.tbl};
     });
     var cites=want.map(function(c){
       var hit=by[c.law+"|"+c.num];
-      return { law:c.law, kind:c.kind||"", num:c.num,
+      var ct={ law:c.law, kind:c.kind||"", num:c.num,
                label:hit?hit.label:(c.label||c.num),
                text:hit?hit.text:"", table:hit?hit.table:false,
+               artId:hit?hit.id:null, lawId:hit?hit.lawId:null,
                missing:!hit };
+      /* 저장된 글에서 그 조의 근거 문장을 되찾는다 — 안 그러면 참고 붙이기만 켜도 조문 전체로 다시 써진다(이랑님 2026-09-10 「조문 전체를 써버리는데?」) */
+      ct.key=ansKeyFromSaved(String(a.final||a.draft||""),ct)||"";
+      return ct;
     });
     var apm=/신청번호\s*([0-9A-Za-z\-]{6,24})\)/.exec(String(a.final||a.draft||""));
     ansDraft={ q:a.question||"", cites:cites, summary:ansSummaryOf(a), title:a.title||"", topic:ansSummaryOf(a), help:"",
@@ -5442,8 +5468,10 @@ function ansReopen(id){
 function ansModalHtml(){
   var d=ansDraft; if(!d) return "";
   var chips=d.cites.map(function(c,i){
-    return '<span class="ans-chip'+(c.missing?" miss":"")+'">'
+    var ks=c.table?"":(c.pick?"직접 고른 문장":(c.key?"근거 문장 있음":(d.made?"문장 없음 → 조문 전체":"")));
+    return '<span class="ans-chip'+(c.missing?" miss":"")+(c.artId?" can-open":"")+'"'+(c.artId?' data-act="ans-chip-open" data-id="'+i+'" title="조 전체 보기 — 글자를 끌어 고르면 근거 문장이 돼요"':'')+'>'
       + '<b>'+esc(c.law)+'</b> '+esc(c.num)
+      + (ks?' <span class="ans-chip-tag'+(c.key||c.pick?" ok":" warn")+'">'+ks+'</span>':'')
       + (c.table?' <span class="ans-chip-tag">표</span>':'')
       + (c.missing?' <span class="ans-chip-tag warn">글자 없음</span>':'')
       + '<button class="ans-chip-x" data-act="ans-drop" data-id="'+i+'" title="빼기">✕</button></span>';
@@ -5543,7 +5571,7 @@ var ansSigLast="";
 function ansSig(){
   var d=ansDraft; if(!d) return "";
   return JSON.stringify([d.made,d.mode,d.busy,d.err,d.krw,d.summary,d.help,d.dropped,d.id,
-    d.cites.map(function(c){ return c.law+"|"+c.label; }),ansFmtOpen,ansFmt]);
+    d.cites.map(function(c){ return c.law+"|"+c.label+"|"+(c.pick?"p":c.key?"k":"-"); }),ansFmtOpen,ansFmt]);
 }
 function renderAnsModal(force){
   var el=document.getElementById("ans-modal"); if(!el) return;
@@ -6227,6 +6255,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "ans-mode": if(ansDraft){ ansDraft.mode=id; ansRegen(); renderAnsModal(true); } break;
     case "ans-regen": ansRegen(); renderAnsModal(true); break;
     case "ans-drop": if(ansDraft){ ansDraft.cites.splice(parseInt(id,10),1); renderAnsModal(); } break;
+    case "ans-chip-open": { var cc=ansDraft&&ansDraft.cites[parseInt(id,10)]; if(cc&&cc.artId){ openLawArticle(cc.artId,cc.lawId); } break; }
     case "ans-fmt": ansFmtOpen=!ansFmtOpen; renderAnsModal(); break;
     case "ans-mark": ansFmt.hangul=(id==="han"); ansFmtSave(); ansRegen(); renderAnsModal(true); break;
     case "ans-style": ansFmt.style=(id==="classic")?"classic":"sinmungo"; ansFmtSave(); ansRegen(); renderAnsModal(true); break;
@@ -6419,7 +6448,24 @@ function inspNeedsRefill(insp){
   return it.some(function(x){ return !!INSP_OLD_PAGE[x.page]; });
 }
 /* 본이 바뀌었을 때 — 본에서 온 줄은 새 본으로 갈고, 같은 글이 있으면 체크·메모를 옮긴다. 손으로 적은 줄·방·발견은 남긴다(옛 페이지면 옮긴다). */
+var inspBusy=false;
+/* 같은 노트에 같은 줄(페이지·묶음·글·본)이 둘이면 하나만 — 2026-09-10 「새 본으로 다시 채우기」가 두 번 눌려 252줄이 됐다.
+   체크·메모 있는 쪽을 남기고 나머지는 서버에서도 지운다. 직접 적은 줄(src 없음)은 건드리지 않는다. */
+function inspDedupe(){
+  var seen={}, drop=[];
+  (S.insp_items||[]).slice().sort(function(a,b){ return (b.done?1:0)-(a.done?1:0)||((b.memo?1:0)-(a.memo?1:0)); }).forEach(function(x){
+    if(!x.src) return;
+    var k=[x.insp_id,x.page,x.section||"",x.text,x.src].join("|");
+    if(seen[k]) drop.push(x); else seen[k]=1;
+  });
+  if(!drop.length) return 0;
+  var ids={}; drop.forEach(function(x){ ids[x.id]=1; });
+  S.insp_items=S.insp_items.filter(function(x){ return !ids[x.id]; });
+  drop.forEach(function(x){ inspWrite("delete","insp_items",x); });
+  return drop.length;
+}
 function inspRefill(insp){
+  if(inspBusy) return; inspBusy=true;
   inspLoadTpl().then(function(t){
     var old=inspItems(insp.id), norm=function(x){ return String(x||"").replace(/\s+/g,""); };
     var carry={}; old.forEach(function(x){ if(x.src&&(x.done||x.memo)) carry[norm(x.text)]={done:x.done,memo:x.memo}; });
@@ -6435,10 +6481,10 @@ function inspRefill(insp){
       withAuthRetry(function(){ return sb.from("insp_items").insert(items.map(function(x){ return toRemote("insp_items",x); })); })
         .then(function(res){ if(res&&res.error) items.forEach(function(x){ inspQPush({op:"upsert",table:"insp_items",item:x,id:x.id}); }); });
     } else items.forEach(function(x){ inspQPush({op:"upsert",table:"insp_items",item:x,id:x.id}); });
-    inspCacheSave(); inspPage="tour"; render();
+    inspCacheSave(); inspPage="tour"; inspBusy=false; render();
     var moved=Object.keys(carry).length;
     showToast("✓ 새 본으로 채웠어요 — "+items.length+"줄"+(moved?", 체크·메모 "+moved+"줄 옮김":""));
-  },function(e){ showToast(e.message,true); });
+  },function(e){ inspBusy=false; showToast(e.message,true); });
 }
 function inspProgress(insp){
   var it=inspItems(insp.id).filter(inspCountable);
@@ -6624,7 +6670,9 @@ function inspToFind(id){
   showToast("발견 페이지로 옮겼어요");
 }
 function inspCreate(){
+  if(inspBusy) return;
   var title=(val("insp-title")||"").trim(); if(!title){ showToast("업체·제조소 이름을 적어 주세요."); return; }
+  inspBusy=true;
   var start=val("insp-start")||keyOf(new Date()), days=Math.max(1,parseInt(val("insp-days")||"3",10)||3);
   var d=new Date(start+"T00:00:00"); d.setDate(d.getDate()+days-1); var end=keyOf(d);
   var buildings=(val("insp-buildings")||"").split(/[,、]/).map(function(s){ s=s.trim(); if(!s) return null; var m=/^(\S+)\s*(.*)$/.exec(s); return {name:m[1],mode:m[2]||""}; }).filter(Boolean);
@@ -6647,9 +6695,9 @@ function inspCreate(){
       items.forEach(function(x){ inspQPush({op:"upsert",table:"insp_items",item:x,id:x.id}); });
       inspQPush({op:"upsert",table:"events",item:ev,id:ev.id});
     }
-    inspOpenId=insp.id; inspPage="prep"; inspNewOpen=false; inspFilter={day:"",mine:false,bld:""}; render();
+    inspOpenId=insp.id; inspPage="prep"; inspNewOpen=false; inspFilter={day:"",mine:false,bld:""}; inspBusy=false; render();
     showToast("✓ 노트를 만들었어요 — 항목 "+items.length+"개, 캘린더에 일정도 넣었어요");
-  },function(e){ showToast(e.message,true); });
+  },function(e){ inspBusy=false; showToast(e.message,true); });
 }
 function inspCopyFinds(){
   var insp=S.inspections.find(function(x){ return x.id===inspOpenId; }); if(!insp) return;

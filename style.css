@@ -1469,3 +1469,6 @@ textarea.ans-q,textarea.ans-final{width:100%;resize:vertical;line-height:var(--l
 
 /* 조 전체 보기 — 글자를 끌어 고르면 아래에 뜬다 */
 .lv-pick{margin-right:auto;}
+
+.ans-chip.can-open{cursor:pointer;}
+.ans-chip-tag.ok{color:var(--accent);background:var(--accent-soft);}

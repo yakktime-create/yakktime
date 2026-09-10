@@ -157,7 +157,7 @@ document.getElementById("login-email").addEventListener("keydown",function(e){ i
 
 /* ========== DB 레이어 (Supabase) — OPUS SQL 스키마 ========== */
 /* archive·docs 는 화면이 없어졌지만 표는 남겨 둔다 — 데이터와 백업이 보존된다 */
-var TABLES=["schedule","events","articles","mfds","archive","docs","laws","refs","answers"];
+var TABLES=["schedule","events","articles","mfds","archive","docs","laws","refs","answers","settings"];
 
 /*
  * OPUS SQL 컬럼명 매핑:
@@ -274,7 +274,15 @@ function dbDelete(table,id){
 }
 
 /* ========== 전역 상태 ========== */
-var S={ schedule:[], events:[], articles:[], mfds:[], archive:[], docs:[], laws:[], refs:[], answers:[] };
+var S={ schedule:[], events:[], articles:[], mfds:[], archive:[], docs:[], laws:[], refs:[], answers:[], settings:[] };
+/* 설정 표 — 기기(아이패드·맥)가 달라도 같아야 하는 작은 값. 「AI에게 알려둔 우리 과 규칙」·답변 형식.
+ * localStorage 는 기기마다 달라서 맥에서 적은 규칙이 아이패드엔 없었다(2026-09-10). */
+function setGet(k){ var r=(S.settings||[]).find(function(x){ return x.key===k; }); return r?String(r.value||""):""; }
+function setPut(k,v){
+  var r=(S.settings||[]).find(function(x){ return x.key===k; });
+  if(r) r.value=v; else (S.settings=S.settings||[]).push({key:k,value:v});
+  return dbUpsert("settings",{key:k,value:v});
+}
 var active="today";
 var now0=new Date(), calYear=now0.getFullYear(), calMonth=now0.getMonth(), calSel=keyOf(now0);
 var ARTICLE_STATUS=["기획","작성중","기고완료"], MFDS_STATUS=["대기","진행중","완료"];
@@ -324,7 +332,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v161";
+var APP_VER="v162";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3494,7 +3502,7 @@ function lawAskRun(){
   render();
   function done(){ lawAskStop(); lawAsking=false; render(); }
   var only=lawOnlyIds();
-  sb.functions.invoke("law-pick",{body:{q:q,lawIds:(only.length&&only.length<S.laws.length)?only:null}}).then(function(r){
+  sb.functions.invoke("law-pick",{body:{q:q,lawIds:(only.length&&only.length<S.laws.length)?only:null,rules:setGet("ai_rules")}}).then(function(r){
     var d=r&&r.data;
     if(!d){ showToast("물어보지 못했어요: "+((r&&r.error&&r.error.message)||"응답이 비었어요"),true); done(); return; }
     if(d.error){ showToast(d.error,true); done(); return; }
@@ -4840,9 +4848,12 @@ function lawExportAll(then){
   function build(by){
     var title=lawAsk?("민원 질문 — "+lawAsk.q):("법령 검색 결과 — "+(lawSem?lawSem.q:lawTermList.join(" + ")));
     var lines=[title,new Date().toLocaleString("ko-KR")+" · 조문 "+picked.length+"건",""], cur=null;
+    var sub=0;
     picked.forEach(function(c){
       if(c.lawName!==cur){ cur=c.lawName; lines.push("■ "+cur); }
-      lines.push("  ["+(c.art||"")+(c.page?" · "+(c.page===c.hit.pageEnd?c.page+"쪽":c.page+"~"+c.hit.pageEnd+"쪽"):"")+"]");
+      /* 답변에 바로 붙일 수 있게 「가. 「법령」(종류) 조항에서, …」 머리줄을 먼저 둔다(2026-09-10 국민신문고 양식) */
+      var lw=S.laws.find(function(l){ return l.name===c.lawName; });
+      lines.push(" "+(ANS_HAN2[sub]||String(sub+1))+". 「"+c.lawName+"」"+ansKindTag(lw?lw.kind:"")+" "+(c.art||"")+"에서,"); sub++;
       if(c.ai&&c.ai.why) lines.push("  (고른 이유) "+c.ai.why);
       if(c.hit&&c.hit.snips&&c.hit.snips.length){
         c.hit.snips.forEach(function(h){
@@ -4991,7 +5002,16 @@ function ansMark(i){
 /* 형식은 고칠 수 있게 둔다. 기관·과마다 쓰는 말이 다르고, 쓰다 보면
  * 바꾸고 싶어진다. 기본값은 「2025 행정업무운영 편람」 기준이다. */
 var ANS_FMT0={
-  hangul:false,   /* false = 1. 2. 3. (편람 기준) · true = 가. 나. 다. */
+  /* 양식 둘. sinmungo = 국민신문고 답변(이랑님이 2026-09-10 「고친 글」로 보여주신 꼴 — 인사·요지·검토 결과 가.나.다.·담당자).
+     classic = 편람식(요지 한 줄 → 조문 → 맺음말). 이랑님: 「고친 글 양식은 내가 손댄 거니까 괜찮은 거고」. */
+  style:"sinmungo",
+  intro:"안녕하십니까? 귀하께서 국민신문고를 통해 신청하신 민원(신청번호 {신청번호})에 대한 검토 결과를 다음과 같이 알려드립니다.",
+  ask:"귀하께서 제출하신 민원의 내용은 '{주제}'에 대한 질의로 이해됩니다.",
+  review:"귀하의 민원에 대한 검토 결과는 다음과 같습니다.",
+  citeS:"「{법령명}」{종류} {조항}에서, ",
+  close:"답변내용에 대한 추가 설명이 필요한 경우 식품의약품안전처 {담당과} {직위}({연락처})에게 연락주시면 안내해 드리도록 하겠습니다. 감사합니다.",
+  dept:"", who:"주무관", phone:"",
+  hangul:false,   /* (편람식) false = 1. 2. 3. · true = 가. 나. 다. */
   brief:true,     /* true = AI 가 짚고 원문과 대조해 통과한 핵심 문장(없는 조는 전체) · false = 늘 조문 전체 */
   end:true,       /* 끝. 표시 (규칙 제4조제5항) */
   head:"귀하께서 주신 내용은 {요지}(으)로 이해되며, 이에 대한 답변입니다.",
@@ -5009,7 +5029,17 @@ var ansFmt=(function(){
   }catch(e){}
   return f;
 })();
-function ansFmtSave(){ try{ localStorage.setItem("ansFmt",JSON.stringify(ansFmt)); }catch(e){} }
+var ansFmtTimer=null;
+function ansFmtSave(){
+  try{ localStorage.setItem("ansFmt",JSON.stringify(ansFmt)); }catch(e){}
+  /* 기기 사이에 같게 — 설정 표에도 둔다. 글쇠마다 올리지 않게 잠깐 모아서. */
+  clearTimeout(ansFmtTimer);
+  ansFmtTimer=setTimeout(function(){ if(typeof sb!=="undefined"&&sb) setPut("ans_fmt",JSON.stringify(ansFmt)); },900);
+}
+/* 앱이 켜질 때 설정 표의 형식이 있으면 그것으로 덮는다(아이패드에서 고친 것이 맥에도) */
+function ansFmtLoadRemote(){
+  try{ var raw=setGet("ans_fmt"); if(!raw) return; var got=JSON.parse(raw), k; for(k in ANS_FMT0) if(got[k]!=null) ansFmt[k]=got[k]; }catch(e){}
+}
 
 /* ---------- 고른 조문 모으기 ---------- */
 /* 저장에는 id 를 안 쓴다 — 「조문 전부 다시 만들기」를 누르면 id 가 새로 생겨
@@ -5094,13 +5124,14 @@ function ansMake(){
   d.busy=true; d.err=""; render();
   sb.functions.invoke("law-draft",{body:{
     q:d.q, mode:"help",     /* 늘 둘 다 만든다 — 나란히 보여주기로 했다 */
+    rules:setGet("ai_rules"),
     cites:d.cites.map(function(c){ return {law:c.law,num:c.num,text:c.text}; })
   }}).then(function(r){
     d.busy=false;
     var v=r&&r.data;
     if(r&&r.error){ d.err=String(r.error.message||r.error); render(); return; }
     if(!v||v.error){ d.err=(v&&v.error)||"응답이 비어 있어요."; render(); return; }
-    d.summary=v.summary||""; d.title=v.title||""; d.help=v.help||""; d.krw=v.krw||0; d.made=true;
+    d.summary=v.summary||""; d.title=v.title||""; d.topic=v.topic||""; d.help=v.help||""; d.krw=v.krw||0; d.made=true;
     /* 조문마다 AI 가 짚고 서버가 원문과 대조한 핵심 문장. 없는 조는 "" → 그 조는 전체를 넣는다 */
     (v.keys||[]).forEach(function(k,i){ if(d.cites[i]) d.cites[i].key=k||""; });
     d.keysDropped=v.keysDropped||0;
@@ -5136,6 +5167,17 @@ function ansKeyLine(c){
           .replace(/^\s*(?:[\u2460-\u2473]|\d{1,2}(?:\.\d+)*\.?|[가-힣]\.|[가-힣]\))\s*/,"").trim();
 }
 /* 법령 말투 → 공문 말투. 끝만 바꾼다(편람: 「하시기 바랍니다」 꼴). */
+/* 국민신문고 양식의 조문 문장: 원문을 그대로 두고 「…고 규정하고 있습니다」로 감싼다(간접 인용).
+ * 이랑님(2026-09-10): 「안녕하다 → 안녕하세요 정도의 수정은 해야 하는데 원문에서 의미가 벗어나면 안 돼」
+ * 「할 수 있다가 조문에 박혀 있으면 그대로 차용해도 상관없어」. 「…다」「…것」으로 안 끝나면 ansPolite 로. */
+function ansQuoteForm(t){
+  t=String(t||"").trim().replace(/\.$/,"");
+  if(/다$/.test(t)) return t+"고 규정하고 있습니다.";
+  if(/것$/.test(t)) return t+"을 규정하고 있습니다.";
+  return ansPolite(t);
+}
+var ANS_KIND_TAG={"고시":"(식약처 고시)","총리령":"(총리령)","대통령령":"(대통령령)","부령":"(부령)"};
+function ansKindTag(k){ return ANS_KIND_TAG[k]||""; }
 function ansPolite(t){
   t=String(t||"").trim().replace(/\.$/,"");
   var r=[[/할 것$/,"하여야 합니다"],[/있을 것$/,"있어야 합니다"],[/일 것$/,"이어야 합니다"],[/것$/,"것입니다"],
@@ -5150,8 +5192,47 @@ function ansRegen(force){
   if(!force&&d.final&&d.gen&&d.final!==d.gen&&!confirm("초안을 손으로 고친 게 있어요. 새로 만든 글로 바꿀까요?\n(취소하면 고친 글을 그대로 둡니다)")) return;
   d.final=ansText(d.mode||"plain"); d.gen=d.final;
 }
+var ANS_HAN2=["가","나","다","라","마","바","사","아","자","차","카","타","파","하"];
+function ansTopicOf(d){
+  var t=String(d.topic||"").trim(); if(t) return t;
+  t=String(d.title||"").replace(/\s*·\s*/g," ").trim(); if(t) return t;
+  return String(d.summary||"").replace(/\s*(?:에\s*관한\s*것|에\s*대한\s*것)\s*$/,"").trim()||"(주제)";
+}
+function ansBlocksSinmungo(mode){
+  var d=ansDraft, out=[], n=1, sub=0;
+  var fill=function(t){
+    return String(t||"").replace("{신청번호}",d.appno||"____________").replace("{주제}",ansTopicOf(d))
+      .replace("{담당과}",ansFmt.dept||"○○과").replace("{직위}",ansFmt.who||"주무관").replace("{연락처}",ansFmt.phone||"000-000-0000");
+  };
+  out.push({t:(n++)+". "+fill(ansFmt.intro),lv:0}); out.push({t:"",lv:9});
+  out.push({t:(n++)+". "+fill(ansFmt.ask),lv:0}); out.push({t:"",lv:9});
+  out.push({t:(n++)+". "+fill(ansFmt.review),lv:0}); out.push({t:"",lv:9});
+  d.cites.forEach(function(c){
+    var head=ansFmt.citeS.replace("{법령명}",c.law).replace("{종류}",ansKindTag(c.kind)).replace("{조항}",c.label||c.num);
+    var mark=(ANS_HAN2[sub]||String(sub+1))+". "; sub++;
+    if(c.table){
+      out.push({t:mark+head.replace(/,\s*$/,"")+" 다음과 같이 규정하고 있습니다.",lv:1});
+      out.push({t:"(칸이 뒤섞여 읽기 어려운 대목입니다. PDF 원문에서 확인해 붙여 넣어주세요.)",lv:2});
+    } else if(ansFmt.brief&&ansKeyLine(c)){
+      out.push({t:mark+head+ansQuoteForm(ansKeyLine(c)),lv:1});
+    } else {
+      out.push({t:mark+head.replace(/,\s*$/,"")+" 다음과 같이 규정하고 있습니다.",lv:1});
+      ansCiteLines(c.text).forEach(function(x){ out.push({t:x.t,lv:Math.min(3,(x.lv||0)+2)}); });
+    }
+    out.push({t:"",lv:9});
+  });
+  if(mode==="help"&&d.help){
+    /* AI 참고는 「- 참고로, …」 줄로 마지막 항목 아래에 — 이랑님 고친 글의 자리 그대로 */
+    var hs=String(d.help).split(/\n+/).map(function(h){ return h.replace(/^\s*[○o]\s*/,"").trim(); }).filter(Boolean);
+    hs.forEach(function(h,i){ out.push({t:(i?"- ":"- 참고로, ")+h,lv:2}); });
+    if(hs.length) out.push({t:"",lv:9});
+  }
+  out.push({t:(n++)+". "+fill(ansFmt.close)+(ansFmt.end?"  끝.":""),lv:0});
+  return out;
+}
 function ansBlocks(mode){
   var d=ansDraft; if(!d) return [];
+  if(ansFmt.style!=="classic") return ansBlocksSinmungo(mode);
   var out=[], n=0;
   out.push({t:ansMark(n++)+" "+ansFmt.head.replace("{요지}",d.summary||"(요지)"),lv:0});
   d.cites.forEach(function(c){
@@ -5237,7 +5318,8 @@ function ansTitle(d){
    제목이 핵심 낱말이 된 뒤로 제목을 요지로 쓰면 「1. 귀하께서 주신 내용은 보툴리눔 · 2차 포장(으)로 이해되며」가 된다. */
 function ansSummaryOf(a){
   var t=String(a.final||a.draft||"");
-  var m=/귀하께서\s*주신\s*내용은\s*([\s\S]{4,200}?)\(으\)로\s*이해되며/.exec(t);
+  var m=/귀하께서\s*주신\s*내용은\s*([\s\S]{4,200}?)\(으\)로\s*이해되며/.exec(t)
+       ||/민원의\s*내용은\s*['‘]([\s\S]{2,120}?)['’]에\s*대한\s*질의/.exec(t);
   return m?m[1].replace(/\s+/g," ").trim():String(a.title||"");
 }
 function ansSave(mode){
@@ -5293,7 +5375,9 @@ function ansReopen(id){
                text:hit?hit.text:"", table:hit?hit.table:false,
                missing:!hit };
     });
-    ansDraft={ q:a.question||"", cites:cites, summary:ansSummaryOf(a), title:a.title||"", help:"",
+    var apm=/신청번호\s*([0-9A-Za-z\-]{6,24})\)/.exec(String(a.final||a.draft||""));
+    ansDraft={ q:a.question||"", cites:cites, summary:ansSummaryOf(a), title:a.title||"", topic:ansSummaryOf(a), help:"",
+               appno:apm?apm[1]:"",
                mode:a.mode||"plain", busy:false, err:"", krw:0, id:a.id,
                made:true, final:a.final||"" };
     /* 「다시 열어 고치기」에 글이 비어 있었다(이랑님 2026-09-09) — 옛 답변은 final 이 null 이라(고치지 않고 담으면
@@ -5319,22 +5403,38 @@ function ansModalHtml(){
 
   var fmt=ansFmtOpen
     ? '<div class="ans-fmt">'
+      + '<div class="ans-fmt-row"><span class="ans-fmt-k">양식</span>'
+      +   '<button class="chip '+(ansFmt.style!=="classic"?"on":"")+'" data-act="ans-style" data-id="sinmungo">국민신문고 답변<span class="ans-fmt-hint">인사 · 요지 · 검토 결과 가.나.다. · 담당자</span></button>'
+      +   '<button class="chip '+(ansFmt.style==="classic"?"on":"")+'" data-act="ans-style" data-id="classic">편람식</button></div>'
+      + (ansFmt.style!=="classic"
+          ? '<div class="ans-fmt-row"><span class="ans-fmt-k">담당자</span>'
+          +   '<input class="input ans-fmt-sm" id="ans-f-dept" value="'+esc(ansFmt.dept)+'" placeholder="담당과 (예: 바이오의약품품질관리과)" />'
+          +   '<input class="input ans-fmt-xs" id="ans-f-who" value="'+esc(ansFmt.who)+'" placeholder="직위" />'
+          +   '<input class="input ans-fmt-sm" id="ans-f-phone" value="'+esc(ansFmt.phone)+'" placeholder="전화 (043-719-0000)" /></div>'
+          + '<label class="ans-fmt-row"><span class="ans-fmt-k">인사</span><input class="input" id="ans-f-intro" value="'+esc(ansFmt.intro)+'" /></label>'
+          + '<label class="ans-fmt-row"><span class="ans-fmt-k">요지</span><input class="input" id="ans-f-ask" value="'+esc(ansFmt.ask)+'" /></label>'
+          + '<label class="ans-fmt-row"><span class="ans-fmt-k">검토</span><input class="input" id="ans-f-review" value="'+esc(ansFmt.review)+'" /></label>'
+          + '<label class="ans-fmt-row"><span class="ans-fmt-k">조문</span><input class="input" id="ans-f-citeS" value="'+esc(ansFmt.citeS)+'" /></label>'
+          + '<label class="ans-fmt-row"><span class="ans-fmt-k">맺음</span><input class="input" id="ans-f-close" value="'+esc(ansFmt.close)+'" /></label>'
+          : "")
       + '<div class="ans-fmt-row"><span class="ans-fmt-k">조문 인용</span>'
       +   '<button class="chip '+(ansFmt.brief?"on":"")+'" data-act="ans-brief" data-id="on">핵심 문장<span class="ans-fmt-hint">AI 가 짚고 원문과 대조 · 못 짚은 조는 전체</span></button>'
       +   '<button class="chip '+(ansFmt.brief?"":"on")+'" data-act="ans-brief" data-id="off">조문 전체</button></div>'
-      + '<div class="ans-fmt-row"><span class="ans-fmt-k">항목 기호</span>'
-      +   '<button class="chip '+(ansFmt.hangul?"":"on")+'" data-act="ans-mark" data-id="num">1. 2. 3.<span class="ans-fmt-hint">편람 기준</span></button>'
-      +   '<button class="chip '+(ansFmt.hangul?"on":"")+'" data-act="ans-mark" data-id="han">가. 나. 다.</button></div>'
-      + '<label class="ans-fmt-row"><span class="ans-fmt-k">머리말</span>'
-      +   '<input class="input" id="ans-f-head" value="'+esc(ansFmt.head)+'" /></label>'
-      + '<label class="ans-fmt-row"><span class="ans-fmt-k">조문</span>'
-      +   '<input class="input" id="ans-f-cite" value="'+esc(ansFmt.cite)+'" /></label>'
-      + '<label class="ans-fmt-row"><span class="ans-fmt-k">맺음말</span>'
-      +   '<input class="input" id="ans-f-tail" value="'+esc(ansFmt.tail)+'" /></label>'
+      + (ansFmt.style==="classic"
+          ? '<div class="ans-fmt-row"><span class="ans-fmt-k">항목 기호</span>'
+          +   '<button class="chip '+(ansFmt.hangul?"":"on")+'" data-act="ans-mark" data-id="num">1. 2. 3.<span class="ans-fmt-hint">편람 기준</span></button>'
+          +   '<button class="chip '+(ansFmt.hangul?"on":"")+'" data-act="ans-mark" data-id="han">가. 나. 다.</button></div>'
+          + '<label class="ans-fmt-row"><span class="ans-fmt-k">머리말</span>'
+          +   '<input class="input" id="ans-f-head" value="'+esc(ansFmt.head)+'" /></label>'
+          + '<label class="ans-fmt-row"><span class="ans-fmt-k">조문</span>'
+          +   '<input class="input" id="ans-f-cite" value="'+esc(ansFmt.cite)+'" /></label>'
+          + '<label class="ans-fmt-row"><span class="ans-fmt-k">맺음말</span>'
+          +   '<input class="input" id="ans-f-tail" value="'+esc(ansFmt.tail)+'" /></label>'
+          : "")
       + '<div class="ans-fmt-row"><span class="ans-fmt-k"></span>'
       +   '<label class="ans-fmt-chk"><input type="checkbox" data-act="ans-end"'+(ansFmt.end?" checked":"")+' /> 「끝.」 표시 붙이기</label>'
       +   '<button class="link-btn" data-act="ans-fmt-reset">되돌리기</button></div>'
-      + '<p class="ans-fmt-note">{요지}·{법령명}·{조항} 자리에 값이 들어갑니다. 나머지 글자는 그대로 나갑니다.</p>'
+      + '<p class="ans-fmt-note">{신청번호}·{주제}·{법령명}·{종류}·{조항}·{담당과}·{직위}·{연락처} 자리에 값이 들어갑니다. 나머지 글자는 그대로 나갑니다. 형식은 아이패드·맥에 같이 저장돼요.</p>'
       + '</div>'
     : "";
 
@@ -5369,6 +5469,7 @@ function ansModalHtml(){
     + '<div class="ans-scroll">'
     +   '<label class="ans-lab">민원 내용</label>'
     +   '<textarea class="input ans-q" id="ans-q" rows="3" placeholder="민원 원문을 붙여넣거나 요약해서 적어주세요.">'+esc(d.q)+'</textarea>'
+    +   (ansFmt.style!=="classic"?'<label class="ans-appno"><span class="ans-lab-n">국민신문고 신청번호</span><input class="input" id="ans-appno" value="'+esc(d.appno||"")+'" placeholder="1AA-0000-0000000" /></label>':"")
     +   '<label class="ans-lab">근거 조문 <span class="ans-lab-n">'+d.cites.length+'건</span></label>'
     +   '<div class="ans-chips">'+chips+'</div>'
     +   '<div class="ans-go">'
@@ -5410,10 +5511,12 @@ function renderAnsModal(force){
   if(q) q.addEventListener("input",function(){ if(ansDraft) ansDraft.q=q.value; });
   var f=document.getElementById("ans-final");
   if(f) f.addEventListener("input",function(){ if(ansDraft) ansDraft.final=f.value; });
-  ["head","cite","tail"].forEach(function(k){
+  ["head","cite","tail","intro","ask","review","citeS","close","dept","who","phone"].forEach(function(k){
     var i=document.getElementById("ans-f-"+k);
     if(i) i.addEventListener("input",function(){ ansFmt[k]=i.value; ansFmtSave(); ansRegen(true); var fa=document.getElementById("ans-final"); if(fa) fa.value=ansDraft.final; });
   });
+  var ap=document.getElementById("ans-appno");
+  if(ap) ap.addEventListener("input",function(){ if(ansDraft){ ansDraft.appno=ap.value.trim(); ansRegen(true); var fa=document.getElementById("ans-final"); if(fa) fa.value=ansDraft.final; } });
   ansSwipeWire();
 }
 /* 좁은 화면에서 두 판을 좌우로 넘긴다 — 버튼을 늘리지 않는다 */
@@ -6077,6 +6180,9 @@ document.getElementById("app").addEventListener("click",function(e){
     case "ans-drop": if(ansDraft){ ansDraft.cites.splice(parseInt(id,10),1); renderAnsModal(); } break;
     case "ans-fmt": ansFmtOpen=!ansFmtOpen; renderAnsModal(); break;
     case "ans-mark": ansFmt.hangul=(id==="han"); ansFmtSave(); ansRegen(); renderAnsModal(true); break;
+    case "ans-style": ansFmt.style=(id==="classic")?"classic":"sinmungo"; ansFmtSave(); ansRegen(); renderAnsModal(true); break;
+    case "rules": rulesOpen=!rulesOpen; renderRulesModal(); break;
+    case "rules-save": { var ta=document.getElementById("rules-ta"); if(ta){ setPut("ai_rules",ta.value.trim()).then(function(){ showToast("✓ 규칙을 저장했어요 — 다음 조문 찾기·초안부터 AI 가 읽어요"); }); } rulesOpen=false; renderRulesModal(); break; }
     case "ans-brief": ansFmt.brief=(id==="on"); ansFmtSave(); ansRegen(); renderAnsModal(true); break;
     case "ans-end": ansFmt.end=!ansFmt.end; ansFmtSave(); ansRegen(); renderAnsModal(true); break;
     case "ans-fmt-reset": { var fk; for(fk in ANS_FMT0) ansFmt[fk]=ANS_FMT0[fk];
@@ -6111,8 +6217,23 @@ document.getElementById("app").addEventListener("click",function(e){
 });
 
 /* ========== 렌더 + 초기화 ========== */
+/* 「AI에게 알려둔 우리 과 규칙」 — 조문 찾기(law-pick)와 초안(law-draft)이 매번 읽는 평문 메모.
+ * 소관 구분·「이 말이 나오면 이 문서를 본다」 같은 것을 코드에 박으면 다음 사안에서 또 틀린다(2026-09-10 사례 정리 문서).
+ * 이랑님이 평문으로 적어 두면 AI 가 프롬프트에서 읽는다. 자리는 왼쪽 아래 — 가끔 손대는 것이라 화면에 안 둔다. */
+var rulesOpen=false;
+function renderRulesModal(){
+  var el=document.getElementById("rules-modal"); if(!el) return;
+  if(!rulesOpen){ el.innerHTML=""; return; }
+  el.innerHTML='<div class="ans-back" data-act="rules"></div>'
+    + '<div class="ans-win rules-modal" role="dialog"><div class="ans-top"><b>AI에게 알려둔 우리 과 규칙</b><button class="ans-x" data-act="rules" title="닫기">✕</button></div>'
+    + '<div class="ans-scroll">'
+    + '<p class="ans-fmt-note">조문을 찾을 때와 초안을 쓸 때 AI 가 먼저 읽습니다. 평소 말로 적으세요. 한 줄에 하나.</p>'
+    + '<textarea class="input" id="rules-ta" rows="12" placeholder="예)\n- 「시험생산용 적합판정서」가 나오면 바이오의약품 전문수탁 제조업체 GMP 평가 절차 9쪽 적용범위를 반드시 본다.\n- 실태조사 생략·서류평가는 바이오의약품 사전 GMP 평가 지침 3-1·3-2 가 기준이다. 규칙 제48조의2·제48조의3 은 지방청 제조소 단위 적합판정 조문이라 품목별 사전 GMP 평가 민원에는 인용하지 않는다.\n- 「…할 수 있다」 조문만으로 「필수가 아니다」라고 쓰지 않는다.">'+esc(setGet("ai_rules"))+'</textarea>'
+    + '</div><div class="ans-pane-foot rules-foot"><button class="btn quiet sm" data-act="rules">닫기</button><button class="btn sm ans-save-btn" data-act="rules-save">저장</button></div></div>';
+}
 function render(){
   renderTabs();
+  renderRulesModal();
   if(active==="today") renderToday();
   else if(active==="calendar") renderCalendar();
   else if(active==="articles") renderArticles();
@@ -6129,6 +6250,7 @@ function startApp(){
   document.getElementById("loading").className="loading-overlay";
   document.getElementById("loading").querySelector(".loading-text").textContent="데이터를 불러오는 중...";
   loadAll().then(function(){
+    ansFmtLoadRemote();
     return Promise.resolve();
   }).then(function(){
     render();

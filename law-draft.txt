@@ -4,6 +4,7 @@
 //  **AI 는 답변을 쓰지 않는다.** 두 가지만 만든다.
 //    summary  민원의 요지 한 문장  (「…에 관한 것으로 이해되며」의 빈칸)
 //    help     실무 참고 한두 문장   (mode 가 "help" 일 때만)
+//    topic    「'○○'에 대한 질의로 이해됩니다」의 빈칸 — 4~16자 명사구 (예: 반창고 품목허가)
 //    title    「민원 답변」 목록에 보일 짧은 제목 — 핵심 낱말 두셋을 「·」로 이은 것 (8~24자)
 //    keys     근거 조문마다 「민원에 답하는 핵심 문장」 하나 — **원문에서 그대로 옮긴 것만**.
 //             서버가 원문과 대조해 없으면 빈 문자열로 만든다. 브라우저는 빈 것은 조문 전체를 넣는다.
@@ -76,7 +77,7 @@ async function claude(apiKey: string, body: unknown) {
 
 const HEAD = `너는 대한민국 식품의약품안전처 공무원이 민원 답변을 쓰는 것을 돕는 도구다.
 답변 본문은 네가 쓰지 않는다. 조문 원문은 사람이 그대로 붙여 넣는다.
-너는 아래 네 가지만 만든다.`;
+너는 아래 다섯 가지만 만든다.`;
 
 const RULES = `${HEAD}
 
@@ -100,8 +101,18 @@ const RULES = `${HEAD}
     · 1~3문장. **각 문장은 「○ 」로 시작하고 문장마다 줄을 바꾼다(\n).**
     · **단정하지 않는다.** 「…하시면 절차가 빠릅니다」처럼 안내하는 말투.
     · 법령 해석을 새로 만들지 마라. 처분·판단·가부(可否)를 단정하지 마라.
+    · **「…할 수 있다」(재량) 조문만 보고 「필수가 아니다」「안 받을 수도 있다」로 쓰지 마라.** 재량을 언제 쓰는지 정한
+      지침·고시의 구체 기준이 근거 조문에 있으면 그 기준을 따라 쓴다(2026-09-10 실측: 「실태조사를 할 수 있다」를
+      「재량 규정이 핵심」이라 써서 민원인이 오독할 뻔했다).
+    · **민원에 든 낱말(「시험생산 배치」「상업용 배치」 등)이 조문의 판단 기준인지는 조문 본문으로 확인한다.**
+      본문에 그 구분이 없으면 「다르게 취급될 수 있다」처럼 짐작해 쓰지 마라. 기준은 조문에 적힌 것뿐이다.
+    · 아래 [담당자가 적어 둔 우리 과 규칙]이 있으면 그것을 조문 다음으로 따른다.
 
-[3] title — 목록에서 한눈에 알아볼 **짧은 제목**. 핵심 낱말 두셋을 「 · 」로 잇는다. 8~24자. 문장이 아니다.
+[3] topic — 「귀하께서 제출하신 민원의 내용은 '___'에 대한 질의로 이해됩니다」의 빈칸. **4~16자 명사구.**
+    좋은 예: 「반창고 품목허가」 「유전자재조합의약품 제조소 변경 시 GMP 실태조사」 「위탁제조판매업 신고」
+    나쁜 예: 「…에 관한 것」(summary) / 문장 / 「GMP」(너무 짧다)
+
+[3-1] title — 목록에서 한눈에 알아볼 **짧은 제목**. 핵심 낱말 두셋을 「 · 」로 잇는다. 8~24자. 문장이 아니다.
     좋은 예: 「보툴리눔 · 다른 의약품 · 2차 포장 공용」 「임상시험 의약품 · 위탁제조 신고」
     나쁜 예: 「…에 관한 것」(summary 를 되풀이) / 「민원 답변」(아무 말도 아님) / 「신고」(너무 짧다)
 
@@ -125,10 +136,11 @@ const SCHEMA = {
   properties: {
     summary: { type: "string", description: "민원 요지 명사구 (…에 관한 것)" },
     help:    { type: "string", description: "실무 참고. mode!=help 이면 빈 문자열" },
+    topic:   { type: "string", description: "'___'에 대한 질의 의 빈칸. 4~16자 명사구" },
     title:   { type: "string", description: "핵심 낱말 두셋을 「 · 」로 이은 짧은 제목 (8~24자)" },
     keys:    { type: "array", items: { type: "string" }, description: "근거 조문마다 원문 그대로 옮긴 핵심 문장 하나. 없으면 빈 문자열" },
   },
-  required: ["summary", "help", "title", "keys"],
+  required: ["summary", "help", "topic", "title", "keys"],
   additionalProperties: false,
 };
 
@@ -167,6 +179,8 @@ Deno.serve(async (req) => {
     const q = nfc(String(body?.q || "")).trim().slice(0, Q_MAX);
     const mode = body?.mode === "help" ? "help" : "plain";
     const cites = Array.isArray(body?.cites) ? body.cites : [];
+    // 담당자가 앱에 적어 둔 「우리 과 규칙」 — 소관 구분·「이 말이 나오면 이 문서」 같은 평문. 없으면 빈 문자열.
+    const rules = nfc(String(body?.rules || "")).trim().slice(0, 4000);
 
     if (!q) return json({ error: "민원 내용을 적어주세요." });
     if (!cites.length) return json({ error: "근거 조문을 하나 이상 골라주세요." });
@@ -195,7 +209,8 @@ Deno.serve(async (req) => {
         content:
           `mode: ${mode}\n\n` +
           `[민원 내용]\n${q}\n\n` +
-          `[담당자가 고른 근거 조문]\n${shown}`,
+          `[담당자가 고른 근거 조문]\n${shown}` +
+          (rules ? `\n\n[담당자가 적어 둔 우리 과 규칙]\n${rules}` : ""),
       }],
     });
 
@@ -256,6 +271,7 @@ Deno.serve(async (req) => {
     return json({
       summary: nfc(String(out?.summary || "")).trim(),
       title: nfc(String(out?.title || "")).replace(/\s+/g, " ").trim().slice(0, 40),
+      topic: nfc(String(out?.topic || "")).replace(/\s+/g, " ").replace(/^['‘"「]|['’"」]$/g, "").trim().slice(0, 30),
       help,
       keys,
       keysDropped: rawKeys.filter((k) => k).length - keys.filter((k) => k).length,

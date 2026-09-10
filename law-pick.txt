@@ -217,7 +217,10 @@ words 에는 이 질문의 답이 적혀 있을 조문을 **본문에서** 찾�
 gist 에는 이 민원을 <b>법령 말투의 한 문장</b>으로 고쳐 적는다(20~40자). 업체 사정·층수·
 제품 이름은 빼고 「무엇의 허용 요건을 묻는가」만 남긴다. 뜻이 비슷한 조문을 찾는 데 쓴다.
   「보툴리눔 독소 2층, 다른 약 3층, 2차 포장 같이 해도 되나」
-  → 「서로 다른 의약품을 같은 작업실에서 함께 포장하는 것의 허용 요건」`;
+  → 「서로 다른 의약품을 같은 작업실에서 함께 포장하는 것의 허용 요건」
+
+<담당자 규칙>이 함께 오면 그것을 따른다 — 「이 말이 나오면 이 문서를 반드시 본다」「이 조문은 이런 민원엔 안 쓴다」 같은
+담당자의 실무 규칙이다. 규칙이 가리키는 문서의 조는 후보에 꼭 넣는다.`;
 
 const SCHEMA1 = {
   type: "object",
@@ -285,7 +288,15 @@ const RULES2 = `${HEAD}
   「의약품 등의 안전에 관한 규칙」[별표 1] 15.2).
 - 같은 내용이 법률과 지침서에 다 있으면 <b>법률 쪽을 고른다</b>. 지침서는 법령이
   아니라 운영 방침이라, 민원 답변의 근거로는 법률·규칙·고시가 먼저다.
-  지침서만 답을 담고 있으면 그건 그대로 낸다.`;
+  지침서만 답을 담고 있으면 그건 그대로 낸다.
+- <b>「…할 수 있다」(재량) 조문만 보고 「필수가 아니다」「재량이 핵심」이라고 why·note 에 쓰지 않는다.</b>
+  재량을 언제 쓰는지 정한 지침·고시의 <b>구체 기준</b>(기간·이력·대상)이 후보에 있으면 그쪽이 「인용 필수」이고,
+  재량 조문은 「있으면 좋음」이다. 실측(2026-09-10): 「실태조사를 할 수 있다」를 핵심이라 적어 민원인이
+  「안 받을 수도 있다」로 오독할 뻔했다.
+- <b>질문에 든 낱말이 조문의 판단 기준인지는 본문으로 확인한다.</b> 「시험생산 배치」「상업용 배치」처럼 민원인이
+  쓴 구분이 조문에 없으면 「다르게 취급될 수 있다」고 짐작해 쓰지 않는다. 기준은 조문에 적힌 것뿐이다.
+- <담당자 규칙>이 오면 그것을 따른다(어느 문서를 먼저 볼지, 어느 조문은 이런 민원에 안 쓰는지). 규칙이
+  「인용하지 않는다」고 한 조문은 「없어도 됨」으로 내린다.`;
 
 const SCHEMA2 = {
   type: "object",
@@ -356,9 +367,12 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) return json({ error: "ANTHROPIC_API_KEY 가 없어요. Edge Functions 비밀값에 넣어주세요." });
 
-    const { q, lawIds } = await req.json().catch(() => ({ q: "", lawIds: null }));
+    const { q, lawIds, rules: rulesIn } = await req.json().catch(() => ({ q: "", lawIds: null, rules: "" }));
     const cfg = CFG;
     const question = String(q || "").trim();
+    // 담당자가 앱에 적어 둔 「우리 과 규칙」(평문). 1차·2차 프롬프트에 그대로 붙인다.
+    const rules = String(rulesIn || "").trim().slice(0, 4000);
+    const rulesBlock = rules ? `\n\n<담당자 규칙>\n${rules}\n</담당자 규칙>` : "";
     if (question.length < 5)    return json({ error: "질문을 조금 더 길게 적어주세요." });
     if (question.length > 4000) return json({ error: "질문이 너무 길어요. 4000자 안으로 줄여주세요." });
     // 화면에서 법령을 골랐으면 그 안에서만 고른다. 안 골랐으면(null) 전부 본다.
@@ -419,7 +433,7 @@ Deno.serve(async (req) => {
         { type: "text", text: `<조 목록>\n${catalog}</조 목록>`,
           cache_control: { type: "ephemeral" } },
       ],
-      messages: [{ role: "user", content: `민원 질문:\n${question}` }],
+      messages: [{ role: "user", content: `민원 질문:\n${question}${rulesBlock}` }],
       output_config: outCfg(cfg, SCHEMA1),
     });
     const p1 = readJson(r1);
@@ -576,7 +590,7 @@ Deno.serve(async (req) => {
       // 1차만 올리고 2차를 안 올린 것이 화근이었다. 안 쓰면 값은 그대로다.
       max_tokens: 6000 * cfg.room,
       system: [{ type: "text", text: RULES2 }],
-      messages: [{ role: "user", content: `민원 질문:\n${question}\n\n<핵심>${String(p1.gist || "").trim() || "(1차가 요지를 내지 않았다 — 질문에서 직접 읽는다)"}</핵심>\n\n<조문>${sheet}</조문>` }],
+      messages: [{ role: "user", content: `민원 질문:\n${question}${rulesBlock}\n\n<핵심>${String(p1.gist || "").trim() || "(1차가 요지를 내지 않았다 — 질문에서 직접 읽는다)"}</핵심>\n\n<조문>${sheet}</조문>` }],
       output_config: outCfg(cfg, SCHEMA2),
     });
     const p2 = readJson(r2);
@@ -649,6 +663,9 @@ Deno.serve(async (req) => {
         const qraw = String(p.quote || "").trim();
         const qok  = qraw.length >= 10 && bare(t).indexOf(bare(qraw)) >= 0;
         if (!qok && sure === "근거 찾음") sure = "비슷한 대목만";
+        // **근거 문장이 원문과 안 맞으면 「인용 필수」로 못 올라간다.** 2026-09-10 실측: 전문수탁 절차 24쪽
+        // 「사례 14」가 대조 실패(「비슷한 대목만」)인데 인용 필수로 붙어 초안에 들어갔다. 근거를 못 짚은 조는 답변의 필수 근거일 수 없다.
+        if (!qok && need2 === "인용 필수") need2 = "있으면 좋음";
         return { id: hit.id, lawId: hit.law_id, law: hit.law, label: hit.label,
                  direct, need: need2, sure, kind: kind.t, grade: gradeOf(score), score,
                  // 미리보기는 **근거 문장**이 낫다 — 본문 앞 180자는 대개

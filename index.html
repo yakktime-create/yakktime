@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <title>이랑 업무 데스크</title>
-<link rel="stylesheet" href="style.css?v=161" />
+<link rel="stylesheet" href="style.css?v=162" />
 </head>
 <body>
 <div class="loading-overlay" id="loading">
@@ -36,12 +36,14 @@
 
 <!-- 메인 앱 (로그인 후 보임) -->
 <div id="app" style="display:none;">
+  <div id="rules-modal"></div>
   <nav class="rail">
     <div class="brand"><span class="brand-mark">℞</span><div><div class="brand-title">이랑 업무 데스크</div><div class="brand-sub">personal hub</div></div></div>
     <div class="rail-tabs" id="tabs"></div>
     <div class="rail-foot">
       <button class="foot-btn" data-act="export">데이터 백업(내보내기)</button>
       <button class="foot-btn" data-act="import">백업 불러오기</button>
+      <button class="foot-btn" data-act="rules">AI에게 알려둔 규칙</button>
       <div class="ver" id="ver"></div>
       <button class="foot-btn" data-act="logout" style="color:var(--brick);border-color:var(--brick);">로그아웃</button>
     </div>
@@ -52,6 +54,6 @@
 <input type="file" id="lawfile" accept="application/pdf" style="display:none" />
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="app.js?v=161"></script>
+<script src="app.js?v=162"></script>
 </body>
 </html>

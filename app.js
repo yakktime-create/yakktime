@@ -332,7 +332,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v162";
+var APP_VER="v163";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3549,12 +3549,20 @@ function lawAskNoteHtml(){
   var extra=[];
   if(d.boosted) extra.push("낱말로 "+d.boosted+"개"+(d.words&&d.words.length?"("+d.words.join("·")+")":""));
   if(d.semantic) extra.push("뜻으로 "+d.semantic+"개");
+  if(d.pastBoost) extra.push("지난 답변에서 "+d.pastBoost+"개");
   if(d.skipped) extra.push("시행 전 조문 "+d.skipped+"개 제외");
+  var past=(d.similar||[]).filter(function(x){ return S.answers.some(function(a){ return a.id===x.id; }); });
+  var pastHtml=past.length
+    ? '<p class="ask-past"><b>비슷한 지난 답변</b> — '+past.map(function(x){
+        return '<button class="link-btn ask-past-btn" data-act="ans-jump" data-id="'+esc(x.id)+'">'+esc(x.title||"(제목 없음)")+'</button>';
+      }).join(" · ")+' <span class="ask-dim">그때 인용한 조문을 후보에 먼저 넣었고, 초안의 말투 본보기로도 써요.</span></p>'
+    : "";
   if(d.looked) extra.push("본문 읽음 "+d.looked+"개");
   return '<div class="ask-box">'+head
     + (d.note?'<p class="ask-note">'+esc(d.note)+'</p>':'')
     + (d.truncated?'<p class="ask-warn">올려둔 조문이 너무 많아 <b>앞쪽 '+d.arts+'개만</b> 봤어요. 위에서 법령을 골라 범위를 좁혀주세요.</p>':'')
     + (extra.length?'<p class="ask-dim ask-extra">후보 보강 — '+esc(extra.join(" · "))+'</p>':'')
+    + pastHtml
     + '<p class="ask-legend"><span class="ask-score n-1">인용 필수</span> 표시가 붙은 조는 처음부터 체크돼 있어요. '
     +   '<span>있으면 좋음</span><span>없어도 됨</span>은 보고 고르세요. 조문 원문은 카드를 누르면 열려요.</p>'
     + '</div>';
@@ -5122,9 +5130,14 @@ function ansMake(){
   if(q!=null) d.q=q;
   if(!String(d.q||"").trim()){ showToast("민원 내용을 적어주세요."); return; }
   d.busy=true; d.err=""; render();
+  /* 비슷한 지난 답변(조문 찾기가 찾아 둔 것)의 글을 본보기로 함께 보낸다 — 이랑님이 고친 글이 있으면 그것 */
+  var examples=((lawAsk&&lawAsk.similar)||[]).map(function(x){
+    var a=S.answers.find(function(y){ return y.id===x.id; }); if(!a) return null;
+    var t=String(a.final||a.draft||"").trim(); return t.length>=40?{title:a.title||"",text:t.slice(0,1800)}:null;
+  }).filter(Boolean).slice(0,2);
   sb.functions.invoke("law-draft",{body:{
     q:d.q, mode:"help",     /* 늘 둘 다 만든다 — 나란히 보여주기로 했다 */
-    rules:setGet("ai_rules"),
+    rules:setGet("ai_rules"), examples:examples,
     cites:d.cites.map(function(c){ return {law:c.law,num:c.num,text:c.text}; })
   }}).then(function(r){
     d.busy=false;
@@ -6192,6 +6205,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "ans-hwpx": ansHwpx(id); break;
     case "ans-save": ansSave(id); break;
     case "ans-open": ansOpenId=(ansOpenId===id)?null:id; render(); break;
+    case "ans-jump": ansOpenId=id; active="answers"; render(); break;
     case "ans-del": ansDel(id); break;
     case "ans-edit": ansReopen(id); break;
     case "ans-rcopy": { var rt=ansRowText(id);

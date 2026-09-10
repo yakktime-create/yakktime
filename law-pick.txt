@@ -64,6 +64,26 @@ const SEM_MIN    = 0.35;   // 이보다 먼 것은 안 보탠다 (코사인 유�
 // 질문 원문과 1차가 고쳐 쓴 요지(gist)를 **둘 다** 지문 내서 합친다. 민원 원문은 업체 사정·층수
 // 같은 군더더기가 많아 지문이 흐려진다 — 실측: 원문으로는 「별표 1 8.2 포장공정관리」가 10위,
 // 「별표 17 5.7 포장작업」이 36위였는데, 요지 한 문장으로는 1위·7위였다(2026-09-09).
+// 지난 답변을 본보기로 — 담당자가 실제로 보낸 답변(민원 답변 탭)의 질문 지문과 이번 질문을 견줘, 비슷한 민원에서
+// 인용한 조문을 후보 맨 앞에 두고 2차에게 알린다. 답변이 쌓일수록 손으로 적는 규칙이 줄어든다(2026-09-10 이랑님 「제안 좋은 듯」).
+const PAST_MIN = 0.50;   // 이보다 먼 지난 답변은 안 쓴다 (코사인 유사도)
+const PAST_MAX = 3;
+async function voyageDoc(key: string, docs: string[]): Promise<number[][]> {
+  const r = await fetch("https://api.voyageai.com/v1/embeddings", {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ input: docs.map((q) => q.slice(0, 4000)), model: "voyage-4-large", input_type: "document" }),
+  });
+  if (!r.ok) return [];
+  const j = await r.json().catch(() => null);
+  const out: number[][] = [];
+  (j?.data || []).forEach((d: any) => { out[d.index] = d.embedding; });
+  return out;
+}
+function cosine(a: number[], b: number[]) {
+  let d = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length && i < b.length; i++) { d += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+  return na && nb ? d / Math.sqrt(na * nb) : 0;
+}
 async function voyageQuery(key: string, qs: string[]): Promise<number[][]> {
   const r = await fetch("https://api.voyageai.com/v1/embeddings", {
     method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
@@ -296,7 +316,9 @@ const RULES2 = `${HEAD}
 - <b>질문에 든 낱말이 조문의 판단 기준인지는 본문으로 확인한다.</b> 「시험생산 배치」「상업용 배치」처럼 민원인이
   쓴 구분이 조문에 없으면 「다르게 취급될 수 있다」고 짐작해 쓰지 않는다. 기준은 조문에 적힌 것뿐이다.
 - <담당자 규칙>이 오면 그것을 따른다(어느 문서를 먼저 볼지, 어느 조문은 이런 민원에 안 쓰는지). 규칙이
-  「인용하지 않는다」고 한 조문은 「없어도 됨」으로 내린다.`;
+  「인용하지 않는다」고 한 조문은 「없어도 됨」으로 내린다.
+- <지난 답변>이 오면, 담당자가 비슷한 민원에서 실제로 인용한 조문이다. 이번 질문에도 맞으면 우선 고른다.
+  다만 질문이 다른 데를 묻고 있으면 억지로 넣지 않는다 — 본보기이지 정답표가 아니다.`;
 
 const SCHEMA2 = {
   type: "object",
@@ -522,11 +544,13 @@ Deno.serve(async (req) => {
     // --- 뜻으로 후보를 보탠다 ------------------------------------------------
     // 열쇠가 없거나 지문이 아직 없으면 조용히 건너뛴다 — 예전과 똑같이 돈다.
     let semantic = 0;
+    let qEmb: number[] | null = null;
     const vKey = Deno.env.get("VOYAGE_API_KEY");
     if (vKey) {
       try {
         const gist = String(p1.gist || "").trim();
         const qes = await voyageQuery(vKey, gist.length >= 8 ? [question, gist] : [question]);
+        if (qes.length) qEmb = qes[0];
         if (qes.length) {
           // 지문마다 비슷한 조문을 받아 **가장 가까운 값**으로 합친다
           const best = new Map<string, any>();
@@ -552,6 +576,51 @@ Deno.serve(async (req) => {
           cand = semExtra.concat(cand);
         }
       } catch (e) { dbg.semErr = String(e).slice(0, 120); }
+    }
+
+    // --- 지난 답변을 본보기로 ------------------------------------------------
+    let similar: any[] = [], pastBoost = 0, pastBlock = "";
+    if (vKey && qEmb) {
+      try {
+        const { data: ans } = await pg("answers?select=id,title,question,cites,emb&order=created_at.desc&limit=400");
+        const rows: any[] = ans || [];
+        // 지문이 없는 답변은 지금 만들어 넣는다(한 번만). 질문 글로 만든다 — 답변 글은 조문이 섞여 지문이 흐리다.
+        const need = rows.filter((a) => !a.emb && String(a.question || "").trim().length >= 8);
+        if (need.length) {
+          const embs = await voyageDoc(vKey, need.map((a) => String(a.question)));
+          await Promise.all(need.map((a, i) => embs[i]
+            ? fetch(`${SB_URL}/rest/v1/answers?id=eq.${encodeURIComponent(a.id)}`, {
+                method: "PATCH", headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+                body: JSON.stringify({ emb: "[" + embs[i].join(",") + "]" }),
+              }).then(() => { a.emb = embs[i]; }, () => {})
+            : Promise.resolve()));
+        }
+        const parse = (e: any): number[] | null => Array.isArray(e) ? e : (typeof e === "string" ? JSON.parse(e) : null);
+        const scored = rows.map((a) => { const v = parse(a.emb); return v ? { a, sim: cosine(qEmb!, v) } : null; })
+          .filter((x): x is { a: any; sim: number } => !!x)
+          .sort((x, y) => y.sim - x.sim)
+          .filter((x) => x.sim >= PAST_MIN).slice(0, PAST_MAX);
+        similar = scored.map((x) => ({ id: x.a.id, title: x.a.title, sim: Number(x.sim.toFixed(2)) }));
+        const have3 = new Set(cand.map((c: any) => String(c.id)));
+        const nOf3 = new Map<string, number>(live.map((a: any, i: number) => [String(a.id), i + 1]));
+        const idOfName = new Map<string, string>([...lawName.entries()].map(([id, nm]) => [nm, id]));
+        const lines: string[] = [];
+        scored.forEach((x) => {
+          const a = x.a; const cs: any[] = Array.isArray(a.cites) ? a.cites : [];
+          const names: string[] = [];
+          cs.forEach((c) => {
+            const lawId = idOfName.get(String(c.law || "")); if (!lawId) return;
+            const hit = live.find((r: any) => String(r.law_id) === lawId
+              && (String(r.label) === String(c.label || "") || (c.num && String(r.label).indexOf(String(c.num)) === 0)));
+            if (!hit) return;
+            names.push(`「${c.law} ${c.label || c.num}」`);
+            if (!have3.has(String(hit.id))) { const n = nOf3.get(String(hit.id))!; cand.unshift({ n, ...index[n], past: true }); have3.add(String(hit.id)); pastBoost++; }
+          });
+          lines.push(`- 「${a.title}」(유사도 ${x.sim.toFixed(2)}): ${names.join(", ") || "(지금 올라온 조문과 안 맞음)"}`);
+        });
+        if (lines.length) pastBlock = `\n\n<지난 답변>\n담당자가 비슷한 민원에 실제로 인용한 조문이다. 이번 질문에도 맞으면 우선 고른다. 안 맞으면 굳이 넣지 않는다.\n${lines.join("\n")}\n</지난 답변>`;
+        dbg.past = similar; dbg.pastBoost = pastBoost;
+      } catch (e) { dbg.pastErr = String(e).slice(0, 160); }
     }
 
     if (!cand.length) {
@@ -590,7 +659,7 @@ Deno.serve(async (req) => {
       // 1차만 올리고 2차를 안 올린 것이 화근이었다. 안 쓰면 값은 그대로다.
       max_tokens: 6000 * cfg.room,
       system: [{ type: "text", text: RULES2 }],
-      messages: [{ role: "user", content: `민원 질문:\n${question}${rulesBlock}\n\n<핵심>${String(p1.gist || "").trim() || "(1차가 요지를 내지 않았다 — 질문에서 직접 읽는다)"}</핵심>\n\n<조문>${sheet}</조문>` }],
+      messages: [{ role: "user", content: `민원 질문:\n${question}${rulesBlock}${pastBlock}\n\n<핵심>${String(p1.gist || "").trim() || "(1차가 요지를 내지 않았다 — 질문에서 직접 읽는다)"}</핵심>\n\n<조문>${sheet}</조문>` }],
       output_config: outCfg(cfg, SCHEMA2),
     });
     const p2 = readJson(r2);
@@ -710,6 +779,8 @@ Deno.serve(async (req) => {
       // 제목에는 안 드러나서 낱말로 찾아 보탠 상위법 조문 수
       boosted,
       semantic,
+      // 비슷한 지난 답변(민원 답변 탭) — 화면에 「지난 답변 참고」로 보이고, 초안(law-draft)에도 본보기로 넘긴다
+      similar, pastBoost,
       gist: String(p1.gist || ""),
       words,
       dbg,

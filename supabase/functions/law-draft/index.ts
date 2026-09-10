@@ -107,6 +107,8 @@ const RULES = `${HEAD}
     · **민원에 든 낱말(「시험생산 배치」「상업용 배치」 등)이 조문의 판단 기준인지는 조문 본문으로 확인한다.**
       본문에 그 구분이 없으면 「다르게 취급될 수 있다」처럼 짐작해 쓰지 마라. 기준은 조문에 적힌 것뿐이다.
     · 아래 [담당자가 적어 둔 우리 과 규칙]이 있으면 그것을 조문 다음으로 따른다.
+    · [담당자가 전에 보낸 비슷한 답변]이 있으면 **말투·구성·참고를 적는 방식**의 본보기로 삼는다. 거기 적힌 조문 내용·법령 이름을
+      이번 답에 옮기지 마라 — 이번 근거 조문에 있는 것만 쓴다. 다른 민원의 답이지 이번 민원의 답이 아니다.
 
 [3] topic — 「귀하께서 제출하신 민원의 내용은 '___'에 대한 질의로 이해됩니다」의 빈칸. **4~16자 명사구.**
     좋은 예: 「반창고 품목허가」 「유전자재조합의약품 제조소 변경 시 GMP 실태조사」 「위탁제조판매업 신고」
@@ -181,6 +183,13 @@ Deno.serve(async (req) => {
     const cites = Array.isArray(body?.cites) ? body.cites : [];
     // 담당자가 앱에 적어 둔 「우리 과 규칙」 — 소관 구분·「이 말이 나오면 이 문서」 같은 평문. 없으면 빈 문자열.
     const rules = nfc(String(body?.rules || "")).trim().slice(0, 4000);
+    // 담당자가 전에 보낸 비슷한 답변(민원 답변 탭) — 말투·구성·참고의 본보기. 최대 2건, 건마다 1,800자.
+    const examples: { title: string; text: string }[] = (Array.isArray(body?.examples) ? body.examples : []).slice(0, 2)
+      .map((e: any) => ({ title: nfc(String(e?.title || "")).slice(0, 60), text: nfc(String(e?.text || "")).slice(0, 1800) }))
+      .filter((e: any) => e.text.trim().length >= 40);
+    const exBlock = examples.length
+      ? "\n\n[담당자가 전에 보낸 비슷한 답변 — 말투·구성·참고의 본보기]\n" + examples.map((e, i) => `(${i + 1}) 「${e.title}」\n${e.text}`).join("\n\n")
+      : "";
 
     if (!q) return json({ error: "민원 내용을 적어주세요." });
     if (!cites.length) return json({ error: "근거 조문을 하나 이상 골라주세요." });
@@ -210,7 +219,7 @@ Deno.serve(async (req) => {
           `mode: ${mode}\n\n` +
           `[민원 내용]\n${q}\n\n` +
           `[담당자가 고른 근거 조문]\n${shown}` +
-          (rules ? `\n\n[담당자가 적어 둔 우리 과 규칙]\n${rules}` : ""),
+          (rules ? `\n\n[담당자가 적어 둔 우리 과 규칙]\n${rules}` : "") + exBlock,
       }],
     });
 

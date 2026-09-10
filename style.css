@@ -1457,3 +1457,12 @@ textarea.ans-q,textarea.ans-final{width:100%;resize:vertical;line-height:var(--l
 .insp-add{margin-bottom:var(--sp-3);}
 .insp-foot-acts{display:flex;gap:var(--sp-3);align-items:center;margin-top:var(--sp-3);}
 @media (max-width:620px){ .insp-head-t b{font-size:var(--fs-lg);} .insp-exp{padding-left:0;} }
+
+/* v166 — 현장·서류 검토 거르기, 보기/묻기 표시, 본 새로고침 띠 */
+.insp-filters{display:flex;flex-wrap:wrap;gap:var(--sp-1);align-items:center;margin:0 0 var(--sp-3);}
+.insp-filters .chip.mine.on{background:var(--brass-soft);border-color:var(--brass);color:var(--brass);}
+.insp-filters .link-btn{margin-left:auto;}
+.insp-k{display:inline-block;font-size:var(--fs-xs);font-weight:700;border-radius:var(--r-xs);padding:1px 6px;margin-right:6px;vertical-align:1px;white-space:nowrap;}
+.insp-k.look{background:var(--accent-soft);color:var(--accent);} .insp-k.ask{background:var(--blue-soft);color:var(--blue-deep);} .insp-k.doc{background:var(--brass-soft);color:var(--brass);}
+.insp-d{display:inline-block;font-size:var(--fs-xs);color:var(--muted);background:var(--paper);border-radius:var(--r-xs);padding:1px 6px;vertical-align:1px;margin-left:2px;white-space:nowrap;}
+.insp-refill{background:var(--warn-bg);border:1px solid var(--warn-bd);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);margin:0 0 var(--sp-3);font-size:var(--fs-md);}

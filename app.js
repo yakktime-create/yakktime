@@ -332,7 +332,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v163";
+var APP_VER="v164";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -5187,7 +5187,9 @@ function ansQuoteForm(t){
   t=String(t||"").trim().replace(/\.$/,"");
   if(/다$/.test(t)) return t+"고 규정하고 있습니다.";
   if(/것$/.test(t)) return t+"을 규정하고 있습니다.";
-  return ansPolite(t);
+  /* 목록 항목(「제조소 이전·추가하는 경우」「…이력이 없는 작업소」)은 문장이 아니라 그대로 두면 「…경우.」로 끝나 어색하다
+     (2026-09-10 실측). 원문을 「」로 감싸 인용한다 — 글자는 그대로다. */
+  return "「"+t+"」이라고 규정하고 있습니다.";
 }
 var ANS_KIND_TAG={"고시":"(식약처 고시)","총리령":"(총리령)","대통령령":"(대통령령)","부령":"(부령)"};
 function ansKindTag(k){ return ANS_KIND_TAG[k]||""; }

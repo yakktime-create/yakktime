@@ -1466,3 +1466,6 @@ textarea.ans-q,textarea.ans-final{width:100%;resize:vertical;line-height:var(--l
 .insp-k.look{background:var(--accent-soft);color:var(--accent);} .insp-k.ask{background:var(--blue-soft);color:var(--blue-deep);} .insp-k.doc{background:var(--brass-soft);color:var(--brass);}
 .insp-d{display:inline-block;font-size:var(--fs-xs);color:var(--muted);background:var(--paper);border-radius:var(--r-xs);padding:1px 6px;vertical-align:1px;margin-left:2px;white-space:nowrap;}
 .insp-refill{background:var(--warn-bg);border:1px solid var(--warn-bd);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);margin:0 0 var(--sp-3);font-size:var(--fs-md);}
+
+/* 조 전체 보기 — 글자를 끌어 고르면 아래에 뜬다 */
+.lv-pick{margin-right:auto;}

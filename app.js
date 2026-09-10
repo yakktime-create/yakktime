@@ -337,7 +337,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v166";
+var APP_VER="v167";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3935,6 +3935,32 @@ function edgeBits(before,here,after){
  * PDF를 여는 건 파일 전체를 내려받는 일이라 501쪽짜리는 12MB를 다 받아야
  * 한 쪽이 보인다. 쪽 텍스트는 이미 law_pages에 있으므로 그걸 바로 띄운다. */
 var lawView=null;   /* {lawId,page,content,loading,err} */
+/* 조 전체 보기에서 글자를 끌어 고르면 그 문장을 그 조의 답변 근거 문장으로 삼는다(이랑님 2026-09-10 — AI 가 고른 문장이
+ * 원문이긴 해도 「마.」의 일반 문장이라 핀트가 빗나갔다. 사람이 고르는 게 제일 정확하다). artId → 문장. */
+var lawKeyPick={}, lawSelText="";
+function lawSelWatch(){
+  var btn=document.getElementById("lv-pick"); if(!btn) return;
+  var sel=window.getSelection&&window.getSelection(), t=sel?String(sel).replace(/\s+/g," ").trim():"";
+  var body=document.getElementById("lv-body");
+  var inside=!!(t.length>=12&&sel.rangeCount&&body&&body.contains(sel.getRangeAt(0).commonAncestorContainer));
+  lawSelText=inside?t:"";
+  btn.style.display=inside?"":"none";
+  btn.textContent=inside?"고른 문장을 답변 근거로 ("+Math.min(t.length,60)+(t.length>60?"…":"")+"자)":"";
+}
+document.addEventListener("selectionchange",function(){ clearTimeout(window.__lvSelT); window.__lvSelT=setTimeout(lawSelWatch,180); });
+function lawPickApply(){
+  if(!lawView||!lawView.artId||!lawSelText) return;
+  var id=String(lawView.artId); lawKeyPick[id]=lawSelText;
+  /* 초안 창이 열려 있고 그 조가 들어 있으면 바로 바꾼다 */
+  if(ansDraft&&ansDraft.cites){
+    var hit=ansDraft.cites.find(function(c){ return String(c.artId)===id; });
+    if(hit){ hit.pick=lawSelText; hit.key=lawSelText; if(ansDraft.made){ ansRegen(true); } }
+  }
+  var tn=document.getElementById("lv-pick"); if(tn) tn.style.display="none";
+  if(window.getSelection) window.getSelection().removeAllRanges();
+  showToast("✓ 이 조의 답변 근거 문장으로 골랐어요");
+  renderAnsModal(true);
+}
 
 function openLawView(id,page){
   var l=S.laws.find(function(x){ return x.id===id; });
@@ -4758,6 +4784,7 @@ function renderLawModal(){
     artBar='<div class="lv-arts">'+lawArtHtml(lawView.art||"")+((lawView.page&&!dup)?'  ·  '+span:"")+'</div>';
 
     foot='<div class="lv-foot">'
+      + '<button class="btn sm lv-pick" id="lv-pick" data-act="lv-pick" style="display:none"></button>'
       + ((l&&l.src==="api")
           ? '<span class="lv-src">법제처 '+esc(lawEffOf(l)||"")+' 시행판</span>'
             + '<button class="link-btn lv-pdf" data-act="lv-site">법제처에서 보기 ↗</button>'
@@ -5107,7 +5134,7 @@ function ansCitesAll(then){
       }
       var k=lawBare(c.lawName)+"|"+ansNumOf(c.art); if(seen[k]) return; seen[k]=1;
       out.push({ law:c.lawName, kind:lo?lawKindOf(lo).t:(c.ai&&c.ai.kind)||"", num:ansNumOf(c.art), label:nfc(c.art||""),
-                 text:text, quote:nfc((c.ai&&c.ai.quote)||""), table:table });
+                 text:text, quote:nfc((c.ai&&c.ai.quote)||""), table:table, artId:c.artId, pick:lawKeyPick[String(c.artId)]||"" });
     });
     if(!out.length){ showToast("담아 갈 조문이 없어요."); return; }
     then(out,q);
@@ -5152,6 +5179,7 @@ function ansMake(){
     d.summary=v.summary||""; d.title=v.title||""; d.topic=v.topic||""; d.help=v.help||""; d.krw=v.krw||0; d.made=true;
     /* 조문마다 AI 가 짚고 서버가 원문과 대조한 핵심 문장. 없는 조는 "" → 그 조는 전체를 넣는다 */
     (v.keys||[]).forEach(function(k,i){ if(d.cites[i]) d.cites[i].key=k||""; });
+    d.cites.forEach(function(c){ if(c.pick) c.key=c.pick; });   /* 사람이 끌어 고른 문장이 있으면 그것 */
     d.keysDropped=v.keysDropped||0;
     d.final=ansText(d.mode||"plain"); d.gen=d.final;
     d.dropped=!!v.dropped;
@@ -6134,6 +6162,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "law-reindex": lawReindex(id); break;
     case "law-pdf": openLawPdf(id,parseInt(el.getAttribute("data-page"),10)||1); break;
     case "lv-close": closeLawView(); break;
+    case "lv-pick": lawPickApply(); break;
     case "law-art": {
       var aid=parseInt(el.getAttribute("data-art-id"),10)||0;
       /* AI 가 고른 조라면 원문과 대조를 통과한 **근거 문장 하나만** 칠한다.

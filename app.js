@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v179";
+var APP_VER="v180";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6538,13 +6538,16 @@ function inspNewHtml(){
 function inspListHtml(list){
   if(!list.length) return '<div class="empty-box"><p>아직 실사 노트가 없어요. 위에서 하나 만들어 보세요.</p></div>';
   return '<div class="insp-list">'+list.map(function(x){
-    var p=inspProgress(x), pct=p.total?Math.round(p.done/p.total*100):0;
+    var p=inspProgress(x), pct=p.total?Math.round(p.done/p.total*100):0, past=(x.end_date||x.start_date||"")<keyOf(new Date());
     return '<div class="card insp-card'+(x.status==="끝남"?" done":"")+'" data-act="insp-open" data-id="'+esc(x.id)+'">'
       + '<div class="insp-card-t"><span>'+esc(x.title)+'</span><span class="meta-pill'+(x.status==="끝남"?"":" accent")+'">'+esc(x.status||"진행")+'</span></div>'
-      + '<div class="insp-card-s">'+esc(inspDates(x))+(x.partner?' · '+esc(x.partner):'')+(x.areas&&x.areas.length?' · '+esc(x.areas.join("·"))+' 담당':'')+'</div>'
+      /* 담당 영역 열다섯 개를 카드에 늘어놓지 않는다(이랑님 「UX/UI 구린 듯」) — 노트 안 「담당 영역 고르기」에서 본다 */
+      + '<div class="insp-card-s">'+esc(inspDates(x))+(x.partner?' · '+esc(x.partner):'')+'</div>'
       + '<div class="insp-card-s">'+inspBuildingTags(x)+'</div>'
       + '<div class="insp-bar"><i style="width:'+pct+'%"></i></div>'
-      + '<div class="insp-card-s">체크 '+p.done+'/'+p.total+' · 발견 '+p.finds+'</div>'
+      + '<div class="insp-card-s">체크 '+p.done+'/'+p.total+' · 발견 '+p.finds
+      /* 끝남 표시는 끝날짜가 지난 노트에만 — 노트 안 머리줄에 있던 것을 뺐다(v180, 실수로 눌렸다) */
+      + (past?' · <button class="link-btn quiet-link" data-act="insp-status" data-id="'+esc(x.id)+'">'+(x.status==="끝남"?"다시 진행으로":"끝남으로")+'</button>':'')+'</div>'
       + '</div>';
   }).join("")+'</div>';
 }
@@ -6589,7 +6592,7 @@ function inspSectionsHtml(items,insp,showPage){
 function inspAddRowHtml(page){
   var ph={rooms:"방 이름 (예: 633-2F 배양실) — Enter",findings:"발견 한 줄 — Enter 하면 아래에 생겨요",prep:"챙길 것 한 줄 더 — Enter",plan:"일정·서류 요청 한 줄 더 — Enter",tour:"현장에서 볼 것·물을 것 한 줄 더 — Enter",review:"검토 포인트 한 줄 더 — Enter"}[page];
   if(!ph) return "";
-  return '<div class="add-row quick insp-add"><input class="input" id="insp-add" placeholder="'+ph+'" /><button class="btn sm" data-act="insp-add" data-id="'+page+'">＋</button></div>';
+  return '<div class="add-row quick insp-add"><input class="input" id="insp-add" placeholder="'+ph+'" /></div>';
 }
 function inspFilterHtml(insp,items){
   var days=[]; items.forEach(function(x){ if(x.day&&days.indexOf(x.day)<0) days.push(x.day); }); days.sort();
@@ -6653,7 +6656,6 @@ function inspNoteHtml(insp){
     + '<button class="link-btn" data-act="insp-back">← 실태조사</button>'
     + '<div class="insp-head-t"><b>'+esc(insp.title)+'</b><span class="muted">'+esc(inspDates(insp))+(insp.partner?' · '+esc(insp.partner):'')+'</span><div class="insp-head-b">'+inspBuildingTags(insp)+'</div></div>'
     + '<span class="insp-q" id="insp-q" style="display:none"></span>'
-    + '<button class="link-btn quiet-link" data-act="insp-status" data-id="'+esc(insp.id)+'">'+(insp.status==="끝남"?"다시 진행으로":"끝남으로")+'</button>'
     + '</div>'
     + refill
     + '<div class="insp-tabs">'+INSP_PAGES.map(function(p){ return '<button class="insp-tab'+(pg===p[0]?" on":"")+'" data-act="insp-page" data-id="'+p[0]+'">'+p[1]+(counts[p[0]]?'<i>'+counts[p[0]]+'</i>':'')+'</button>'; }).join("")+'</div>'
@@ -6666,7 +6668,7 @@ function renderInsp(){
   if(!inspTpl) inspLoadTpl().then(function(){ if(active==="insp") render(); },function(){});
   if(!cur){
     inspOpenId=null;
-    view().innerHTML='<div class="page">'+pageHead2("실태조사","실사 한 건이 노트 한 권이에요. 현장에서 통신이 끊겨도 체크와 메모는 되고, 돌아오면 저장돼요.",list.length?[pill("실사 "+list.length+"건")]:null)
+    view().innerHTML='<div class="page">'+pageHead2("실태조사","실사 한 건이 노트 한 권이에요. 현장에서 통신이 끊겨도 체크와 메모는 되고, 돌아오면 저장돼요.",list.length>1?[pill("실사 "+list.length+"건")]:null)
       + inspNewHtml()+inspListHtml(list)+'</div>';
     var t=document.getElementById("insp-title"); if(t&&inspNewOpen&&!t.value) t.focus();
     return;

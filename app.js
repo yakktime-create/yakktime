@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v190";
+var APP_VER="v191";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6663,7 +6663,8 @@ function inspNoteHtml(insp){
     var areas=(inspTpl&&inspTpl.areas)||[]; (insp.areas||[]).forEach(function(a){ if(areas.indexOf(a)<0) areas=areas.concat([a]); });
     areasHtml='<div class="insp-areas"><span class="muted">내 담당 — 켜 둔 영역이 「내 담당만」에 모여요. 번호는 보고서 항목</span>'+inspAreaChips(areas,insp.areas||[],"insp-area")+'</div>';
   }
-  body=(filt?inspFilterHtml(insp,all.filter(function(x){ return x.page===pg; }))+areasHtml:"")
+  var intro=(inspTpl&&inspTpl.intro&&inspTpl.intro[pg])?'<p class="insp-intro">'+esc(inspTpl.intro[pg])+'</p>':"";   /* 처음 보는 사람도 이 페이지가 뭘 하는 곳인지 알게(v191) */
+  body=intro+(filt?inspFilterHtml(insp,all.filter(function(x){ return x.page===pg; }))+areasHtml:"")
     +(pg==="plan"?inspAgendaHtml():"")+inspAddRowHtml(pg)+inspSectionsHtml(items,insp,false);
   if(pg==="findings"&&items.length) body+='<div class="insp-foot-acts"><button class="btn quiet sm" data-act="insp-copyfind">발견 전부 복사</button><span class="muted">검토서에 붙일 때 — 한글 내보내기는 다음 판에</span></div>';
   var refill=inspNeedsRefill(insp)?'<div class="insp-refill">체크리스트가 새로 정리됐어요. <button class="link-btn" data-act="insp-refill" data-id="'+esc(insp.id)+'">새 체크리스트로 바꾸기</button> <span class="muted">체크·메모는 옮겨 오고, 직접 적은 줄·방·발견은 그대로예요.</span></div>':"";

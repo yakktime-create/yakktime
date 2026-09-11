@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v169";
+var APP_VER="v170";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6273,7 +6273,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "ans-jump": ansOpenId=id; active="answers"; render(); break;
     /* 실태조사 노트 */
     case "insp-new": inspNewOpen=!inspNewOpen; if(inspNewOpen) inspLoadTpl().then(function(){ render(); },function(){}); render(); break;
-    case "insp-newarea": { var ai=inspNewAreas.indexOf(id); if(ai>=0) inspNewAreas.splice(ai,1); else inspNewAreas.push(id); el.classList.toggle("on"); break; }
+    case "insp-newarea": { inspAreasTouched=true; var ai=inspNewAreas.indexOf(id); if(ai>=0) inspNewAreas.splice(ai,1); else inspNewAreas.push(id); el.classList.toggle("on"); break; }
     case "insp-create": inspCreate(); break;
     case "insp-open": inspOpenId=id; if(!INSP_PAGE_LABEL[inspPage]) inspPage="tour"; inspExpand={}; render(); break;
     case "insp-f": { if(id==="all") inspFilter={day:"",mine:false,bld:""}; else if(id==="mine") inspFilter.mine=!inspFilter.mine; else if(id.indexOf("day:")===0){ var dv=id.slice(4); inspFilter.day=(inspFilter.day===dv)?"":dv; } else if(id.indexOf("bld:")===0){ var bv=id.slice(4); inspFilter.bld=(inspFilter.bld===bv)?"":bv; } render(); break; }
@@ -6392,13 +6392,16 @@ var INSP_OLD_PAGE={d1:"plan",d2:"plan",d3:"plan",docs:"plan",questions:"review",
 var INSP_DAY_LABEL={d1:"1일차",d2:"2일차",d3:"3일차",d4:"4일차",d5:"5일차"};
 var inspFilter={day:"",mine:false,bld:""};
 var INSP_PAGE_LABEL={}; INSP_PAGES.forEach(function(p){ INSP_PAGE_LABEL[p[0]]=p[1]; });
-var inspOpenId=null, inspPage="tour", inspTpl=null, inspNewOpen=false, inspExpand={}, inspNewAreas=["압축공기·가스"], inspTimers={};
+var inspOpenId=null, inspPage="tour", inspTpl=null, inspNewOpen=false, inspExpand={}, inspTimers={};
+/* 「내 담당」 기본값은 본의 업무분장(mine)이다 — 이랑님이 칩을 열두 번 켤 일이 없게. 한 번이라도 손대면 그대로 둔다 */
+var inspNewAreas=["압축공기·가스"], inspAreasTouched=false;
 
 function inspItems(id){ return (S.insp_items||[]).filter(function(x){ return x.insp_id===id; }).sort(function(a,b){ return (a.seq||0)-(b.seq||0); }); }
 function inspLoadTpl(){
   if(inspTpl) return Promise.resolve(inspTpl);
   return fetch("insp_template.json?v="+APP_VER).then(function(r){ return r.json(); }).then(function(t){
-    inspTpl=t; try{ localStorage.setItem("insp_tpl",JSON.stringify(t)); }catch(e){} return t;
+    inspTpl=t; if(t.mine&&t.mine.length&&!inspAreasTouched) inspNewAreas=t.mine.slice();
+    try{ localStorage.setItem("insp_tpl",JSON.stringify(t)); }catch(e){} return t;
   }).catch(function(){
     try{ var c=localStorage.getItem("insp_tpl"); if(c){ inspTpl=JSON.parse(c); return inspTpl; } }catch(e){}
     throw new Error("체크리스트 본을 못 불러왔어요. 통신이 되는 곳에서 한 번 열어 주세요.");
@@ -6481,6 +6484,9 @@ function inspRefill(insp){
     var seq=Math.max.apply(null,[0].concat(keep.map(function(x){ return x.seq||0; })))+1;
     var items=t.items.map(function(x,i){ var c=carry[norm(x.text)]||{}; return {id:uuid(),insp_id:insp.id,page:x.page,section:x.section||null,seq:seq+i,kind:x.kind||"task",text:x.text,hint:x.hint||null,building:x.building||null,area:x.area||null,day:x.day||null,done:!!c.done,memo:c.memo||null,grade:null,ref:null,src:x.src||"본"}; });
     S.insp_items=S.insp_items.filter(function(x){ return x.insp_id!==insp.id; }).concat(keep,items);
+    /* 담당 영역을 아직 안 건드린 노트(한 개 이하)면 본의 업무분장대로 켜 준다 — 칩을 열둘 켤 일이 없게 */
+    var areaSet=false;
+    if(t.mine&&t.mine.length&&(insp.areas||[]).length<=1){ insp.areas=t.mine.slice(); areaSet=true; }
     insp.tpl=t.version; inspWrite("upsert","inspections",insp);
     gone.forEach(function(x){ inspWrite("delete","insp_items",x); });
     if(navigator.onLine){
@@ -6489,7 +6495,7 @@ function inspRefill(insp){
     } else items.forEach(function(x){ inspQPush({op:"upsert",table:"insp_items",item:x,id:x.id}); });
     inspCacheSave(); inspPage="tour"; inspBusy=false; render();
     var moved=Object.keys(carry).length;
-    showToast("✓ 새 본으로 채웠어요 — "+items.length+"줄"+(moved?", 체크·메모 "+moved+"줄 옮김":"")+(orphan.length?", 옛 줄 "+orphan.length+"개는 그대로 남겼어요":""));
+    showToast("✓ 새 본으로 채웠어요 — "+items.length+"줄"+(moved?", 체크·메모 "+moved+"줄 옮김":"")+(orphan.length?", 옛 줄 "+orphan.length+"개는 그대로 남겼어요":"")+(areaSet?". 「내 담당」도 업무분장대로 켰어요":""));
   },function(e){ inspBusy=false; showToast(e.message,true); });
 }
 function inspProgress(insp){
@@ -6506,7 +6512,7 @@ function inspBuildingTags(insp){
   return (insp.buildings||[]).map(function(b){ return '<span class="insp-b">'+esc(b.name)+' <i>'+esc(b.mode||"")+'</i></span>'; }).join(" ");
 }
 function inspNewHtml(){
-  var areas=(inspTpl&&inspTpl.areas)||["유틸리티","압축공기·가스","셀뱅크","제조","제조기록서","공정밸리데이션","적격성평가","일탈","세척밸리데이션","시험","교육"];
+  var areas=(inspTpl&&inspTpl.areas)||["제조소 연혁","작업소","시설·환경","압축공기·가스","기준서·SOP","공정밸리데이션","적격성평가","세척밸리데이션","제조기록서","위탁제조","일탈·변경","작업원 위생"];
   if(!inspNewOpen) return '<div class="add-row quick"><button class="btn" data-act="insp-new">＋ 새 실사 노트</button><span class="muted">본(바이오 원액 5일)을 복사해서 시작해요</span></div>';
   return '<div class="card composer insp-new">'
     + '<input class="input" id="insp-title" placeholder="업체 · 제조소 (예: ○○바이오 오송)" />'

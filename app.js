@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v181";
+var APP_VER="v182";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6531,7 +6531,7 @@ function inspNewHtml(){
     +   '<label>일수 <input class="input insp-days" type="number" id="insp-days" value="5" min="1" max="10" /></label></div>'
     + '<input class="input" id="insp-buildings" placeholder="건물 (예: 633 변경만, 636 전체)" value="633 변경만, 636 전체, 630 창고, 660 시험실" />'
     + '<input class="input" id="insp-partner" placeholder="같이 가는 사람 (예: 김해인 선생님 — 3일차 공유)" />'
-    + '<div class="insp-areas"><span class="muted">내 담당</span>'+areas.map(function(a){ return '<button class="chip'+(inspNewAreas.indexOf(a)>=0?" on":"")+'" data-act="insp-newarea" data-id="'+esc(a)+'">'+esc(a)+'</button>'; }).join("")+'</div>'
+    + '<div class="insp-areas"><span class="muted">내 담당</span>'+inspAreaChips(areas,inspNewAreas,"insp-newarea")+'</div>'
     + '<div class="composer-foot"><span class="muted">캘린더에 일정이 같이 들어가요</span><button class="btn quiet sm" data-act="insp-new">닫기</button><button class="btn sm" data-act="insp-create">노트 만들기</button></div>'
     + '</div>';
 }
@@ -6614,6 +6614,18 @@ function inspApplyFilter(items,insp){
   });
 }
 var inspAreasOpen=false;
+/* 영역 칩은 분장표(=보고서) 차례로 번호를 달아 묶는다 — 「개요 · 1) · 2) …」. 본의 report 가 순서를 정한다(이랑님 「실태조사 순서는 업무분장 항목 분류 순서대로」) */
+function inspAreaChips(areas,on,act){
+  var rep=(inspTpl&&inspTpl.report)||[], used={}, out="";
+  var chip=function(a){ used[a]=1; return '<button class="chip'+(on.indexOf(a)>=0?" on":"")+'" data-act="'+act+'" data-id="'+esc(a)+'">'+esc(a)+'</button>'; };
+  rep.forEach(function(r){
+    var as=(r.areas||[]).filter(function(a){ return areas.indexOf(a)>=0; }); if(!as.length) return;
+    out+='<span class="insp-area-g"><i>'+esc(r.no)+'</i>'+as.map(chip).join("")+'</span>';
+  });
+  var left=areas.filter(function(a){ return !used[a]; });
+  if(left.length) out+='<span class="insp-area-g">'+left.map(chip).join("")+'</span>';
+  return out;
+}
 var inspAgendaOpen=(function(){ try{ return localStorage.getItem("insp_agenda")!=="0"; }catch(e){ return true; } })();
 /* 타임 스케줄 — 아젠다를 보기만 하는 자리다(이랑님 「메모 할 건 아니고 그냥 보려는 거」).
  * 본(insp_template.json)의 agenda 를 그대로 그린다. 줄이 아니라 표라서 체크·메모가 붙지 않고,
@@ -6647,18 +6659,20 @@ function inspNoteHtml(insp){
   var areasHtml="";
   if(inspAreasOpen){
     var areas=(inspTpl&&inspTpl.areas)||[]; (insp.areas||[]).forEach(function(a){ if(areas.indexOf(a)<0) areas=areas.concat([a]); });
-    areasHtml='<div class="insp-areas"><span class="muted">내 담당 — 켜 둔 영역이 「내 담당만」에 모여요</span>'+areas.map(function(a){ return '<button class="chip'+((insp.areas||[]).indexOf(a)>=0?" on":"")+'" data-act="insp-area" data-id="'+esc(a)+'">'+esc(a)+'</button>'; }).join("")+'</div>';
+    areasHtml='<div class="insp-areas"><span class="muted">내 담당 — 켜 둔 영역이 「내 담당만」에 모여요. 번호는 보고서 항목</span>'+inspAreaChips(areas,insp.areas||[],"insp-area")+'</div>';
   }
   body=(filt?inspFilterHtml(insp,all.filter(function(x){ return x.page===pg; }))+areasHtml:"")
     +(pg==="plan"?inspAgendaHtml():"")+inspAddRowHtml(pg)+inspSectionsHtml(items,insp,false);
   if(pg==="findings"&&items.length) body+='<div class="insp-foot-acts"><button class="btn quiet sm" data-act="insp-copyfind">발견 전부 복사</button><span class="muted">검토서에 붙일 때 — 한글 내보내기는 다음 판에</span></div>';
   var refill=inspNeedsRefill(insp)?'<div class="insp-refill">체크리스트가 새로 정리됐어요. <button class="link-btn" data-act="insp-refill" data-id="'+esc(insp.id)+'">새 체크리스트로 바꾸기</button> <span class="muted">체크·메모는 옮겨 오고, 직접 적은 줄·방·발견은 그대로예요.</span></div>':"";
+  /* 맨 위 고정 띠 — 「검토서는 오프라인에서」. 체크할 것이 아니라 늘 보고 있어야 하는 말이라 줄이 아니라 띠다(이랑님, v182) */
+  var notice=(inspTpl&&inspTpl.notice)?'<div class="insp-notice">⚠ '+esc(inspTpl.notice)+'</div>':"";
   return '<div class="insp-head">'
     + '<button class="link-btn" data-act="insp-back">← 실태조사</button>'
     + '<div class="insp-head-t"><b>'+esc(insp.title)+'</b><span class="muted">'+esc(inspDates(insp))+(insp.partner?' · '+esc(insp.partner):'')+'</span><div class="insp-head-b">'+inspBuildingTags(insp)+'</div></div>'
     + '<span class="insp-q" id="insp-q" style="display:none"></span>'
     + '</div>'
-    + refill
+    + notice + refill
     + '<div class="insp-tabs">'+INSP_PAGES.map(function(p){ return '<button class="insp-tab'+(pg===p[0]?" on":"")+'" data-act="insp-page" data-id="'+p[0]+'">'+p[1]+(counts[p[0]]?'<i>'+counts[p[0]]+'</i>':'')+'</button>'; }).join("")+'</div>'
     + '<div class="insp-page">'+body+'</div>';
 }

@@ -1486,6 +1486,11 @@ textarea.ans-q,textarea.ans-final{width:100%;resize:vertical;line-height:var(--l
 .insp-ag-t tr.me .w{font-weight:700;}
 .insp-ag-t tr.me td.t{box-shadow:inset 3px 0 0 var(--accent);}
 .insp-ag-f{padding:var(--sp-2) var(--sp-3);font-size:var(--fs-xs);color:var(--muted);border-top:1px solid var(--line);}
+/* 영역 칩 묶음 — 분장표 번호가 앞에 붙는다 */
+.insp-area-g{display:inline-flex;align-items:center;flex-wrap:wrap;gap:var(--sp-1);margin-right:var(--sp-2);}
+.insp-area-g i{font-style:normal;font-size:var(--fs-xs);font-weight:700;color:var(--muted);margin-right:2px;}
+/* 맨 위 고정 띠 — 검토서는 오프라인에서 */
+.insp-notice{background:var(--brass-soft);border:1px solid var(--brass-bd);color:var(--brass);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);margin:0 0 var(--sp-3);font-size:var(--fs-md);font-weight:700;letter-spacing:var(--ls-head);}
 .insp-refill{background:var(--warn-bg);border:1px solid var(--warn-bd);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);margin:0 0 var(--sp-3);font-size:var(--fs-md);}
 
 /* 조 전체 보기 — 글자를 끌어 고르면 아래에 뜬다 */

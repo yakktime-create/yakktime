@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v186";
+var APP_VER="v187";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6571,7 +6571,7 @@ function inspRowHtml(x,insp){
     + '<button class="check'+(x.done?" on":"")+'" data-act="insp-done" data-id="'+esc(x.id)+'">✓</button>'
     + '<div class="insp-body" data-act="insp-expand" data-id="'+esc(x.id)+'">'
     +   '<div class="insp-text">'+kindTag+esc(x.text)+' '+tags+'</div>'
-    +   (x.hint?'<div class="insp-hint">'+esc(x.hint)+'</div>':'')
+    +   (x.hint?'<div class="insp-hint">'+esc(x.hint).replace(/ 확인: /,'<br>확인: ')+'</div>':'')   /* 「왜 … / 확인 …」 두 줄로 — 훑기 쉽게 */
     +   (!open&&x.memo?'<div class="insp-memo-pv">📝 '+esc(x.memo)+'</div>':'')
     + '</div>'
     + (open?'<div class="insp-exp"><textarea class="insp-memo" data-id="'+esc(x.id)+'" rows="2" placeholder="메모 — 본 것 · 답변 · 서류 번호">'+esc(x.memo||"")+'</textarea>'

@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v182";
+var APP_VER="v183";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6706,6 +6706,14 @@ function wireInspNote(insp){
     });
   }
   wire(".insp-memo","memo"); wire(".insp-title-in","text"); wire(".insp-ref-in","ref");
+  /* 메모 칸에서 손을 떼면 저절로 접힌다 — 흰 박스가 남지 않게(이랑님 「메모로 쓰면 흰색 박스로 남는 게 좋은 건가?」).
+   * 방·발견 줄은 늘 펼쳐진 자유 줄이라 해당 없다. 「발견으로 옮기기」를 누르는 클릭이 먼저 들어오게 잠깐 기다린다 */
+  Array.prototype.forEach.call(root.querySelectorAll('.insp-row:not(.free) .insp-memo'),function(el){
+    el.addEventListener("blur",function(){
+      var id=el.getAttribute("data-id");
+      setTimeout(function(){ if(inspExpand[id]&&document.activeElement!==el){ inspExpand[id]=false; render(); } },300);
+    });
+  });
   var add=document.getElementById("insp-add");
   if(add) add.addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); inspAdd(inspPage); } });
   /* 길게 누르면 발견으로 — 손가락용 */

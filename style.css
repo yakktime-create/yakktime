@@ -1442,7 +1442,7 @@ textarea.ans-q,textarea.ans-final{width:100%;resize:vertical;line-height:var(--l
 .insp-text{font-size:var(--fs-base);line-height:var(--lh-snug);}
 .insp-row.done .insp-text{color:var(--muted);text-decoration:line-through;}
 .insp-hint{font-size:var(--fs-sm);color:var(--muted);margin-top:2px;line-height:var(--lh-snug);}
-.insp-memo-pv{font-size:var(--fs-md);color:var(--ink);background:var(--paper);border-radius:var(--r-sm);padding:6px 10px;margin-top:6px;white-space:pre-wrap;}
+.insp-memo-pv{font-size:var(--fs-md);color:var(--ink);border-left:2px solid var(--brass-bd);padding:2px 10px;margin-top:6px;white-space:pre-wrap;line-height:var(--lh-snug);}
 .insp-exp{flex-basis:100%;padding-left:calc(20px + var(--sp-3));}
 .insp-memo{width:100%;font:inherit;font-size:var(--fs-md);line-height:var(--lh-snug);border:1px solid var(--line);border-radius:var(--r-sm);padding:8px 10px;background:var(--surface);color:var(--ink);resize:vertical;}
 .insp-exp-acts{display:flex;gap:var(--sp-3);margin-top:6px;}

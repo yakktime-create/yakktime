@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v191";
+var APP_VER="v192";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6553,7 +6553,7 @@ function inspListHtml(list){
 }
 function inspRowHtml(x,insp){
   var open=!!inspExpand[x.id], custom=!x.src, free=(x.kind==="room"||x.kind==="find");
-  var tags=(x.building?'<span class="insp-b">'+esc(x.building)+'</span>':'')+(x.area?'<span class="insp-a">'+esc(x.area)+'</span>':'')
+  var tags=(x.building?'<span class="insp-b">'+esc(x.building)+'</span>':'')+(x.area&&x.area!=="공통"?'<span class="insp-a">'+esc(x.area)+'</span>':'')
     +(x.day&&x.page!=="plan"?'<span class="insp-d">'+esc(INSP_DAY_LABEL[x.day]||x.day)+'</span>':'');
   var kindTag=x.page==="tour"?(x.kind==="q"?'<span class="insp-k ask">묻기</span>':'<span class="insp-k look">보기</span>'):(x.kind==="doc"?'<span class="insp-k doc">서류 요청</span>':'');
   if(free){
@@ -6606,6 +6606,7 @@ function inspFilterHtml(insp,items){
 }
 function inspApplyFilter(items,insp){
   return items.filter(function(x){
+    if(x.area==="공통") return true;   /* 원칙·「어느 방이든 30초」 — 날·담당을 걸러도 늘 남는다(이랑님 「원칙은 내 담당에도」, v192) */
     if(inspFilter.day&&x.day&&x.day!==inspFilter.day) return false;
     if(inspFilter.day&&!x.day&&x.page!=="prep") return false;
     if(inspFilter.mine&&!(x.area&&(insp.areas||[]).indexOf(x.area)>=0)) return false;

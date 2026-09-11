@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v192";
+var APP_VER="v193";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6556,6 +6556,18 @@ function inspRowHtml(x,insp){
   var tags=(x.building?'<span class="insp-b">'+esc(x.building)+'</span>':'')+(x.area&&x.area!=="공통"?'<span class="insp-a">'+esc(x.area)+'</span>':'')
     +(x.day&&x.page!=="plan"?'<span class="insp-d">'+esc(INSP_DAY_LABEL[x.day]||x.day)+'</span>':'');
   var kindTag=x.page==="tour"?(x.kind==="q"?'<span class="insp-k ask">묻기</span>':'<span class="insp-k look">보기</span>'):(x.kind==="doc"?'<span class="insp-k doc">서류 요청</span>':'');
+  if(free&&!open){
+    /* 방·발견은 접힌 카드로 — 이름 · 등급/건물 · 메모 한 줄. 누르면 적는 칸이 열리고 손을 떼면 접힌다(v193, 이랑님 「여기 UX/UI 개선 방법 없나?」) */
+    var ftags=(x.kind==="find"?(x.grade?'<span class="insp-g'+(x.grade==="보완 예상"?" warn":"")+'">'+esc(x.grade)+'</span>':''):'')+(x.building?'<span class="insp-b">'+esc(x.building)+'</span>':'');
+    var empty=!(x.memo&&String(x.memo).trim())&&!(x.ref&&x.ref.trim());
+    return '<li class="insp-row free folded" data-id="'+esc(x.id)+'">'
+      + '<div class="insp-body" data-act="insp-expand" data-id="'+esc(x.id)+'">'
+      +   '<div class="insp-text"><b>'+esc(x.text||(x.kind==="room"?"(이름 없음)":"(내용 없음)"))+'</b> '+ftags+'</div>'
+      +   (x.ref&&x.ref.trim()?'<div class="insp-hint">근거: '+esc(x.ref)+'</div>':'')
+      +   (x.memo&&String(x.memo).trim()?'<div class="insp-memo-pv">'+esc(x.memo)+'</div>':'')
+      +   (empty?'<div class="insp-hint">눌러서 적기</div>':'')
+      + '</div></li>';
+  }
   if(free){
     return '<li class="insp-row free" data-id="'+esc(x.id)+'">'
       + '<div class="insp-body">'
@@ -6712,10 +6724,10 @@ function wireInspNote(insp){
   wire(".insp-memo","memo"); wire(".insp-title-in","text"); wire(".insp-ref-in","ref");
   /* 메모 칸에서 손을 떼면 저절로 접힌다 — 흰 박스가 남지 않게(이랑님 「메모로 쓰면 흰색 박스로 남는 게 좋은 건가?」).
    * 방·발견 줄은 늘 펼쳐진 자유 줄이라 해당 없다. 「발견으로 옮기기」를 누르는 클릭이 먼저 들어오게 잠깐 기다린다 */
-  Array.prototype.forEach.call(root.querySelectorAll('.insp-row:not(.free) .insp-memo'),function(el){
+  Array.prototype.forEach.call(root.querySelectorAll('.insp-row .insp-memo, .insp-row.free .insp-title-in, .insp-row.free .insp-ref-in'),function(el){
     el.addEventListener("blur",function(){
-      var id=el.getAttribute("data-id");
-      setTimeout(function(){ if(inspExpand[id]&&document.activeElement!==el){ inspExpand[id]=false; render(); } },300);
+      var id=el.getAttribute("data-id"), row=el.closest(".insp-row");
+      setTimeout(function(){ if(inspExpand[id]&&!(row&&row.contains(document.activeElement))){ inspExpand[id]=false; render(); } },300);
     });
   });
   var add=document.getElementById("insp-add");
@@ -6733,6 +6745,7 @@ function inspAdd(page){
   var kind=page==="rooms"?"room":page==="findings"?"find":page==="review"?"q":"task";
   var seq=Math.max.apply(null,[0].concat(inspItems(insp.id).map(function(x){ return x.seq||0; })))+1;
   var it={id:uuid(),insp_id:insp.id,page:page,section:(kind==="room"||kind==="find")?null:"직접 적음",seq:seq,kind:kind,text:v,hint:null,building:null,area:null,done:false,memo:null,grade:kind==="find"?"참고":null,ref:null,src:null};
+  if(kind==="room"||kind==="find") inspExpand[it.id]=true;
   S.insp_items.push(it); inspSave(it); render();
   if(kind==="room"||kind==="find"){ var m=document.querySelector('.insp-memo[data-id="'+it.id+'"]'); if(m) m.focus(); }
   else { var a=document.getElementById("insp-add"); if(a) a.focus(); }
@@ -6741,6 +6754,7 @@ function inspToFind(id){
   var src=inspItem(id); if(!src||src.kind==="find") return;
   var seq=Math.max.apply(null,[0].concat(inspItems(src.insp_id).map(function(x){ return x.seq||0; })))+1;
   var it={id:uuid(),insp_id:src.insp_id,page:"findings",section:null,seq:seq,kind:"find",text:src.text,hint:null,building:src.building||null,area:src.area||null,done:false,memo:src.memo||null,grade:"참고",ref:null,src:"←"+INSP_PAGE_LABEL[src.page]};
+  inspExpand[it.id]=true;
   S.insp_items.push(it); inspSave(it); inspPage="findings"; render();
   var m=document.querySelector('.insp-memo[data-id="'+it.id+'"]'); if(m) m.focus();
   showToast("발견 페이지로 옮겼어요");

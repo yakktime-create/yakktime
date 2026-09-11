@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v201";
+var APP_VER="v202";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6605,7 +6605,9 @@ function inspSectionsHtml(items,insp,showPage){
   items.forEach(function(x){ var k=isRooms?("B"+(x.building||"")).replace(/^B$/,"건물 미정"):((showPage?INSP_PAGE_LABEL[x.page]+" · ":"")+(x.section||"")); if(!by[k]){ by[k]=[]; order.push(k); } by[k].push(x); });
   return order.map(function(k){
     var rows=by[k], n=rows.filter(function(x){ return x.done; }).length, cnt=rows.filter(inspCountable).length;
-    return '<section class="insp-sec"><div class="insp-sec-h"><span>'+esc(k)+'</span>'+(cnt?'<span class="muted">'+n+'/'+cnt+'</span>':'')+'</div><ul class="list">'
+    if(isRooms) return '<section class="insp-sec rooms"><div class="insp-sec-h band"><span>'+esc(k)+'</span><span class="muted">방 '+rows.length+'</span></div><ul class="list cards">'
+      + rows.map(function(x){ return inspRowHtml(x,insp); }).join("")+'</ul></section>';
+    return '<section class="insp-sec"><div class="insp-sec-h"><span>'+esc(k)+'</span>'+(cnt?'<span class="muted">'+n+'/'+cnt+'</span>':'')+'</div><ul class="list'+(rows[0]&&rows[0].kind==="find"?" cards":"")+'">'
       + rows.map(function(x){ return inspRowHtml(x,insp); }).join("")+'</ul></section>';
   }).join("");
 }

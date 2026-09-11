@@ -1,6 +1,6 @@
 {
  "name": "AstraZeneca 실태조사 5일 (Tozorakimab 원액)",
- "version": "2026-09-11d",
+ "version": "2026-09-11e",
  "areas": [
   "제조소 연혁",
   "작업소",
@@ -87,7 +87,7 @@
   {
    "page": "prep",
    "section": "출력물",
-   "text": "이전 검토서(백본 보고서)",
+   "text": "이전 검토서 (그 제조소 8월 조사 · 백본)",
    "hint": "투어용. 🟢 = 보완 나간 항목 → 반영 여부 현장 확인 / 밑줄 = 참고만",
    "area": "",
    "kind": "task",
@@ -98,7 +98,29 @@
   {
    "page": "prep",
    "section": "출력물",
-   "text": "제조방법 · 별규(원액) · 기시(완제)",
+   "text": "8월 보완 지시서 + 업체 보완 회신",
+   "hint": "검토서와 따로 있으면 — 업체가 「뭘 고쳤다」고 했는지는 회신에만 있다",
+   "area": "",
+   "kind": "task",
+   "day": "",
+   "building": "",
+   "src": ""
+  },
+  {
+   "page": "prep",
+   "section": "출력물",
+   "text": "제조방법 (허가사항)",
+   "hint": "현장·BMR 대조 기준",
+   "area": "",
+   "kind": "task",
+   "day": "",
+   "building": "",
+   "src": ""
+  },
+  {
+   "page": "prep",
+   "section": "출력물",
+   "text": "신청서 — 별규(원액)·기시(완제) 부분은 꼭",
    "hint": "원액 + 버퍼 = 완제라 시험방법이 거의 같다 → 차이점만",
    "area": "",
    "kind": "task",
@@ -109,8 +131,41 @@
   {
    "page": "prep",
    "section": "출력물",
-   "text": "아젠다 · 업무 분장표",
-   "hint": "5일 타임 스케줄은 일정 페이지 맨 위에도 그대로 있다 · 담당이 늘면 「내 담당」 영역을 켠다",
+   "text": "Requiring Documents List",
+   "hint": "요청할 때 번호로 말한다 — 일정 페이지의 요청 줄도 같은 번호",
+   "area": "",
+   "kind": "task",
+   "day": "",
+   "building": "",
+   "src": ""
+  },
+  {
+   "page": "prep",
+   "section": "출력물",
+   "text": "내가 쓸 검토서 양식",
+   "hint": "이전에 안 본 것 위주로 새로 쓴다 · 미확인은 삭제",
+   "area": "",
+   "kind": "task",
+   "day": "",
+   "building": "",
+   "src": ""
+  },
+  {
+   "page": "prep",
+   "section": "출력물",
+   "text": "업무 분장표",
+   "hint": "담당이 늘면 「담당 영역 고르기」에서 켠다",
+   "area": "",
+   "kind": "task",
+   "day": "",
+   "building": "",
+   "src": ""
+  },
+  {
+   "page": "prep",
+   "section": "출력물",
+   "text": "아젠다 (MFDS Inspection Schedule)",
+   "hint": "일정 페이지 맨 위에도 그대로 있다",
    "area": "",
    "kind": "task",
    "day": "",

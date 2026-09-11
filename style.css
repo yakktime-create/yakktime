@@ -1465,6 +1465,27 @@ textarea.ans-q,textarea.ans-final{width:100%;resize:vertical;line-height:var(--l
 .insp-k{display:inline-block;font-size:var(--fs-xs);font-weight:700;border-radius:var(--r-xs);padding:1px 6px;margin-right:6px;vertical-align:1px;white-space:nowrap;}
 .insp-k.look{background:var(--accent-soft);color:var(--accent);} .insp-k.ask{background:var(--blue-soft);color:var(--blue-deep);} .insp-k.doc{background:var(--brass-soft);color:var(--brass);}
 .insp-d{display:inline-block;font-size:var(--fs-xs);color:var(--muted);background:var(--paper);border-radius:var(--r-xs);padding:1px 6px;vertical-align:1px;margin-left:2px;white-space:nowrap;}
+/* 타임 스케줄 — 아젠다를 보기만 하는 표. 체크·메모가 붙지 않는다 */
+.insp-ag{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);margin:0 0 var(--sp-4);overflow:hidden;}
+.insp-ag-h{display:flex;justify-content:space-between;align-items:baseline;gap:var(--sp-2);
+  padding:var(--sp-2) var(--sp-3);cursor:pointer;font-size:var(--fs-md);font-weight:700;letter-spacing:var(--ls-head);}
+.insp-ag-h .muted{font-weight:400;font-size:var(--fs-sm);}
+.insp-ag-who{display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-3);padding:0 var(--sp-3) var(--sp-2);
+  font-size:var(--fs-xs);color:var(--muted);border-bottom:1px solid var(--line);}
+.insp-ag-p.me{color:var(--accent);font-weight:700;}
+.insp-ag-d{display:flex;align-items:baseline;gap:var(--sp-2);padding:var(--sp-3) var(--sp-3) var(--sp-1);}
+.insp-ag-d b{font-size:var(--fs-md);letter-spacing:var(--ls-head);}
+.insp-ag-d .muted{font-size:var(--fs-sm);}
+.insp-ag-t{width:100%;border-collapse:collapse;font-size:var(--fs-sm);}
+.insp-ag-t td{padding:5px var(--sp-2);vertical-align:top;border-top:1px solid var(--line);color:var(--muted);line-height:var(--lh-snug);}
+.insp-ag-t td.t{white-space:nowrap;width:1%;padding-left:var(--sp-3);font-variant-numeric:tabular-nums;}
+.insp-ag-t td:last-child{padding-right:var(--sp-3);}
+.insp-ag-t i{font-style:normal;margin-left:var(--sp-2);font-size:var(--fs-xs);color:var(--muted);}
+.insp-ag-t .sub{display:block;font-size:var(--fs-xs);color:var(--muted);margin-top:2px;}
+.insp-ag-t tr.me td{color:var(--ink);background:var(--accent-soft);}
+.insp-ag-t tr.me .w{font-weight:700;}
+.insp-ag-t tr.me td.t{box-shadow:inset 3px 0 0 var(--accent);}
+.insp-ag-f{padding:var(--sp-2) var(--sp-3);font-size:var(--fs-xs);color:var(--muted);border-top:1px solid var(--line);}
 .insp-refill{background:var(--warn-bg);border:1px solid var(--warn-bd);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);margin:0 0 var(--sp-3);font-size:var(--fs-md);}
 
 /* 조 전체 보기 — 글자를 끌어 고르면 아래에 뜬다 */

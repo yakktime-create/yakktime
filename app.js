@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v168";
+var APP_VER="v169";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6278,6 +6278,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "insp-open": inspOpenId=id; if(!INSP_PAGE_LABEL[inspPage]) inspPage="tour"; inspExpand={}; render(); break;
     case "insp-f": { if(id==="all") inspFilter={day:"",mine:false,bld:""}; else if(id==="mine") inspFilter.mine=!inspFilter.mine; else if(id.indexOf("day:")===0){ var dv=id.slice(4); inspFilter.day=(inspFilter.day===dv)?"":dv; } else if(id.indexOf("bld:")===0){ var bv=id.slice(4); inspFilter.bld=(inspFilter.bld===bv)?"":bv; } render(); break; }
     case "insp-areas": inspAreasOpen=!inspAreasOpen; render(); break;
+    case "insp-agenda": inspAgendaOpen=!inspAgendaOpen; try{ localStorage.setItem("insp_agenda",inspAgendaOpen?"1":"0"); }catch(e){} render(); break;
     case "insp-refill": { var ir=S.inspections.find(function(x){ return x.id===id; }); if(ir&&confirm("본에서 온 줄을 새 본으로 바꿉니다. 같은 글의 체크·메모는 옮기고, 직접 적은 줄·방·발견은 남아요. 할까요?")) inspRefill(ir); break; }
     case "insp-back": inspOpenId=null; render(); break;
     case "insp-page": inspPage=id; inspExpand={}; render(); window.scrollTo(0,0); break;
@@ -6388,7 +6389,7 @@ ensureSession().then(function(session){
  * 날·내 담당·건물은 페이지가 아니라 위의 거르기(inspFilter)다. */
 var INSP_PAGES=[["prep","준비"],["plan","일정"],["tour","현장"],["review","서류 검토"],["rooms","방"],["findings","발견"]];
 var INSP_OLD_PAGE={d1:"plan",d2:"plan",d3:"plan",docs:"plan",questions:"review",mine:"tour"};
-var INSP_DAY_LABEL={d1:"1일차",d2:"2일차",d3:"3일차"};
+var INSP_DAY_LABEL={d1:"1일차",d2:"2일차",d3:"3일차",d4:"4일차",d5:"5일차"};
 var inspFilter={day:"",mine:false,bld:""};
 var INSP_PAGE_LABEL={}; INSP_PAGES.forEach(function(p){ INSP_PAGE_LABEL[p[0]]=p[1]; });
 var inspOpenId=null, inspPage="tour", inspTpl=null, inspNewOpen=false, inspExpand={}, inspNewAreas=["압축공기·가스"], inspTimers={};
@@ -6469,9 +6470,14 @@ function inspRefill(insp){
   inspLoadTpl().then(function(t){
     var old=inspItems(insp.id), norm=function(x){ return String(x||"").replace(/\s+/g,""); };
     var carry={}; old.forEach(function(x){ if(x.src&&(x.done||x.memo)) carry[norm(x.text)]={done:x.done,memo:x.memo}; });
-    var keep=old.filter(function(x){ return !x.src; });
-    keep.forEach(function(x){ if(INSP_OLD_PAGE[x.page]){ x.page=INSP_OLD_PAGE[x.page]; inspSave(x); } });
-    var gone=old.filter(function(x){ return !!x.src; });
+    /* 새 본에 같은 글이 없는데 체크·메모가 달린 줄은 지우지 않는다 — 현장에서 적은 것이 조용히 사라진다.
+     * (본이 3일 → 5일로 바뀌면서 일정 줄의 글이 거의 다 바뀌었다.) 직접 적은 줄로 돌려 남긴다. */
+    var inTpl={}; t.items.forEach(function(x){ inTpl[norm(x.text)]=1; });
+    var orphan=old.filter(function(x){ return x.src&&(x.done||x.memo)&&!inTpl[norm(x.text)]; });
+    var gone=old.filter(function(x){ return !!x.src&&orphan.indexOf(x)<0; });
+    var keep=old.filter(function(x){ return !x.src; }).concat(orphan);
+    orphan.forEach(function(x){ x.src=null; x.section=(x.section||"직접 적음")+" · 옛 본"; });
+    keep.forEach(function(x){ if(INSP_OLD_PAGE[x.page]){ x.page=INSP_OLD_PAGE[x.page]; } inspSave(x); });
     var seq=Math.max.apply(null,[0].concat(keep.map(function(x){ return x.seq||0; })))+1;
     var items=t.items.map(function(x,i){ var c=carry[norm(x.text)]||{}; return {id:uuid(),insp_id:insp.id,page:x.page,section:x.section||null,seq:seq+i,kind:x.kind||"task",text:x.text,hint:x.hint||null,building:x.building||null,area:x.area||null,day:x.day||null,done:!!c.done,memo:c.memo||null,grade:null,ref:null,src:x.src||"본"}; });
     S.insp_items=S.insp_items.filter(function(x){ return x.insp_id!==insp.id; }).concat(keep,items);
@@ -6483,7 +6489,7 @@ function inspRefill(insp){
     } else items.forEach(function(x){ inspQPush({op:"upsert",table:"insp_items",item:x,id:x.id}); });
     inspCacheSave(); inspPage="tour"; inspBusy=false; render();
     var moved=Object.keys(carry).length;
-    showToast("✓ 새 본으로 채웠어요 — "+items.length+"줄"+(moved?", 체크·메모 "+moved+"줄 옮김":""));
+    showToast("✓ 새 본으로 채웠어요 — "+items.length+"줄"+(moved?", 체크·메모 "+moved+"줄 옮김":"")+(orphan.length?", 옛 줄 "+orphan.length+"개는 그대로 남겼어요":""));
   },function(e){ inspBusy=false; showToast(e.message,true); });
 }
 function inspProgress(insp){
@@ -6501,12 +6507,12 @@ function inspBuildingTags(insp){
 }
 function inspNewHtml(){
   var areas=(inspTpl&&inspTpl.areas)||["유틸리티","압축공기·가스","셀뱅크","제조","제조기록서","공정밸리데이션","적격성평가","일탈","세척밸리데이션","시험","교육"];
-  if(!inspNewOpen) return '<div class="add-row quick"><button class="btn" data-act="insp-new">＋ 새 실사 노트</button><span class="muted">본(바이오 3일)을 복사해서 시작해요</span></div>';
+  if(!inspNewOpen) return '<div class="add-row quick"><button class="btn" data-act="insp-new">＋ 새 실사 노트</button><span class="muted">본(바이오 원액 5일)을 복사해서 시작해요</span></div>';
   return '<div class="card composer insp-new">'
     + '<input class="input" id="insp-title" placeholder="업체 · 제조소 (예: ○○바이오 오송)" />'
     + '<div class="insp-new-row"><label>시작일 <input class="input" type="date" id="insp-start" value="'+keyOf(new Date())+'" /></label>'
-    +   '<label>일수 <input class="input insp-days" type="number" id="insp-days" value="3" min="1" max="10" /></label></div>'
-    + '<input class="input" id="insp-buildings" placeholder="건물 (예: 633 변경만, 636 전체)" value="633 변경만, 636 전체" />'
+    +   '<label>일수 <input class="input insp-days" type="number" id="insp-days" value="5" min="1" max="10" /></label></div>'
+    + '<input class="input" id="insp-buildings" placeholder="건물 (예: 633 변경만, 636 전체)" value="633 변경만, 636 전체, 630 창고, 660 시험실" />'
     + '<input class="input" id="insp-partner" placeholder="같이 가는 사람 (예: 김해인 선생님 — 3일차 공유)" />'
     + '<div class="insp-areas"><span class="muted">내 담당</span>'+areas.map(function(a){ return '<button class="chip'+(inspNewAreas.indexOf(a)>=0?" on":"")+'" data-act="insp-newarea" data-id="'+esc(a)+'">'+esc(a)+'</button>'; }).join("")+'</div>'
     + '<div class="composer-foot"><span class="muted">캘린더에 일정이 같이 들어가요</span><button class="btn quiet sm" data-act="insp-new">닫기</button><button class="btn sm" data-act="insp-create">노트 만들기</button></div>'
@@ -6587,6 +6593,28 @@ function inspApplyFilter(items,insp){
   });
 }
 var inspAreasOpen=false;
+var inspAgendaOpen=(function(){ try{ return localStorage.getItem("insp_agenda")!=="0"; }catch(e){ return true; } })();
+/* 타임 스케줄 — 아젠다를 보기만 하는 자리다(이랑님 「메모 할 건 아니고 그냥 보려는 거」).
+ * 본(insp_template.json)의 agenda 를 그대로 그린다. 줄이 아니라 표라서 체크·메모가 붙지 않고,
+ * 위의 날 거르기(1일차…)를 켜면 그 날만 남는다 — 새 버튼을 만들지 않았다. */
+function inspAgendaHtml(){
+  var a=inspTpl&&inspTpl.agenda; if(!a) return "";
+  var head='<div class="insp-ag-h" data-act="insp-agenda"><span>타임 스케줄</span>'
+    + '<span class="muted">'+esc(a.period||"")+' · '+(inspAgendaOpen?"접기":"펴기")+'</span></div>';
+  if(!inspAgendaOpen) return '<div class="insp-ag">'+head+'</div>';
+  var days=(a.days||[]).filter(function(d){ return !inspFilter.day||d.day===inspFilter.day; });
+  var who=(a.who||[]).map(function(x){ return '<span class="insp-ag-p'+(x.indexOf("나 —")>=0?" me":"")+'">'+esc(x)+'</span>'; }).join("");
+  var body=days.map(function(d){
+    return '<div class="insp-ag-d"><b>'+esc(INSP_DAY_LABEL[d.day]||d.day)+'</b><span class="muted">'+esc(d.date||"")+'</span></div>'
+      + '<table class="insp-ag-t">'+(d.rows||[]).map(function(r){
+          return '<tr'+(r.me?' class="me"':'')+'><td class="t">'+esc(r.t||"")+'</td><td>'
+            + '<span class="w">'+esc(r.w||"")+'</span>'+(r.who?'<i>'+esc(r.who)+'</i>':'')
+            + (r.sub?'<span class="sub">'+esc(r.sub)+'</span>':'')+'</td></tr>';
+        }).join("")+'</table>';
+  }).join("");
+  return '<div class="insp-ag open">'+head+'<div class="insp-ag-who">'+who+'</div>'+body
+    + '<div class="insp-ag-f">진한 줄이 내가 들어가는 자리예요 · 숫자는 조사관 번호</div></div>';
+}
 function inspNoteHtml(insp){
   var all=inspItems(insp.id), pg=inspPage, body="";
   var counts={}; INSP_PAGES.forEach(function(p){ var it=all.filter(function(x){ return x.page===p[0]&&inspCountable(x); }); counts[p[0]]=it.length?it.filter(function(x){ return x.done; }).length+"/"+it.length:""; });
@@ -6600,7 +6628,8 @@ function inspNoteHtml(insp){
     var areas=(inspTpl&&inspTpl.areas)||[]; (insp.areas||[]).forEach(function(a){ if(areas.indexOf(a)<0) areas=areas.concat([a]); });
     areasHtml='<div class="insp-areas"><span class="muted">내 담당 — 켜 둔 영역이 「내 담당만」에 모여요</span>'+areas.map(function(a){ return '<button class="chip'+((insp.areas||[]).indexOf(a)>=0?" on":"")+'" data-act="insp-area" data-id="'+esc(a)+'">'+esc(a)+'</button>'; }).join("")+'</div>';
   }
-  body=(filt?inspFilterHtml(insp,all.filter(function(x){ return x.page===pg; }))+areasHtml:"")+inspAddRowHtml(pg)+inspSectionsHtml(items,insp,false);
+  body=(filt?inspFilterHtml(insp,all.filter(function(x){ return x.page===pg; }))+areasHtml:"")
+    +(pg==="plan"?inspAgendaHtml():"")+inspAddRowHtml(pg)+inspSectionsHtml(items,insp,false);
   if(pg==="findings"&&items.length) body+='<div class="insp-foot-acts"><button class="btn quiet sm" data-act="insp-copyfind">발견 전부 복사</button><span class="muted">검토서에 붙일 때 — 한글 내보내기는 다음 판에</span></div>';
   var refill=inspNeedsRefill(insp)?'<div class="insp-refill">본이 새로워졌어요(준비·일정·현장·서류 검토). <button class="link-btn" data-act="insp-refill" data-id="'+esc(insp.id)+'">새 본으로 다시 채우기</button> <span class="muted">같은 글의 체크·메모는 옮기고, 직접 적은 줄·방·발견은 남아요.</span></div>':"";
   return '<div class="insp-head">'
@@ -6616,7 +6645,8 @@ function inspNoteHtml(insp){
 function renderInsp(){
   var list=(S.inspections||[]).slice().sort(function(a,b){ return String(b.start_date||"").localeCompare(String(a.start_date||"")); });
   var cur=inspOpenId?list.find(function(x){ return x.id===inspOpenId; }):null;
-  if(!inspTpl) inspLoadTpl().then(function(){ if(active==="insp"&&!inspOpenId) render(); },function(){});
+  /* 본이 아직 안 왔으면 오는 대로 한 번 더 그린다 — 노트를 열어 둔 채여도(타임 스케줄이 본에 있다) */
+  if(!inspTpl) inspLoadTpl().then(function(){ if(active==="insp") render(); },function(){});
   if(!cur){
     inspOpenId=null;
     view().innerHTML='<div class="page">'+pageHead2("실태조사","실사 한 건이 노트 한 권이에요. 현장에서 통신이 끊겨도 체크와 메모는 되고, 돌아오면 저장돼요.",list.length?[pill("실사 "+list.length+"건")]:null)

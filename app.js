@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v180";
+var APP_VER="v181";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6576,7 +6576,8 @@ function inspRowHtml(x,insp){
     + '</div>'
     + (open?'<div class="insp-exp"><textarea class="insp-memo" data-id="'+esc(x.id)+'" rows="2" placeholder="메모 — 본 것 · 답변 · 서류 번호">'+esc(x.memo||"")+'</textarea>'
         + '<div class="insp-exp-acts"><button class="link-btn" data-act="insp-tofind" data-id="'+esc(x.id)+'">발견으로 옮기기 →</button>'
-        + (custom?'<button class="link-btn quiet-link" data-act="insp-del" data-id="'+esc(x.id)+'">지우기</button>':'')+'</div></div>':'')
+        /* 체크리스트에서 온 줄도 지운다(v181, 이랑님 「아예 지울 땐 어케 지움?」). 되돌리기 알림이 뜬다. 다음 「새 체크리스트로 바꾸기」 때는 다시 온다 */
+        + '<button class="link-btn quiet-link" data-act="insp-del" data-id="'+esc(x.id)+'">지우기</button></div></div>':'')
     + '</li>';
 }
 function inspSectionsHtml(items,insp,showPage){

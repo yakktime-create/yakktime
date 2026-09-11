@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v187";
+var APP_VER="v188";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6572,7 +6572,7 @@ function inspRowHtml(x,insp){
     + '<div class="insp-body" data-act="insp-expand" data-id="'+esc(x.id)+'">'
     +   '<div class="insp-text">'+kindTag+esc(x.text)+' '+tags+'</div>'
     +   (x.hint?'<div class="insp-hint">'+esc(x.hint).replace(/ 확인: /,'<br>확인: ')+'</div>':'')   /* 「왜 … / 확인 …」 두 줄로 — 훑기 쉽게 */
-    +   (!open&&x.memo?'<div class="insp-memo-pv">📝 '+esc(x.memo)+'</div>':'')
+    +   (!open&&x.memo&&String(x.memo).trim()?'<div class="insp-memo-pv">📝 '+esc(x.memo)+'</div>':'')
     + '</div>'
     + (open?'<div class="insp-exp"><textarea class="insp-memo" data-id="'+esc(x.id)+'" rows="2" placeholder="메모 — 본 것 · 답변 · 서류 번호">'+esc(x.memo||"")+'</textarea>'
         + '<div class="insp-exp-acts"><button class="link-btn" data-act="insp-tofind" data-id="'+esc(x.id)+'">발견으로 옮기기 →</button>'
@@ -6702,7 +6702,7 @@ function wireInspNote(insp){
     Array.prototype.forEach.call(root.querySelectorAll(sel),function(el){
       el.addEventListener("input",function(){
         var it=inspItem(el.getAttribute("data-id")); if(!it) return;
-        it[field]=el.value; clearTimeout(inspTimers[it.id+field]);
+        it[field]=(field==="memo"&&!el.value.trim())?null:el.value; clearTimeout(inspTimers[it.id+field]);   /* 지운 메모는 null — 빈 📝 가 남지 않게 */
         inspTimers[it.id+field]=setTimeout(function(){ inspSave(it); },700);
       });
     });

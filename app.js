@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v195";
+var APP_VER="v196";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6551,6 +6551,8 @@ function inspListHtml(list){
       + '</div>';
   }).join("")+'</div>';
 }
+/* 검토서의 형광펜을 그대로 — {녹:…} 은 녹색 칠(8월 보완 나간 항목), {노:…} 은 연한 노란 칠(밑줄·참고). esc() 뒤에 바꾼다(v196) */
+function inspMark(s){ return esc(s).replace(/\{녹:([^}]*)\}/g,'<mark class="hl-g">$1</mark>').replace(/\{노:([^}]*)\}/g,'<mark class="hl-y">$1</mark>'); }
 function inspRowHtml(x,insp){
   var open=!!inspExpand[x.id], custom=!x.src, free=(x.kind==="room"||x.kind==="find");
   var tags=(x.building?'<span class="insp-b">'+esc(x.building)+'</span>':'')+(x.area&&x.area!=="공통"?'<span class="insp-a">'+esc(x.area)+'</span>':'')
@@ -6582,8 +6584,8 @@ function inspRowHtml(x,insp){
   return '<li class="insp-row'+(x.done?" done":"")+(open?" open":"")+'" data-id="'+esc(x.id)+'">'
     + '<button class="check'+(x.done?" on":"")+'" data-act="insp-done" data-id="'+esc(x.id)+'">✓</button>'
     + '<div class="insp-body" data-act="insp-expand" data-id="'+esc(x.id)+'">'
-    +   '<div class="insp-text">'+kindTag+esc(x.text)+' '+tags+'</div>'
-    +   (x.hint?'<div class="insp-hint">'+esc(x.hint).replace(/ 확인: /,'<br>확인: ')+'</div>':'')   /* 「왜 … / 확인 …」 두 줄로 — 훑기 쉽게 */
+    +   '<div class="insp-text">'+kindTag+inspMark(x.text)+' '+tags+'</div>'
+    +   (x.hint?'<div class="insp-hint">'+inspMark(x.hint).replace(/ 확인: /,'<br>확인: ')+'</div>':'')   /* 「왜 … / 확인 …」 두 줄로 — 훑기 쉽게 */
     +   (!open&&x.memo&&String(x.memo).trim()?'<div class="insp-memo-pv">📝 '+esc(x.memo)+'</div>':'')
     + '</div>'
     + (open?'<div class="insp-exp"><textarea class="insp-memo" data-id="'+esc(x.id)+'" rows="2" placeholder="메모 — 본 것 · 답변 · 서류 번호">'+esc(x.memo||"")+'</textarea>'

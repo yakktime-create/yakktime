@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v176";
+var APP_VER="v177";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6486,7 +6486,7 @@ function inspRefill(insp){
     S.insp_items=S.insp_items.filter(function(x){ return x.insp_id!==insp.id; }).concat(keep,items);
     /* 담당 영역을 아직 안 건드린 노트(한 개 이하)면 본의 업무분장대로 켜 준다 — 칩을 열둘 켤 일이 없게 */
     var areaSet=false;
-    if(t.mine&&t.mine.length&&(insp.areas||[]).length<=1){ insp.areas=t.mine.slice(); areaSet=true; }
+    if(t.mine&&t.mine.length){ insp.areas=t.mine.slice(); areaSet=true; }
     insp.tpl=t.version; inspWrite("upsert","inspections",insp);
     gone.forEach(function(x){ inspWrite("delete","insp_items",x); });
     if(navigator.onLine){
@@ -6495,7 +6495,7 @@ function inspRefill(insp){
     } else items.forEach(function(x){ inspQPush({op:"upsert",table:"insp_items",item:x,id:x.id}); });
     inspCacheSave(); inspPage="tour"; inspBusy=false; render();
     var moved=Object.keys(carry).length;
-    showToast("✓ 새 체크리스트로 바꿨어요 — "+items.length+"줄"+(moved?", 체크·메모 "+moved+"줄 옮김":"")+(orphan.length?", 옛 줄 "+orphan.length+"개는 그대로 남겼어요":"")+(areaSet?". 「내 담당」도 업무분장대로 켰어요":""));
+    showToast("✓ 새 체크리스트로 바꿨어요 — "+items.length+"줄"+(moved?", 체크·메모 "+moved+"줄 옮김":"")+(orphan.length?", 옛 줄 "+orphan.length+"개는 그대로 남겼어요":"")+(areaSet?". 「내 담당」은 업무분장표대로 다시 켰어요":""));
   },function(e){ inspBusy=false; showToast(e.message,true); });
 }
 function inspProgress(insp){
@@ -6585,7 +6585,7 @@ function inspFilterHtml(insp,items){
   var chips='<button class="chip'+(!inspFilter.day&&!inspFilter.mine&&!inspFilter.bld?" on":"")+'" data-act="insp-f" data-id="all">전체</button>';
   days.forEach(function(d){ chips+='<button class="chip'+(inspFilter.day===d?" on":"")+'" data-act="insp-f" data-id="day:'+d+'">'+esc(INSP_DAY_LABEL[d]||d)+'</button>'; });
   chips+='<button class="chip mine'+(inspFilter.mine?" on":"")+'" data-act="insp-f" data-id="mine">내 담당만</button>';
-  (insp.buildings||[]).forEach(function(b){ chips+='<button class="chip'+(inspFilter.bld===b.name?" on":"")+'" data-act="insp-f" data-id="bld:'+esc(b.name)+'">'+esc(b.name)+'</button>'; });
+  /* 건물 칩은 뺐다(v177) — 건물 표시가 붙은 줄이 몇 없어 눌러도 화면이 안 바뀌었다. 발견 줄의 건물 칩은 그대로다 */
   chips+='<button class="link-btn quiet-link" data-act="insp-areas">담당 영역 고르기</button>';
   return '<div class="insp-filters">'+chips+'</div>';
 }
@@ -6738,7 +6738,17 @@ function inspCreate(){
 function inspCopyFinds(){
   var insp=S.inspections.find(function(x){ return x.id===inspOpenId; }); if(!insp) return;
   var fs=inspItems(insp.id).filter(function(x){ return x.kind==="find"; });
-  var t=fs.map(function(x,i){ return (i+1)+". ["+(x.grade||"참고")+(x.building?" · "+x.building:"")+"] "+x.text+(x.ref?" (근거: "+x.ref+")":"")+(x.memo?"\n   "+x.memo.replace(/\n/g,"\n   "):""); }).join("\n");
+  /* 보고서 차례(개요 → 1) 품질경영 → … → 기타)로 묶는다 — 본의 report 가 영역을 항목에 잇는다. 영역이 없거나 안 잡히면 맨 뒤 */
+  var rep=(inspTpl&&inspTpl.report)||[], secOf=function(x){ for(var i=0;i<rep.length;i++) if(x.area&&(rep[i].areas||[]).indexOf(x.area)>=0) return i; return rep.length; };
+  var line=function(x,i){ return (i+1)+". ["+(x.grade||"참고")+(x.building?" · "+x.building:"")+(x.area?" · "+x.area:"")+"] "+x.text+(x.ref?" (근거: "+x.ref+")":"")+(x.memo?"\n   "+x.memo.replace(/\n/g,"\n   "):""); };
+  var t;
+  if(rep.length){
+    var groups={}; fs.forEach(function(x){ var k=secOf(x); (groups[k]=groups[k]||[]).push(x); });
+    var n=0; t=Object.keys(groups).map(Number).sort(function(a,b){ return a-b; }).map(function(k){
+      var head=k<rep.length?(rep[k].no+" "+rep[k].title):"기타 (영역 없음)";
+      return "■ "+head+"\n"+groups[k].map(function(x){ return line(x,n++); }).join("\n");
+    }).join("\n\n");
+  } else t=fs.map(line).join("\n");
   var done=function(){ showToast("✓ 발견 "+fs.length+"건을 복사했어요"); };
   if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done,function(){ lawCopyFallback(t,done); }); else lawCopyFallback(t,done);
 }

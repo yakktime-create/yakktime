@@ -1501,6 +1501,8 @@ textarea.ans-q,textarea.ans-final{width:100%;resize:vertical;line-height:var(--l
 /* 검토서 형광펜 — 녹색(보완 나간 항목) · 연한 노랑(밑줄·참고) */
 mark.hl-g{background:#CDEFC9;color:inherit;padding:0 3px;border-radius:3px;}
 mark.hl-y{background:#FFF3B0;color:inherit;padding:0 3px;border-radius:3px;}
+.insp-room-bld{display:flex;align-items:center;gap:var(--sp-1);flex-wrap:wrap;margin:0 0 var(--sp-2);}
+.insp-room-bld .muted{font-size:var(--fs-sm);margin-right:var(--sp-1);}
 .insp-refill{background:var(--warn-bg);border:1px solid var(--warn-bd);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);margin:0 0 var(--sp-3);font-size:var(--fs-md);}
 
 /* 조 전체 보기 — 글자를 끌어 고르면 아래에 뜬다 */

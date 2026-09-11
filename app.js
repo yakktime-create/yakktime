@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v199";
+var APP_VER="v200";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6278,6 +6278,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "insp-open": inspOpenId=id; if(!INSP_PAGE_LABEL[inspPage]) inspPage="tour"; inspExpand={}; render(); break;
     case "insp-f": { if(id==="all") inspFilter={day:"",mine:false,bld:""}; else if(id==="mine") inspFilter.mine=!inspFilter.mine; else if(id.indexOf("day:")===0){ var dv=id.slice(4); inspFilter.day=(inspFilter.day===dv)?"":dv; } else if(id.indexOf("bld:")===0){ var bv=id.slice(4); inspFilter.bld=(inspFilter.bld===bv)?"":bv; } render(); break; }
     case "insp-areas": inspAreasOpen=!inspAreasOpen; render(); break;
+    case "insp-roombld": inspRoomBld=id; render(); var ra=document.getElementById("insp-add"); if(ra) ra.focus(); break;
     case "insp-agenda": inspAgendaOpen=!inspAgendaOpen; try{ localStorage.setItem("insp_agenda",inspAgendaOpen?"1":"0"); }catch(e){} render(); break;
     case "insp-refill": { var ir=S.inspections.find(function(x){ return x.id===id; }); if(ir&&confirm("체크리스트를 새 것으로 바꿉니다. 체크·메모는 옮겨 오고, 직접 적은 줄·방·발견은 그대로예요. 할까요?")) inspRefill(ir); break; }
     case "insp-back": inspOpenId=null; render(); break;
@@ -6560,12 +6561,13 @@ function inspRowHtml(x,insp){
   var kindTag=x.page==="tour"?(x.kind==="q"?'<span class="insp-k ask">묻기</span>':'<span class="insp-k look">보기</span>'):(x.kind==="doc"?'<span class="insp-k doc">서류 요청</span>':'');
   if(free&&!open){
     /* 방·발견은 접힌 카드로 — 이름 · 등급/건물 · 메모 한 줄. 누르면 적는 칸이 열리고 손을 떼면 접힌다(v193, 이랑님 「여기 UX/UI 개선 방법 없나?」) */
-    var ftags=(x.kind==="find"?(x.grade?'<span class="insp-g'+(x.grade==="보완 예상"?" warn":"")+'">'+esc(x.grade)+'</span>':''):'')+(x.building?'<span class="insp-b">'+esc(x.building)+'</span>':'');
-    var empty=!(x.memo&&String(x.memo).trim())&&!(x.ref&&x.ref.trim());
+    var ftags=(x.kind==="find"?(x.grade?'<span class="insp-g'+(x.grade==="보완 예상"?" warn":"")+'">'+esc(x.grade)+'</span>':''):'')+(x.building&&x.kind!=="room"?'<span class="insp-b">'+esc(x.building)+'</span>':'')
+      +(x.kind==="room"&&x.ref&&x.ref.trim()?'<span class="insp-b">'+esc(x.ref)+'</span>':'');   /* 방은 건물별로 묶이니 룸 번호만 */
+    var empty=!(x.memo&&String(x.memo).trim())&&(x.kind==="room"||!(x.ref&&x.ref.trim()));
     return '<li class="insp-row free folded" data-id="'+esc(x.id)+'">'
       + '<div class="insp-body" data-act="insp-expand" data-id="'+esc(x.id)+'">'
       +   '<div class="insp-text"><b>'+esc(x.text||(x.kind==="room"?"(이름 없음)":"(내용 없음)"))+'</b> '+ftags+'</div>'
-      +   (x.ref&&x.ref.trim()?'<div class="insp-hint">근거: '+esc(x.ref)+'</div>':'')
+      +   (x.kind!=="room"&&x.ref&&x.ref.trim()?'<div class="insp-hint">근거: '+esc(x.ref)+'</div>':'')
       +   (x.memo&&String(x.memo).trim()?'<div class="insp-memo-pv">'+esc(x.memo)+'</div>':'')
       +   (empty?'<div class="insp-hint">눌러서 적기</div>':'')
       + '</div></li>';
@@ -6574,10 +6576,10 @@ function inspRowHtml(x,insp){
     return '<li class="insp-row free" data-id="'+esc(x.id)+'">'
       + '<div class="insp-body">'
       +   '<div class="insp-free-h"><input class="insp-title-in" data-id="'+esc(x.id)+'" value="'+esc(x.text)+'" placeholder="'+(x.kind==="room"?"방 이름":"무엇이 이상한가")+'" />'
-      +     (x.kind==="find"?'<span class="insp-grades">'+["보완 예상","참고"].map(function(g){ return '<button class="chip'+(x.grade===g?" on":"")+'" data-act="insp-grade" data-id="'+esc(x.id)+'" data-g="'+g+'">'+g+'</button>'; }).join("")
-      +       (insp.buildings||[]).map(function(b){ return '<button class="chip'+(x.building===b.name?" on":"")+'" data-act="insp-bld" data-id="'+esc(x.id)+'" data-g="'+esc(b.name)+'">'+esc(b.name)+'</button>'; }).join("")+'</span>':'')
+      +     '<span class="insp-grades">'+(x.kind==="find"?["보완 예상","참고"].map(function(g){ return '<button class="chip'+(x.grade===g?" on":"")+'" data-act="insp-grade" data-id="'+esc(x.id)+'" data-g="'+g+'">'+g+'</button>'; }).join(""):"")
+      +       (insp.buildings||[]).map(function(b){ return '<button class="chip'+(x.building===b.name?" on":"")+'" data-act="insp-bld" data-id="'+esc(x.id)+'" data-g="'+esc(b.name)+'">B'+esc(b.name)+'</button>'; }).join("")+'</span>'
       +     '<button class="del" data-act="insp-del" data-id="'+esc(x.id)+'" title="지우기">✕</button></div>'
-      +   (x.kind==="find"?'<input class="insp-ref-in" data-id="'+esc(x.id)+'" value="'+esc(x.ref||"")+'" placeholder="근거 (예: PIC/S Annex 1 · ICH Q9 · 규칙 별표 1 3.5)" />':'')
+      +   '<input class="insp-ref-in" data-id="'+esc(x.id)+'" value="'+esc(x.ref||"")+'" placeholder="'+(x.kind==="room"?"룸 번호 (예: R-201)":"근거 (예: PIC/S Annex 1 · ICH Q9 · 규칙 별표 1 3.5)")+'" />'
       +   '<textarea class="insp-memo" data-id="'+esc(x.id)+'" rows="2" placeholder="'+(x.kind==="room"?"이 방의 특징 — 등급, 설비, 눈에 띈 것":"본 것 · 들은 것 · 서류 번호")+'">'+esc(x.memo||"")+'</textarea>'
       + '</div></li>';
   }
@@ -6597,7 +6599,10 @@ function inspRowHtml(x,insp){
 function inspSectionsHtml(items,insp,showPage){
   if(!items.length) return '<div class="empty-box sm"><p>여기엔 아직 아무것도 없어요.</p></div>';
   var order=[], by={};
-  items.forEach(function(x){ var k=(showPage?INSP_PAGE_LABEL[x.page]+" · ":"")+(x.section||""); if(!by[k]){ by[k]=[]; order.push(k); } by[k].push(x); });
+  /* 방은 건물별로 묶는다 — 「B633 › 배양실 (룸 번호)」 꼴(v200, 이랑님 「빌딩 안에 배양실(룸번호)…로 두고 특징을 적을 수 있어야」) */
+  var isRooms=items.length&&items[0].kind==="room";
+  if(isRooms){ var bo=(insp.buildings||[]).map(function(b){ return b.name; }); items=items.slice().sort(function(a,b){ var ia=bo.indexOf(a.building||""), ib=bo.indexOf(b.building||""); if(ia<0) ia=99; if(ib<0) ib=99; return ia-ib||(a.seq||0)-(b.seq||0); }); }
+  items.forEach(function(x){ var k=isRooms?("B"+(x.building||"")).replace(/^B$/,"건물 미정"):((showPage?INSP_PAGE_LABEL[x.page]+" · ":"")+(x.section||"")); if(!by[k]){ by[k]=[]; order.push(k); } by[k].push(x); });
   return order.map(function(k){
     var rows=by[k], n=rows.filter(function(x){ return x.done; }).length, cnt=rows.filter(inspCountable).length;
     return '<section class="insp-sec"><div class="insp-sec-h"><span>'+esc(k)+'</span>'+(cnt?'<span class="muted">'+n+'/'+cnt+'</span>':'')+'</div><ul class="list">'
@@ -6605,9 +6610,13 @@ function inspSectionsHtml(items,insp,showPage){
   }).join("");
 }
 function inspAddRowHtml(page){
-  var ph={rooms:"방 이름 (예: 633-2F 배양실) — Enter",findings:"발견 한 줄 — Enter 하면 아래에 생겨요",prep:"챙길 것 한 줄 더 — Enter",plan:"일정·서류 요청 한 줄 더 — Enter",tour:"현장에서 볼 것·물을 것 한 줄 더 — Enter",review:"검토 포인트 한 줄 더 — Enter"}[page];
+  var ph={rooms:"방 이름 (예: 배양실) — Enter 하면 고른 건물 아래 생겨요",findings:"발견 한 줄 — Enter 하면 아래에 생겨요",prep:"챙길 것 한 줄 더 — Enter",plan:"일정·서류 요청 한 줄 더 — Enter",tour:"현장에서 볼 것·물을 것 한 줄 더 — Enter",review:"검토 포인트 한 줄 더 — Enter"}[page];
   if(!ph) return "";
-  return '<div class="add-row quick insp-add"><input class="input" id="insp-add" placeholder="'+ph+'" /></div>';
+  var pre="";
+  if(page==="rooms"){ var ins=S.inspections.find(function(x){ return x.id===inspOpenId; }), bs=(ins&&ins.buildings)||[];
+    if(bs.length&&bs.map(function(b){ return b.name; }).indexOf(inspRoomBld)<0) inspRoomBld=bs[0].name;
+    pre='<div class="insp-room-bld"><span class="muted">건물</span>'+bs.map(function(b){ return '<button class="chip'+(inspRoomBld===b.name?" on":"")+'" data-act="insp-roombld" data-id="'+esc(b.name)+'">B'+esc(b.name)+'</button>'; }).join("")+'</div>'; }
+  return pre+'<div class="add-row quick insp-add"><input class="input" id="insp-add" placeholder="'+ph+'" /></div>';
 }
 function inspFilterHtml(insp,items){
   var days=[]; items.forEach(function(x){ if(x.day&&days.indexOf(x.day)<0) days.push(x.day); }); days.sort();
@@ -6629,6 +6638,7 @@ function inspApplyFilter(items,insp){
   });
 }
 var inspAreasOpen=false;
+var inspRoomBld="";   /* 방을 넣을 때 고른 건물 */
 /* 영역 칩은 분장표(=보고서) 차례로 번호를 달아 묶는다 — 「개요 · 1) · 2) …」. 본의 report 가 순서를 정한다(이랑님 「실태조사 순서는 업무분장 항목 분류 순서대로」) */
 function inspAreaChips(areas,on,act){
   var rep=(inspTpl&&inspTpl.report)||[], used={}, out="";
@@ -6746,7 +6756,7 @@ function inspAdd(page){
   var insp=S.inspections.find(function(x){ return x.id===inspOpenId; }); if(!insp) return;
   var kind=page==="rooms"?"room":page==="findings"?"find":page==="review"?"q":"task";
   var seq=Math.max.apply(null,[0].concat(inspItems(insp.id).map(function(x){ return x.seq||0; })))+1;
-  var it={id:uuid(),insp_id:insp.id,page:page,section:(kind==="room"||kind==="find")?null:"직접 적음",seq:seq,kind:kind,text:v,hint:null,building:null,area:null,done:false,memo:null,grade:kind==="find"?"참고":null,ref:null,src:null};
+  var it={id:uuid(),insp_id:insp.id,page:page,section:(kind==="room"||kind==="find")?null:"직접 적음",seq:seq,kind:kind,text:v,hint:null,building:(kind==="room"&&inspRoomBld)||null,area:null,done:false,memo:null,grade:kind==="find"?"참고":null,ref:null,src:null};
   if(kind==="room"||kind==="find") inspExpand[it.id]=true;
   S.insp_items.push(it); inspSave(it); render();
   if(kind==="room"||kind==="find"){ var m=document.querySelector('.insp-memo[data-id="'+it.id+'"]'); if(m) m.focus(); }

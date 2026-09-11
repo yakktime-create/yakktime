@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v183";
+var APP_VER="v184";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6636,6 +6636,8 @@ function inspAgendaHtml(){
     + '<span class="muted">'+esc(a.period||"")+' · '+(inspAgendaOpen?"접기":"펴기")+'</span></div>';
   if(!inspAgendaOpen) return '<div class="insp-ag">'+head+'</div>';
   var days=(a.days||[]).filter(function(d){ return !inspFilter.day||d.day===inspFilter.day; });
+  /* 「내 담당만」이면 스케줄도 내가 들어가는 줄만(이랑님 「내 담당만 찍어도 안 바뀜」) */
+  if(inspFilter.mine) days=days.map(function(d){ return {day:d.day,date:d.date,rows:(d.rows||[]).filter(function(r){ return r.me; })}; });
   var who=(a.who||[]).map(function(x){ return '<span class="insp-ag-p'+(x.indexOf("나 —")>=0?" me":"")+'">'+esc(x)+'</span>'; }).join("");
   var body=days.map(function(d){
     return '<div class="insp-ag-d"><b>'+esc(INSP_DAY_LABEL[d.day]||d.day)+'</b><span class="muted">'+esc(d.date||"")+'</span></div>'

@@ -1,6 +1,6 @@
 {
  "name": "AstraZeneca 실태조사 5일 (Tozorakimab 원액)",
- "version": "2026-09-11k",
+ "version": "2026-09-11l",
  "areas": [
   "개요·연혁",
   "품질경영",
@@ -50,127 +50,6 @@
   ]
  ],
  "items": [
-  {
-   "page": "prep",
-   "section": "챙길 것",
-   "text": "명함",
-   "hint": "",
-   "area": "",
-   "kind": "task",
-   "day": "",
-   "building": "",
-   "src": ""
-  },
-  {
-   "page": "prep",
-   "section": "챙길 것",
-   "text": "노트북에 내 담당 자료 저장",
-   "hint": "개요(연혁·현황·변경) · 품질경영 · 작업소 · 제조지원설비(압축공기·N₂·O₂·CO₂) · 기준서 · VMP·PV · 장비 적격성 · 세척밸리데이션 · 제조기록서 · 설비 세척 · 일탈(실적) · 작업원 위생. 현장 통신이 막힐 수 있다",
-   "area": "",
-   "kind": "task",
-   "day": "",
-   "building": "",
-   "src": ""
-  },
-  {
-   "page": "prep",
-   "section": "챙길 것",
-   "text": "이 앱을 통신 있는 데서 한 번 열어 두기",
-   "hint": "오프라인 캐시가 그때 만들어진다",
-   "area": "",
-   "kind": "task",
-   "day": "",
-   "building": "",
-   "src": ""
-  },
-  {
-   "page": "prep",
-   "section": "출력물",
-   "text": "이전 검토서 (그 제조소 8월 조사 · 백본)",
-   "hint": "투어용. 🟢 = 보완 나간 항목 → 반영 여부 현장 확인 / 밑줄 = 참고만",
-   "area": "",
-   "kind": "task",
-   "day": "",
-   "building": "",
-   "src": ""
-  },
-  {
-   "page": "prep",
-   "section": "출력물",
-   "text": "8월 보완 지시서 + 업체 보완 회신",
-   "hint": "검토서와 따로 있으면 — 업체가 「뭘 고쳤다」고 했는지는 회신에만 있다",
-   "area": "",
-   "kind": "task",
-   "day": "",
-   "building": "",
-   "src": ""
-  },
-  {
-   "page": "prep",
-   "section": "출력물",
-   "text": "제조방법 (허가사항)",
-   "hint": "현장·BMR 대조 기준",
-   "area": "",
-   "kind": "task",
-   "day": "",
-   "building": "",
-   "src": ""
-  },
-  {
-   "page": "prep",
-   "section": "출력물",
-   "text": "신청서 — 별규(원액)·기시(완제) 부분은 꼭",
-   "hint": "원액 + 버퍼 = 완제라 시험방법이 거의 같다 → 차이점만",
-   "area": "",
-   "kind": "task",
-   "day": "",
-   "building": "",
-   "src": ""
-  },
-  {
-   "page": "prep",
-   "section": "출력물",
-   "text": "Requiring Documents List",
-   "hint": "요청할 때 번호로 말한다 — 일정 페이지의 요청 줄도 같은 번호",
-   "area": "",
-   "kind": "task",
-   "day": "",
-   "building": "",
-   "src": ""
-  },
-  {
-   "page": "prep",
-   "section": "출력물",
-   "text": "내가 쓸 검토서 양식",
-   "hint": "이전에 안 본 것 위주로 새로 쓴다 · 미확인은 삭제",
-   "area": "",
-   "kind": "task",
-   "day": "",
-   "building": "",
-   "src": ""
-  },
-  {
-   "page": "prep",
-   "section": "출력물",
-   "text": "업무 분장표",
-   "hint": "담당이 늘면 「담당 영역 고르기」에서 켠다",
-   "area": "",
-   "kind": "task",
-   "day": "",
-   "building": "",
-   "src": ""
-  },
-  {
-   "page": "prep",
-   "section": "출력물",
-   "text": "아젠다 (MFDS Inspection Schedule)",
-   "hint": "일정 페이지 맨 위에도 그대로 있다",
-   "area": "",
-   "kind": "task",
-   "day": "",
-   "building": "",
-   "src": ""
-  },
   {
    "page": "prep",
    "section": "사전 확인",
@@ -242,6 +121,127 @@
    "section": "사전 확인",
    "text": "업무분장표(2026-09-11) 그대로 「담당 영역」이 켜져 있나",
    "hint": "개요 · 품질경영 · 작업소 · 제조지원설비 · 기준서 · VMP·PV · 장비 적격성 · 세척 · 제조기록서 · 설비 세척 · 일탈 실적 · 작업원 위생. 위탁제조는 없음(X)",
+   "area": "",
+   "kind": "task",
+   "day": "",
+   "building": "",
+   "src": ""
+  },
+  {
+   "page": "prep",
+   "section": "챙길 것 — 서류 (출력)",
+   "text": "이전 검토서 (그 제조소 8월 조사 · 백본)",
+   "hint": "투어용. 🟢 = 보완 나간 항목 → 반영 여부 현장 확인 / 밑줄 = 참고만",
+   "area": "",
+   "kind": "task",
+   "day": "",
+   "building": "",
+   "src": ""
+  },
+  {
+   "page": "prep",
+   "section": "챙길 것 — 서류 (출력)",
+   "text": "8월 보완 지시서 + 업체 보완 회신",
+   "hint": "검토서와 따로 있으면 — 업체가 「뭘 고쳤다」고 했는지는 회신에만 있다",
+   "area": "",
+   "kind": "task",
+   "day": "",
+   "building": "",
+   "src": ""
+  },
+  {
+   "page": "prep",
+   "section": "챙길 것 — 서류 (출력)",
+   "text": "제조방법 (허가사항)",
+   "hint": "현장·BMR 대조 기준",
+   "area": "",
+   "kind": "task",
+   "day": "",
+   "building": "",
+   "src": ""
+  },
+  {
+   "page": "prep",
+   "section": "챙길 것 — 서류 (출력)",
+   "text": "신청서 — 별규(원액)·기시(완제) 부분은 꼭",
+   "hint": "원액 + 버퍼 = 완제라 시험방법이 거의 같다 → 차이점만",
+   "area": "",
+   "kind": "task",
+   "day": "",
+   "building": "",
+   "src": ""
+  },
+  {
+   "page": "prep",
+   "section": "챙길 것 — 서류 (출력)",
+   "text": "Requiring Documents List",
+   "hint": "요청할 때 번호로 말한다 — 일정 페이지의 요청 줄도 같은 번호",
+   "area": "",
+   "kind": "task",
+   "day": "",
+   "building": "",
+   "src": ""
+  },
+  {
+   "page": "prep",
+   "section": "챙길 것 — 서류 (출력)",
+   "text": "내가 쓸 검토서 양식",
+   "hint": "이전에 안 본 것 위주로 새로 쓴다 · 미확인은 삭제",
+   "area": "",
+   "kind": "task",
+   "day": "",
+   "building": "",
+   "src": ""
+  },
+  {
+   "page": "prep",
+   "section": "챙길 것 — 서류 (출력)",
+   "text": "업무 분장표",
+   "hint": "담당이 늘면 「담당 영역 고르기」에서 켠다",
+   "area": "",
+   "kind": "task",
+   "day": "",
+   "building": "",
+   "src": ""
+  },
+  {
+   "page": "prep",
+   "section": "챙길 것 — 서류 (출력)",
+   "text": "아젠다 (MFDS Inspection Schedule)",
+   "hint": "일정 페이지 맨 위에도 그대로 있다",
+   "area": "",
+   "kind": "task",
+   "day": "",
+   "building": "",
+   "src": ""
+  },
+  {
+   "page": "prep",
+   "section": "챙길 것 — 물건 · 기기",
+   "text": "명함",
+   "hint": "",
+   "area": "",
+   "kind": "task",
+   "day": "",
+   "building": "",
+   "src": ""
+  },
+  {
+   "page": "prep",
+   "section": "챙길 것 — 물건 · 기기",
+   "text": "노트북에 내 담당 자료 저장",
+   "hint": "개요(연혁·현황·변경) · 품질경영 · 작업소 · 제조지원설비(압축공기·N₂·O₂·CO₂) · 기준서 · VMP·PV · 장비 적격성 · 세척밸리데이션 · 제조기록서 · 설비 세척 · 일탈(실적) · 작업원 위생. 현장 통신이 막힐 수 있다",
+   "area": "",
+   "kind": "task",
+   "day": "",
+   "building": "",
+   "src": ""
+  },
+  {
+   "page": "prep",
+   "section": "챙길 것 — 물건 · 기기",
+   "text": "이 앱을 통신 있는 데서 한 번 열어 두기",
+   "hint": "오프라인 캐시가 그때 만들어진다",
    "area": "",
    "kind": "task",
    "day": "",

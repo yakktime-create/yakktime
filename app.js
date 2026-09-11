@@ -233,7 +233,7 @@ function loadAll(){
   });
   return Promise.all(promises).then(function(results){
     var bad=results.filter(function(r){ return r.failed; }).map(function(r){ return r.table; });
-    if(bad.length&&navigator.onLine) setTimeout(function(){ showToast("일부 데이터를 못 읽었어요: "+bad.join(", "),true); },600);
+    if(bad.length&&navigator.onLine) setTimeout(function(){ showToast("서버에서 못 읽은 표가 있어요("+bad.join(", ")+") — 기기에 저장된 것으로 보여요. 통신이 되면 새로고침",true); },600);
     results.forEach(function(r){ S[r.table]=r.data; });
     /* 통신이 없으면(현장) 실사 노트·일정은 기기에 적어 둔 것으로 채운다. 아직 못 올린 것도 얹는다. */
     if(bad.length) inspApplyCache(bad);
@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v178";
+var APP_VER="v179";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6423,6 +6423,16 @@ function inspWrite(op,table,item){
     : withAuthRetry(function(){ return sb.from(table).upsert(toRemote(table,item)); });
   return p.then(function(res){ if(res&&res.error) inspQPush(w); },function(){ inspQPush(w); });
 }
+/* 여러 줄을 한 번에 지운다 — 줄마다 요청을 쏘면(215개) 아이패드 5G 에서 절반이 죽고 옛 줄이 남는다. 100개씩 묶는다 */
+function inspDeleteMany(items){
+  var ids=items.map(function(x){ return x.id; }).filter(Boolean); if(!ids.length) return Promise.resolve();
+  if(!navigator.onLine){ items.forEach(function(x){ inspQPush({op:"delete",table:"insp_items",item:x,id:x.id}); }); return Promise.resolve(); }
+  var chunks=[]; for(var i=0;i<ids.length;i+=100) chunks.push(ids.slice(i,i+100));
+  return Promise.all(chunks.map(function(c,ci){
+    return withAuthRetry(function(){ return sb.from("insp_items").delete().in("id",c); })
+      .then(function(res){ if(res&&res.error) throw res.error; },function(){ items.slice(ci*100,ci*100+100).forEach(function(x){ inspQPush({op:"delete",table:"insp_items",item:x,id:x.id}); }); });
+  }));
+}
 function inspFlush(){
   if(!inspQ.length||!navigator.onLine) return;
   var q=inspQ.slice(); inspQ=[]; inspQSave();
@@ -6465,7 +6475,7 @@ function inspDedupe(){
   if(!drop.length) return 0;
   var ids={}; drop.forEach(function(x){ ids[x.id]=1; });
   S.insp_items=S.insp_items.filter(function(x){ return !ids[x.id]; });
-  drop.forEach(function(x){ inspWrite("delete","insp_items",x); });
+  inspDeleteMany(drop);
   return drop.length;
 }
 function inspRefill(insp){
@@ -6487,8 +6497,9 @@ function inspRefill(insp){
     /* 담당 영역을 아직 안 건드린 노트(한 개 이하)면 본의 업무분장대로 켜 준다 — 칩을 열둘 켤 일이 없게 */
     var areaSet=false;
     if(t.mine&&t.mine.length){ insp.areas=t.mine.slice(); areaSet=true; }
-    insp.tpl=t.version; inspWrite("upsert","inspections",insp);
-    gone.forEach(function(x){ inspWrite("delete","insp_items",x); });
+    insp.tpl=t.version;
+    inspWrite("upsert","inspections",insp).then(function(){ if(inspQ.some(function(w){ return w.table==="inspections"; })) showToast("노트 정보를 서버에 못 올렸어요 — 통신이 되면 다시 올려요",true); });
+    inspDeleteMany(gone);
     if(navigator.onLine){
       withAuthRetry(function(){ return sb.from("insp_items").insert(items.map(function(x){ return toRemote("insp_items",x); })); })
         .then(function(res){ if(res&&res.error) items.forEach(function(x){ inspQPush({op:"upsert",table:"insp_items",item:x,id:x.id}); }); });

@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v204";
+var APP_VER="v205";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6280,6 +6280,11 @@ document.getElementById("app").addEventListener("click",function(e){
     case "insp-areas": inspAreasOpen=!inspAreasOpen; render(); break;
     case "insp-roombld": inspRoomBld=id; render(); var ra=document.getElementById("insp-add"); if(ra) ra.focus(); break;
     case "insp-bldadd": inspBldAdding=true; render(); var bi=document.getElementById("insp-bld-in"); if(bi) bi.focus(); break;
+    case "insp-blddel": { e.stopPropagation(); var ins3=S.inspections.find(function(x){ return x.id===inspOpenId; }); if(!ins3) break;
+      var used=inspItems(ins3.id).filter(function(x){ return x.building===id; }).length;
+      if(used&&!confirm("B"+id+" 에 적어 둔 줄이 "+used+"개 있어요. 건물만 빼고 줄은 남길까요?")) break;
+      ins3.buildings=(ins3.buildings||[]).filter(function(b){ return b.name!==id; }); inspWrite("upsert","inspections",ins3);
+      inspRoomBld=ins3.buildings.length?ins3.buildings[0].name:""; render(); showToast("B"+id+" 을 뺐어요"); break; }
     case "insp-agenda": inspAgendaOpen=!inspAgendaOpen; try{ localStorage.setItem("insp_agenda",inspAgendaOpen?"1":"0"); }catch(e){} render(); break;
     case "insp-refill": { var ir=S.inspections.find(function(x){ return x.id===id; }); if(ir&&confirm("체크리스트를 새 것으로 바꿉니다. 체크·메모는 옮겨 오고, 직접 적은 줄·방·발견은 그대로예요. 할까요?")) inspRefill(ir); break; }
     case "insp-back": inspOpenId=null; render(); break;
@@ -6619,7 +6624,7 @@ function inspAddRowHtml(page){
   if(page==="rooms"){ var ins=S.inspections.find(function(x){ return x.id===inspOpenId; }), bs=(ins&&ins.buildings)||[];
     if(bs.length&&bs.map(function(b){ return b.name; }).indexOf(inspRoomBld)<0) inspRoomBld=bs[0].name;
     /* 「＋ 건물」 — 노트를 만들 때 안 적은 건물이 나오면 여기서 더한다(v203, 이랑님 「볼 빌딩이 추가로 있으면?」) */
-    pre='<div class="insp-room-bld"><span class="muted">건물</span>'+bs.map(function(b){ return '<button class="chip'+(inspRoomBld===b.name?" on":"")+'" data-act="insp-roombld" data-id="'+esc(b.name)+'">B'+esc(b.name)+'</button>'; }).join("")
+    pre='<div class="insp-room-bld"><span class="muted">건물</span>'+bs.map(function(b){ var on=inspRoomBld===b.name; return '<button class="chip'+(on?" on":"")+'" data-act="insp-roombld" data-id="'+esc(b.name)+'">B'+esc(b.name)+(on?'<i class="chip-x" data-act="insp-blddel" data-id="'+esc(b.name)+'" title="이 건물 빼기">✕</i>':'')+'</button>'; }).join("")
       +(inspBldAdding?'<input class="input insp-bld-in" id="insp-bld-in" placeholder="건물 번호 (예: 660) — Enter" />':'<button class="chip quiet" data-act="insp-bldadd">＋ 건물</button>')+'</div>'; }
   return pre+'<div class="add-row quick insp-add"><input class="input" id="insp-add" placeholder="'+ph+'" /></div>';
 }

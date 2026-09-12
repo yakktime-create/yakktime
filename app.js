@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v202";
+var APP_VER="v203";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6279,6 +6279,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "insp-f": { if(id==="all") inspFilter={day:"",mine:false,bld:""}; else if(id==="mine") inspFilter.mine=!inspFilter.mine; else if(id.indexOf("day:")===0){ var dv=id.slice(4); inspFilter.day=(inspFilter.day===dv)?"":dv; } else if(id.indexOf("bld:")===0){ var bv=id.slice(4); inspFilter.bld=(inspFilter.bld===bv)?"":bv; } render(); break; }
     case "insp-areas": inspAreasOpen=!inspAreasOpen; render(); break;
     case "insp-roombld": inspRoomBld=id; render(); var ra=document.getElementById("insp-add"); if(ra) ra.focus(); break;
+    case "insp-bldadd": inspBldAdding=true; render(); var bi=document.getElementById("insp-bld-in"); if(bi) bi.focus(); break;
     case "insp-agenda": inspAgendaOpen=!inspAgendaOpen; try{ localStorage.setItem("insp_agenda",inspAgendaOpen?"1":"0"); }catch(e){} render(); break;
     case "insp-refill": { var ir=S.inspections.find(function(x){ return x.id===id; }); if(ir&&confirm("체크리스트를 새 것으로 바꿉니다. 체크·메모는 옮겨 오고, 직접 적은 줄·방·발견은 그대로예요. 할까요?")) inspRefill(ir); break; }
     case "insp-back": inspOpenId=null; render(); break;
@@ -6617,7 +6618,9 @@ function inspAddRowHtml(page){
   var pre="";
   if(page==="rooms"){ var ins=S.inspections.find(function(x){ return x.id===inspOpenId; }), bs=(ins&&ins.buildings)||[];
     if(bs.length&&bs.map(function(b){ return b.name; }).indexOf(inspRoomBld)<0) inspRoomBld=bs[0].name;
-    pre='<div class="insp-room-bld"><span class="muted">건물</span>'+bs.map(function(b){ return '<button class="chip'+(inspRoomBld===b.name?" on":"")+'" data-act="insp-roombld" data-id="'+esc(b.name)+'">B'+esc(b.name)+'</button>'; }).join("")+'</div>'; }
+    /* 「＋ 건물」 — 노트를 만들 때 안 적은 건물이 나오면 여기서 더한다(v203, 이랑님 「볼 빌딩이 추가로 있으면?」) */
+    pre='<div class="insp-room-bld"><span class="muted">건물</span>'+bs.map(function(b){ return '<button class="chip'+(inspRoomBld===b.name?" on":"")+'" data-act="insp-roombld" data-id="'+esc(b.name)+'">B'+esc(b.name)+'</button>'; }).join("")
+      +(inspBldAdding?'<input class="input insp-bld-in" id="insp-bld-in" placeholder="건물 번호 (예: 660) — Enter" />':'<button class="chip quiet" data-act="insp-bldadd">＋ 건물</button>')+'</div>'; }
   return pre+'<div class="add-row quick insp-add"><input class="input" id="insp-add" placeholder="'+ph+'" /></div>';
 }
 function inspFilterHtml(insp,items){
@@ -6640,7 +6643,7 @@ function inspApplyFilter(items,insp){
   });
 }
 var inspAreasOpen=false;
-var inspRoomBld="";   /* 방을 넣을 때 고른 건물 */
+var inspRoomBld="", inspBldAdding=false;   /* 방을 넣을 때 고른 건물 · 건물을 더하는 중 */
 /* 영역 칩은 분장표(=보고서) 차례로 번호를 달아 묶는다 — 「개요 · 1) · 2) …」. 본의 report 가 순서를 정한다(이랑님 「실태조사 순서는 업무분장 항목 분류 순서대로」) */
 function inspAreaChips(areas,on,act){
   var rep=(inspTpl&&inspTpl.report)||[], used={}, out="";
@@ -6746,12 +6749,26 @@ function wireInspNote(insp){
   });
   var add=document.getElementById("insp-add");
   if(add) add.addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); inspAdd(inspPage); } });
+  var bin=document.getElementById("insp-bld-in");
+  if(bin){
+    bin.addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); inspBldAdd(bin.value); } if(e.key==="Escape"){ inspBldAdding=false; render(); } });
+    bin.addEventListener("blur",function(){ setTimeout(function(){ if(inspBldAdding&&document.activeElement!==bin){ inspBldAdding=false; render(); } },200); });
+  }
   /* 길게 누르면 발견으로 — 손가락용 */
   Array.prototype.forEach.call(root.querySelectorAll('.insp-body[data-act="insp-expand"]'),function(el){
     var t=null;
     el.addEventListener("touchstart",function(){ t=setTimeout(function(){ t=null; inspToFind(el.getAttribute("data-id")); },600); },{passive:true});
     ["touchend","touchmove","touchcancel"].forEach(function(ev){ el.addEventListener(ev,function(){ if(t){ clearTimeout(t); t=null; } },{passive:true}); });
   });
+}
+/* 건물을 하나 더한다 — 노트(inspections.buildings)에 저장되니 방·발견의 건물 칩과 머리줄에도 같이 나온다 */
+function inspBldAdd(v){
+  v=String(v||"").trim().replace(/^B/i,""); if(!v){ inspBldAdding=false; render(); return; }
+  var insp=S.inspections.find(function(x){ return x.id===inspOpenId; }); if(!insp) return;
+  insp.buildings=insp.buildings||[];
+  if(!insp.buildings.some(function(b){ return b.name===v; })){ insp.buildings.push({name:v,mode:""}); inspWrite("upsert","inspections",insp); }
+  inspRoomBld=v; inspBldAdding=false; render();
+  var a=document.getElementById("insp-add"); if(a) a.focus();
 }
 function inspAdd(page){
   var el=document.getElementById("insp-add"); var v=(el&&el.value||"").trim(); if(!v) return;

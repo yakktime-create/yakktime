@@ -1492,6 +1492,7 @@ textarea.ans-q,textarea.ans-final{width:100%;resize:vertical;line-height:var(--l
 /* 맨 위 고정 띠 — 검토서는 오프라인에서 */
 .insp-notice{background:var(--brass-soft);border:1px solid var(--brass-bd);color:var(--brass);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);margin:0 0 var(--sp-3);font-size:var(--fs-md);font-weight:700;letter-spacing:var(--ls-head);}
 .insp-intro{margin:0 0 var(--sp-3);font-size:var(--fs-md);color:var(--muted);line-height:var(--lh-snug);}
+.insp-intro .link-btn{white-space:nowrap;}
 /* 방·발견 접힌 카드 */
 .insp-row.free.folded{flex-direction:row;}
 .insp-row.free.folded .insp-body{cursor:pointer;}

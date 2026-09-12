@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v206";
+var APP_VER="v207";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6279,6 +6279,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "insp-f": { if(id==="all") inspFilter={day:"",mine:false,bld:""}; else if(id==="mine") inspFilter.mine=!inspFilter.mine; else if(id.indexOf("day:")===0){ var dv=id.slice(4); inspFilter.day=(inspFilter.day===dv)?"":dv; } else if(id.indexOf("bld:")===0){ var bv=id.slice(4); inspFilter.bld=(inspFilter.bld===bv)?"":bv; } render(); break; }
     case "insp-areas": inspAreasOpen=!inspAreasOpen; render(); break;
     case "insp-roombld": inspRoomBld=id; render(); var ra=document.getElementById("insp-add"); if(ra) ra.focus(); break;
+    case "insp-hints": inspHints=!inspHints; try{ localStorage.setItem("insp_hints",inspHints?"1":"0"); }catch(e){} render(); break;
     case "insp-bldadd": inspBldAdding=true; render(); var bi=document.getElementById("insp-bld-in"); if(bi) bi.focus(); break;
     case "insp-blddel": { e.stopPropagation(); var ins3=S.inspections.find(function(x){ return x.id===inspOpenId; }); if(!ins3) break;
       var used=inspItems(ins3.id).filter(function(x){ return x.building===id; }).length;
@@ -6593,7 +6594,7 @@ function inspRowHtml(x,insp){
     + '<button class="check'+(x.done?" on":"")+'" data-act="insp-done" data-id="'+esc(x.id)+'">✓</button>'
     + '<div class="insp-body" data-act="insp-expand" data-id="'+esc(x.id)+'">'
     +   '<div class="insp-text">'+kindTag+inspMark(x.text)+' '+tags+'</div>'
-    +   (x.hint?'<div class="insp-hint">'+inspMark(x.hint).replace(/ 확인: /,'<br>확인: ')+'</div>':'')   /* 「왜 … / 확인 …」 두 줄로 — 훑기 쉽게 */
+    +   (x.hint&&inspHints?'<div class="insp-hint insp-why">'+inspMark(x.hint).replace(/ 확인: /,'<br>확인: ')+'</div>':'')   /* 「왜 … / 확인 …」 두 줄로 — 훑기 쉽게 */
     +   (!open&&x.memo&&String(x.memo).trim()?'<div class="insp-memo-pv">📝 '+esc(x.memo)+'</div>':'')
     + '</div>'
     /* 준비 페이지는 챙길 것 목록이라 메모가 아니라 이름을 고친다(v206, 이랑님 「여긴 제목을 바꾸게 하는 게 나을 듯」) */
@@ -6652,6 +6653,8 @@ function inspApplyFilter(items,insp){
 }
 var inspAreasOpen=false;
 var inspRoomBld="", inspBldAdding=false;   /* 방을 넣을 때 고른 건물 · 건물을 더하는 중 */
+/* 「왜·확인」 설명을 접어 두기 — 익숙해지면 접고 다닌다(v207, 이랑님 「2번 ㄱㄱ」). 기기에 기억 */
+var inspHints=(function(){ try{ return localStorage.getItem("insp_hints")!=="0"; }catch(e){ return true; } })();
 /* 영역 칩은 분장표(=보고서) 차례로 번호를 달아 묶는다 — 「개요 · 1) · 2) …」. 본의 report 가 순서를 정한다(이랑님 「실태조사 순서는 업무분장 항목 분류 순서대로」) */
 function inspAreaChips(areas,on,act){
   var rep=(inspTpl&&inspTpl.report)||[], used={}, out="";
@@ -6701,7 +6704,7 @@ function inspNoteHtml(insp){
     var areas=(inspTpl&&inspTpl.areas)||[]; (insp.areas||[]).forEach(function(a){ if(areas.indexOf(a)<0) areas=areas.concat([a]); });
     areasHtml='<div class="insp-areas"><span class="muted">내 담당 — 켜 둔 영역이 「내 담당만」에 모여요. 번호는 보고서 항목</span>'+inspAreaChips(areas,insp.areas||[],"insp-area")+'</div>';
   }
-  var intro=(inspTpl&&inspTpl.intro&&inspTpl.intro[pg])?'<p class="insp-intro">'+esc(inspTpl.intro[pg])+'</p>':"";   /* 처음 보는 사람도 이 페이지가 뭘 하는 곳인지 알게(v191) */
+  var intro='<p class="insp-intro">'+((inspTpl&&inspTpl.intro&&inspTpl.intro[pg])?esc(inspTpl.intro[pg])+' ':'')+'<button class="link-btn quiet-link" data-act="insp-hints">'+(inspHints?"설명 접기":"설명 펴기")+'</button></p>';   /* 처음 보는 사람도 이 페이지가 뭘 하는 곳인지 알게(v191) */
   body=intro+(filt?inspFilterHtml(insp,all.filter(function(x){ return x.page===pg; }))+areasHtml:"")
     +(pg==="plan"?inspAgendaHtml():"")+inspAddRowHtml(pg)+inspSectionsHtml(items,insp,false);
   if(pg==="findings"&&items.length) body+='<div class="insp-foot-acts"><button class="btn quiet sm" data-act="insp-copyfind">발견 전부 복사</button><span class="muted">검토서에 붙일 때 — 한글 내보내기는 다음 판에</span></div>';

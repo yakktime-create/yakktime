@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v205";
+var APP_VER="v206";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6290,7 +6290,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "insp-back": inspOpenId=null; render(); break;
     case "insp-page": inspPage=id; inspExpand={}; render(); window.scrollTo(0,0); break;
     case "insp-done": { var it1=inspItem(id); if(it1){ it1.done=!it1.done; inspSave(it1); render(); } break; }
-    case "insp-expand": { if(window.getSelection&&String(window.getSelection()).length) break; inspExpand[id]=!inspExpand[id]; render(); var ta=document.querySelector('.insp-memo[data-id="'+id+'"]'); if(ta&&inspExpand[id]) ta.focus(); break; }
+    case "insp-expand": { if(window.getSelection&&String(window.getSelection()).length) break; inspExpand[id]=!inspExpand[id]; render(); var ta=document.querySelector('.insp-memo[data-id="'+id+'"], .insp-row:not(.free) .insp-title-in[data-id="'+id+'"]'); if(ta&&inspExpand[id]){ ta.focus(); if(ta.setSelectionRange&&ta.tagName==="INPUT") ta.setSelectionRange(ta.value.length,ta.value.length); } break; }
     case "insp-add": inspAdd(id); break;
     case "insp-tofind": inspToFind(id); break;
     case "insp-grade": { var it2=inspItem(id); if(it2){ it2.grade=el.getAttribute("data-g"); inspSave(it2); render(); } break; }
@@ -6596,7 +6596,10 @@ function inspRowHtml(x,insp){
     +   (x.hint?'<div class="insp-hint">'+inspMark(x.hint).replace(/ 확인: /,'<br>확인: ')+'</div>':'')   /* 「왜 … / 확인 …」 두 줄로 — 훑기 쉽게 */
     +   (!open&&x.memo&&String(x.memo).trim()?'<div class="insp-memo-pv">📝 '+esc(x.memo)+'</div>':'')
     + '</div>'
-    + (open?'<div class="insp-exp"><textarea class="insp-memo" data-id="'+esc(x.id)+'" rows="2" placeholder="메모 — 본 것 · 답변 · 서류 번호">'+esc(x.memo||"")+'</textarea>'
+    /* 준비 페이지는 챙길 것 목록이라 메모가 아니라 이름을 고친다(v206, 이랑님 「여긴 제목을 바꾸게 하는 게 나을 듯」) */
+    + (open&&x.page==="prep"?'<div class="insp-exp"><input class="input insp-title-in" data-id="'+esc(x.id)+'" value="'+esc(x.text)+'" placeholder="줄 이름" />'
+        + '<div class="insp-exp-acts"><button class="link-btn quiet-link" data-act="insp-del" data-id="'+esc(x.id)+'">지우기</button></div></div>':'')
+    + (open&&x.page!=="prep"?'<div class="insp-exp"><textarea class="insp-memo" data-id="'+esc(x.id)+'" rows="2" placeholder="메모 — 본 것 · 답변 · 서류 번호">'+esc(x.memo||"")+'</textarea>'
         + '<div class="insp-exp-acts"><button class="link-btn" data-act="insp-tofind" data-id="'+esc(x.id)+'">발견으로 옮기기 →</button>'
         /* 체크리스트에서 온 줄도 지운다(v181, 이랑님 「아예 지울 땐 어케 지움?」). 되돌리기 알림이 뜬다. 다음 「새 체크리스트로 바꾸기」 때는 다시 온다 */
         + '<button class="link-btn quiet-link" data-act="insp-del" data-id="'+esc(x.id)+'">지우기</button></div></div>':'')
@@ -6746,7 +6749,7 @@ function wireInspNote(insp){
   wire(".insp-memo","memo"); wire(".insp-title-in","text"); wire(".insp-ref-in","ref");
   /* 메모 칸에서 손을 떼면 저절로 접힌다 — 흰 박스가 남지 않게(이랑님 「메모로 쓰면 흰색 박스로 남는 게 좋은 건가?」).
    * 방·발견 줄은 늘 펼쳐진 자유 줄이라 해당 없다. 「발견으로 옮기기」를 누르는 클릭이 먼저 들어오게 잠깐 기다린다 */
-  Array.prototype.forEach.call(root.querySelectorAll('.insp-row .insp-memo, .insp-row.free .insp-title-in, .insp-row.free .insp-ref-in'),function(el){
+  Array.prototype.forEach.call(root.querySelectorAll('.insp-row .insp-memo, .insp-row .insp-title-in, .insp-row.free .insp-ref-in'),function(el){
     el.addEventListener("blur",function(){
       var id=el.getAttribute("data-id"), row=el.closest(".insp-row");
       setTimeout(function(){ if(inspExpand[id]&&!(row&&row.contains(document.activeElement))){ inspExpand[id]=false; render(); } },300);

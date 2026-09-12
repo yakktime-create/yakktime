@@ -1515,6 +1515,7 @@ mark.hl-y{background:#FFF3B0;color:inherit;padding:0 3px;border-radius:3px;}
 .insp-bld-in{width:12em;max-width:100%;padding:4px 10px;font-size:var(--fs-sm);}
 .chip.quiet{color:var(--muted);border-style:dashed;}
 .chip .chip-x{font-style:normal;margin-left:6px;padding:0 4px;color:var(--muted);font-size:var(--fs-xs);}
+.insp-row:not(.free) .insp-title-in{width:100%;font-size:var(--fs-base);}
 .insp-refill{background:var(--warn-bg);border:1px solid var(--warn-bd);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);margin:0 0 var(--sp-3);font-size:var(--fs-md);}
 
 /* 조 전체 보기 — 글자를 끌어 고르면 아래에 뜬다 */

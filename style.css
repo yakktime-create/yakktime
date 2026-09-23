@@ -1519,6 +1519,26 @@ mark.hl-y{background:#FFF3B0;color:inherit;padding:0 3px;border-radius:3px;}
 .chip.quiet{color:var(--muted);border-style:dashed;}
 .chip .chip-x{font-style:normal;margin-left:6px;padding:0 4px;color:var(--muted);font-size:var(--fs-xs);}
 .insp-row:not(.free) .insp-title-in{width:100%;font-size:var(--fs-base);}
+/* 관리표 — 한 줄 = 담당 항목. 상태 알약은 왼쪽, 문장 틀은 펼쳤을 때 */
+.list.board .insp-row.track{align-items:center;padding:12px 6px;}
+.list.board .insp-row.track.open{flex-wrap:wrap;}
+.insp-st{flex-shrink:0;min-width:4.6em;text-align:center;font-size:var(--fs-xs);font-weight:700;border-radius:var(--r-full);padding:4px 8px;cursor:pointer;background:var(--paper);color:var(--muted);border:1px solid var(--line);}
+.st1 .insp-st,.chip.st1.on{background:var(--brass-soft);color:var(--brass);border-color:var(--brass-bd);}
+.st2 .insp-st,.chip.st2.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-soft);}
+.st3 .insp-st,.chip.st3.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+.st4 .insp-st,.chip.st4.on{background:#F6E7E3;color:var(--brick);border-color:#EBCFC7;}
+.insp-no{font-style:normal;font-size:var(--fs-xs);font-weight:700;color:var(--muted);margin-right:6px;}
+.insp-cnt{font-size:var(--fs-xs);margin-left:var(--sp-2);}
+.board-exp{flex-basis:100%;padding-left:calc(4.6em + 16px + var(--sp-3));display:flex;flex-direction:column;gap:var(--sp-2);}
+.board-exp .insp-grades{display:flex;flex-wrap:wrap;gap:var(--sp-1);}
+.board-exp .insp-ref-in{width:100%;font-size:var(--fs-md);}
+.insp-sents{border-top:1px dashed var(--line);padding-top:var(--sp-2);}
+.insp-sents-h{font-size:var(--fs-xs);font-weight:700;color:var(--muted);margin-bottom:var(--sp-1);}
+.insp-sent{display:flex;gap:var(--sp-2);align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line);font-size:var(--fs-md);line-height:var(--lh-snug);}
+.insp-sent span{flex:1;min-width:0;}
+.insp-sent .link-btn{flex-shrink:0;}
+.insp-area-sel{width:100%;font-size:var(--fs-md);}
+@media (max-width:640px){ .board-exp{padding-left:0;} }
 .insp-refill{background:var(--warn-bg);border:1px solid var(--warn-bd);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);margin:0 0 var(--sp-3);font-size:var(--fs-md);}
 
 /* 조 전체 보기 — 글자를 끌어 고르면 아래에 뜬다 */

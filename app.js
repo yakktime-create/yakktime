@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v208";
+var APP_VER="v209";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6281,7 +6281,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "insp-newarea": { inspAreasTouched=true; var ai=inspNewAreas.indexOf(id); if(ai>=0) inspNewAreas.splice(ai,1); else inspNewAreas.push(id); el.classList.toggle("on"); break; }
     case "insp-create": inspCreate(); break;
     case "insp-open": inspOpenId=id; if(!INSP_PAGE_LABEL[inspPage]) inspPage="tour"; inspExpand={}; render(); break;
-    case "insp-f": { if(id==="all") inspFilter={day:"",mine:false,bld:""}; else if(id==="mine") inspFilter.mine=!inspFilter.mine; else if(id.indexOf("day:")===0){ var dv=id.slice(4); inspFilter.day=(inspFilter.day===dv)?"":dv; } else if(id.indexOf("bld:")===0){ var bv=id.slice(4); inspFilter.bld=(inspFilter.bld===bv)?"":bv; } render(); break; }
+    case "insp-f": { if(id==="all") inspFilter={day:"",mine:false,bld:"",area:""}; else if(id==="area:") inspFilter.area=""; else if(id==="mine") inspFilter.mine=!inspFilter.mine; else if(id.indexOf("day:")===0){ var dv=id.slice(4); inspFilter.day=(inspFilter.day===dv)?"":dv; } else if(id.indexOf("bld:")===0){ var bv=id.slice(4); inspFilter.bld=(inspFilter.bld===bv)?"":bv; } render(); break; }
     case "insp-areas": inspAreasOpen=!inspAreasOpen; render(); break;
     case "insp-roombld": inspRoomBld=id; render(); var ra=document.getElementById("insp-add"); if(ra) ra.focus(); break;
     case "insp-hints": inspHints=!inspHints; try{ localStorage.setItem("insp_hints",inspHints?"1":"0"); }catch(e){} render(); break;
@@ -6296,7 +6296,14 @@ document.getElementById("app").addEventListener("click",function(e){
     case "insp-back": inspOpenId=null; render(); break;
     case "insp-page": inspPage=id; inspExpand={}; render(); window.scrollTo(0,0); break;
     case "insp-done": { var it1=inspItem(id); if(it1){ it1.done=!it1.done; inspSave(it1); render(); } break; }
-    case "insp-expand": { if(window.getSelection&&String(window.getSelection()).length) break; inspExpand[id]=!inspExpand[id]; render(); var ta=document.querySelector('.insp-memo[data-id="'+id+'"], .insp-row:not(.free) .insp-title-in[data-id="'+id+'"]'); if(ta&&inspExpand[id]){ ta.focus(); if(ta.setSelectionRange&&ta.tagName==="INPUT") ta.setSelectionRange(ta.value.length,ta.value.length); } break; }
+    case "insp-track-st": { var insT=S.inspections.find(function(x){ return x.id===inspOpenId; }); if(!insT) break; var trk=inspTrack(insT,id,true); trk.grade=el.getAttribute("data-g"); inspSave(trk); render(); break; }
+    case "insp-goarea": inspFilter={day:"",mine:false,bld:"",area:id}; { var insA=S.inspections.find(function(x){ return x.id===inspOpenId; }); var hasRev=insA&&inspItems(insA.id).some(function(x){ return x.page==="review"&&x.area===id; }); inspPage=hasRev?"review":"tour"; } inspExpand={}; render(); window.scrollTo(0,0); break;
+    case "insp-gofind": inspPage="findings"; inspExpand={}; render(); window.scrollTo(0,0); break;
+    case "insp-sent": { var sp=id.split("|"), st=(inspTpl&&inspTpl.sentences&&inspTpl.sentences[sp[0]])||[], txt=st[+sp[1]]||""; if(!txt) break;
+      var okc=function(){ showToast("✓ 문장을 복사했어요 — [ ] 를 채워 쓰세요"); };
+      if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(okc,function(){ lawCopyFallback(txt,okc); }); else lawCopyFallback(txt,okc); break; }
+    case "insp-expand": {
+      if(id.indexOf("b:")===0){ var insB=S.inspections.find(function(x){ return x.id===inspOpenId; }); if(insB&&!inspExpand[id]) inspTrack(insB,id.slice(2),true); } if(window.getSelection&&String(window.getSelection()).length) break; inspExpand[id]=!inspExpand[id]; render(); var ta=document.querySelector('.insp-memo[data-id="'+id+'"], .insp-row:not(.free) .insp-title-in[data-id="'+id+'"]'); if(ta&&inspExpand[id]){ ta.focus(); if(ta.setSelectionRange&&ta.tagName==="INPUT") ta.setSelectionRange(ta.value.length,ta.value.length); } break; }
     case "insp-add": inspAdd(id); break;
     case "insp-tofind": inspToFind(id); break;
     case "insp-grade": { var it2=inspItem(id); if(it2){ it2.grade=el.getAttribute("data-g"); inspSave(it2); render(); } break; }
@@ -6400,12 +6407,12 @@ ensureSession().then(function(session){
 /* 페이지 여섯: 준비(챙길 것) · 일정(3일 흐름·서류 요청 시점) · 현장(돌면서 보기·묻기) · 서류 검토(호텔에서, 별첨 45항목 녹임) · 방 · 발견.
  * 「일차」「질문」「내 담당」 페이지는 v166 에서 뺐다 — 같은 것을 두 번 묻고 현장·서류가 섞였다(이랑님 「UX/UI 가 너무 안 좋은 것 같아」).
  * 날·내 담당·건물은 페이지가 아니라 위의 거르기(inspFilter)다. */
-var INSP_PAGES=[["prep","준비"],["plan","일정"],["tour","현장"],["review","서류 검토"],["rooms","방"],["findings","발견"]];
+var INSP_PAGES=[["board","관리표"],["prep","준비"],["plan","일정"],["tour","현장"],["review","서류 검토"],["rooms","방"],["findings","발견"]];
 var INSP_OLD_PAGE={d1:"plan",d2:"plan",d3:"plan",docs:"plan",questions:"review",mine:"tour"};
 var INSP_DAY_LABEL={d1:"1일차",d2:"2일차",d3:"3일차",d4:"4일차",d5:"5일차"};
-var inspFilter={day:"",mine:false,bld:""};
+var inspFilter={day:"",mine:false,bld:"",area:""};
 var INSP_PAGE_LABEL={}; INSP_PAGES.forEach(function(p){ INSP_PAGE_LABEL[p[0]]=p[1]; });
-var inspOpenId=null, inspPage="tour", inspTpl=null, inspNewOpen=false, inspExpand={}, inspTimers={};
+var inspOpenId=null, inspPage="board", inspTpl=null, inspNewOpen=false, inspExpand={}, inspTimers={};
 /* 「내 담당」 기본값은 본의 업무분장(mine)이다 — 이랑님이 칩을 열두 번 켤 일이 없게. 한 번이라도 손대면 그대로 둔다 */
 var inspNewAreas=["압축공기·가스"], inspAreasTouched=false;
 
@@ -6468,7 +6475,7 @@ function inspApplyCache(failedTables){
 }
 
 /* --- 화면 --- */
-function inspCountable(x){ return x.kind!=="room"&&x.kind!=="find"; }
+function inspCountable(x){ return x.kind!=="room"&&x.kind!=="find"&&x.kind!=="track"; }
 function inspNeedsRefill(insp){
   var it=inspItems(insp.id);
   if(inspTpl&&insp.tpl&&insp.tpl!==inspTpl.version) return true;
@@ -6592,6 +6599,7 @@ function inspRowHtml(x,insp){
       +       (insp.buildings||[]).map(function(b){ return '<button class="chip'+(x.building===b.name?" on":"")+'" data-act="insp-bld" data-id="'+esc(x.id)+'" data-g="'+esc(b.name)+'">B'+esc(b.name)+'</button>'; }).join("")+'</span>'
       +     '<button class="del" data-act="insp-del" data-id="'+esc(x.id)+'" title="지우기">✕</button></div>'
       +   '<input class="insp-ref-in" data-id="'+esc(x.id)+'" value="'+esc(x.ref||"")+'" placeholder="'+(x.kind==="room"?"룸 번호 (예: R-201)":"근거 (예: PIC/S Annex 1 · ICH Q9 · 규칙 별표 1 3.5)")+'" />'
+      +   (x.kind==="find"?'<select class="input insp-area-sel" data-id="'+esc(x.id)+'"><option value="">항목 (관리표 줄)</option>'+((inspTpl&&inspTpl.board)||[]).map(function(b){ return '<option value="'+esc(b.area)+'"'+(x.area===b.area?" selected":"")+'>'+esc(b.no+" "+b.title)+'</option>'; }).join("")+'</select>':'')
       +   '<textarea class="insp-memo" data-id="'+esc(x.id)+'" rows="2" placeholder="'+(x.kind==="room"?"이 방의 특징 — 등급, 설비, 눈에 띈 것":"본 것 · 들은 것 · 서류 번호")+'">'+esc(x.memo||"")+'</textarea>'
       + '</div></li>';
   }
@@ -6639,7 +6647,8 @@ function inspAddRowHtml(page){
 }
 function inspFilterHtml(insp,items){
   var days=[]; items.forEach(function(x){ if(x.day&&days.indexOf(x.day)<0) days.push(x.day); }); days.sort();
-  var chips='<button class="chip'+(!inspFilter.day&&!inspFilter.mine&&!inspFilter.bld?" on":"")+'" data-act="insp-f" data-id="all">전체</button>';
+  var chips='<button class="chip'+(!inspFilter.day&&!inspFilter.mine&&!inspFilter.bld&&!inspFilter.area?" on":"")+'" data-act="insp-f" data-id="all">전체</button>';
+  if(inspFilter.area) chips+='<button class="chip on" data-act="insp-f" data-id="area:" title="영역 거르기 끄기">'+esc(inspFilter.area)+' ✕</button>';
   days.forEach(function(d){ chips+='<button class="chip'+(inspFilter.day===d?" on":"")+'" data-act="insp-f" data-id="day:'+d+'">'+esc(INSP_DAY_LABEL[d]||d)+'</button>'; });
   chips+='<button class="chip mine'+(inspFilter.mine?" on":"")+'" data-act="insp-f" data-id="mine">내 담당만</button>';
   /* 건물 칩은 뺐다(v177) — 건물 표시가 붙은 줄이 몇 없어 눌러도 화면이 안 바뀌었다. 발견 줄의 건물 칩은 그대로다 */
@@ -6649,6 +6658,7 @@ function inspFilterHtml(insp,items){
 function inspApplyFilter(items,insp){
   return items.filter(function(x){
     if(x.area==="공통") return true;   /* 원칙·「어느 방이든 30초」 — 날·담당을 걸러도 늘 남는다(이랑님 「원칙은 내 담당에도」, v192) */
+    if(inspFilter.area&&x.area!==inspFilter.area) return false;   /* 관리표에서 한 항목으로 들어왔을 때 */
     if(inspFilter.day&&x.day&&x.day!==inspFilter.day) return false;
     if(inspFilter.day&&!x.day&&x.page!=="prep") return false;
     if(inspFilter.mine&&!(x.area&&(insp.areas||[]).indexOf(x.area)>=0)) return false;
@@ -6657,6 +6667,57 @@ function inspApplyFilter(items,insp){
   });
 }
 var inspAreasOpen=false;
+/* ========== 관리표 (v209 · 2026-09-23) ==========
+ * 한 줄 = 내 담당 영역 하나(본의 board). 상태·받은 문서·메모는 insp_items 에 kind "track" 한 줄로 산다(page "board", src null —
+ * 새 체크리스트로 바꿔도 남는다). 발견 수는 발견 줄의 area 로 센다. 새 표·새 칸 없음.
+ * 이랑님 「아젠다 말고는 체크리스트 관리하는 게 쉽지 않음 · 담당 부분 관리표를 만드는 게 더 실용적」 — 그래서 첫 페이지다. */
+var INSP_ST=["아직","요청 중","보는 중","확인 끝","보완"];
+function inspTrack(insp,area,make){
+  var tr=(S.insp_items||[]).find(function(x){ return x.insp_id===insp.id&&x.kind==="track"&&x.area===area; });
+  if(tr||!make) return tr||null;
+  var seq=Math.max.apply(null,[0].concat(inspItems(insp.id).map(function(x){ return x.seq||0; })))+1;
+  tr={id:uuid(),insp_id:insp.id,page:"board",section:null,seq:seq,kind:"track",text:area,hint:null,building:null,area:area,day:null,done:false,memo:null,grade:null,ref:null,src:null};
+  S.insp_items.push(tr); inspSave(tr); return tr;
+}
+function inspBoardRows(insp){
+  var rows=(inspTpl&&inspTpl.board)||[], mine=insp.areas||[];
+  if(mine.length) rows=rows.filter(function(b){ return mine.indexOf(b.area)>=0||inspTrack(insp,b.area); });
+  return rows;
+}
+function inspBoardHtml(insp){
+  var all=inspItems(insp.id), rows=inspBoardRows(insp);
+  if(!inspTpl) return '<div class="empty-box sm"><p>체크리스트를 불러오는 중…</p></div>';
+  if(!rows.length) return '<div class="empty-box sm"><p>담당 영역을 먼저 골라 주세요 — 「담당 영역 고르기」.</p></div>';
+  var sents=(inspTpl&&inspTpl.sentences)||{};
+  return '<ul class="list board">'+rows.map(function(b){
+    var tr=inspTrack(insp,b.area), st=(tr&&tr.grade)||"아직", si=Math.max(0,INSP_ST.indexOf(st));
+    var finds=all.filter(function(x){ return x.kind==="find"&&x.area===b.area; }), nWarn=finds.filter(function(x){ return x.grade==="보완 예상"; }).length;
+    var lines=all.filter(function(x){ return x.area===b.area&&(x.page==="tour"||x.page==="review"); }), nDone=lines.filter(function(x){ return x.done; }).length;
+    var key="b:"+b.area, open=!!inspExpand[key], docs=tr&&tr.ref?tr.ref:"", memo=tr&&tr.memo&&String(tr.memo).trim()?tr.memo:"";
+    var head='<li class="insp-row track st'+si+(open?" open":"")+'" data-id="'+esc(key)+'">'
+      + '<span class="insp-st" data-act="insp-expand" data-id="'+esc(key)+'">'+esc(st)+'</span>'
+      + '<div class="insp-body" data-act="insp-expand" data-id="'+esc(key)+'">'
+      +   '<div class="insp-text"><i class="insp-no">'+esc(b.no)+'</i><b>'+esc(b.title)+'</b>'
+      +     (finds.length?'<span class="insp-g'+(nWarn?" warn":"")+'">발견 '+finds.length+'</span>':'')
+      +     (lines.length?'<span class="muted insp-cnt">'+nDone+'/'+lines.length+'</span>':'')+'</div>'
+      +   (docs?'<div class="insp-hint">받은 문서: '+esc(docs)+'</div>':'')
+      +   (!open&&memo?'<div class="insp-memo-pv">'+esc(memo)+'</div>':'')
+      + '</div>';
+    if(!open) return head+'</li>';
+    var sl=sents[b.area]||[];
+    return head+'<div class="insp-exp board-exp">'
+      + '<div class="insp-grades">'+INSP_ST.map(function(g,i){ return '<button class="chip st'+i+(st===g?" on":"")+'" data-act="insp-track-st" data-id="'+esc(b.area)+'" data-g="'+g+'">'+g+'</button>'; }).join("")+'</div>'
+      + '<input class="input insp-ref-in" data-id="'+esc(tr?tr.id:"")+'" data-area="'+esc(b.area)+'" value="'+esc(docs)+'" placeholder="받은 문서 — 번호·이름 (예: 4-E OQ/PQ 보고서, 633만)" />'
+      + '<textarea class="insp-memo" data-id="'+esc(tr?tr.id:"")+'" data-area="'+esc(b.area)+'" rows="2" placeholder="메모 — 담당자 이름 · 다음에 물을 것 · 문서 번호">'+esc(memo)+'</textarea>'
+      + '<div class="insp-exp-acts">'
+      +   (lines.length?'<button class="link-btn" data-act="insp-goarea" data-id="'+esc(b.area)+'">체크리스트 '+lines.length+'줄 →</button>':'')
+      +   '<button class="link-btn" data-act="insp-gofind" data-id="'+esc(b.area)+'">발견'+(finds.length?' '+finds.length+'건':'')+' →</button>'
+      + '</div>'
+      + (sl.length?'<div class="insp-sents"><div class="insp-sents-h">검토서 문장 틀 — [ ] 를 채워 쓴다</div>'
+          + sl.map(function(t,i){ return '<div class="insp-sent"><span>'+esc(t)+'</span><button class="link-btn quiet-link" data-act="insp-sent" data-id="'+esc(b.area)+'|'+i+'">복사</button></div>'; }).join("")+'</div>':'')
+      + '</div></li>';
+  }).join("")+'</ul>';
+}
 var inspRoomBld="", inspBldAdding=false;   /* 방을 넣을 때 고른 건물 · 건물을 더하는 중 */
 /* 「왜·확인」 설명을 접어 두기 — 익숙해지면 접고 다닌다(v207, 이랑님 「2번 ㄱㄱ」). 기기에 기억 */
 var inspHints=(function(){ try{ return localStorage.getItem("insp_hints")!=="0"; }catch(e){ return true; } })();
@@ -6700,6 +6761,7 @@ function inspNoteHtml(insp){
   var all=inspItems(insp.id), pg=inspPage, body="";
   var counts={}; INSP_PAGES.forEach(function(p){ var it=all.filter(function(x){ return x.page===p[0]&&inspCountable(x); }); counts[p[0]]=it.length?it.filter(function(x){ return x.done; }).length+"/"+it.length:""; });
   counts.rooms=String(all.filter(function(x){ return x.kind==="room"; }).length||"");
+  var brows=inspBoardRows(insp); counts.board=brows.length?brows.filter(function(b){ var tr=inspTrack(insp,b.area); return tr&&tr.grade==="확인 끝"; }).length+"/"+brows.length:"";
   counts.findings=String(all.filter(function(x){ return x.kind==="find"; }).length||"");
   var items=all.filter(function(x){ return x.page===pg; });
   var filt=(pg==="tour"||pg==="review"||pg==="plan");
@@ -6711,7 +6773,7 @@ function inspNoteHtml(insp){
   }
   var intro='<p class="insp-intro">'+((inspTpl&&inspTpl.intro&&inspTpl.intro[pg])?esc(inspTpl.intro[pg])+' ':'')+'<button class="link-btn quiet-link" data-act="insp-hints">'+(inspHints?"설명 접기":"설명 펴기")+'</button></p>';   /* 처음 보는 사람도 이 페이지가 뭘 하는 곳인지 알게(v191) */
   body=intro+(filt?inspFilterHtml(insp,all.filter(function(x){ return x.page===pg; }))+areasHtml:"")
-    +(pg==="plan"?inspAgendaHtml():"")+inspAddRowHtml(pg)+inspSectionsHtml(items,insp,false);
+    +(pg==="plan"?inspAgendaHtml():"")+inspAddRowHtml(pg)+(pg==="board"?inspBoardHtml(insp):inspSectionsHtml(items,insp,false));
   if(pg==="findings"&&items.length) body+='<div class="insp-foot-acts"><button class="btn quiet sm" data-act="insp-copyfind">발견 전부 복사</button><span class="muted">검토서에 붙일 때 — 한글 내보내기는 다음 판에</span></div>';
   var refill=inspNeedsRefill(insp)?'<div class="insp-refill">체크리스트가 새로 정리됐어요. <button class="link-btn" data-act="insp-refill" data-id="'+esc(insp.id)+'">새 체크리스트로 바꾸기</button> <span class="muted">체크·메모는 옮겨 오고, 직접 적은 줄·방·발견은 그대로예요.</span></div>':"";
   /* 맨 위 고정 띠 — 「검토서는 오프라인에서」. 체크할 것이 아니라 늘 보고 있어야 하는 말이라 줄이 아니라 띠다(이랑님, v182) */
@@ -6755,6 +6817,7 @@ function wireInspNote(insp){
     });
   }
   wire(".insp-memo","memo"); wire(".insp-title-in","text"); wire(".insp-ref-in","ref");
+  Array.prototype.forEach.call(root.querySelectorAll(".insp-area-sel"),function(el){ el.addEventListener("change",function(){ var it=inspItem(el.getAttribute("data-id")); if(!it) return; it.area=el.value||null; inspSave(it); render(); }); });
   /* 메모 칸에서 손을 떼면 저절로 접힌다 — 흰 박스가 남지 않게(이랑님 「메모로 쓰면 흰색 박스로 남는 게 좋은 건가?」).
    * 방·발견 줄은 늘 펼쳐진 자유 줄이라 해당 없다. 「발견으로 옮기기」를 누르는 클릭이 먼저 들어오게 잠깐 기다린다 */
   Array.prototype.forEach.call(root.querySelectorAll('.insp-row .insp-memo, .insp-row .insp-title-in, .insp-row.free .insp-ref-in'),function(el){

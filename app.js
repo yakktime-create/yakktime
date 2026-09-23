@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v209";
+var APP_VER="v210";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -952,7 +952,9 @@ var BOARD_FOLD=5;
 var boardOpen={}, boardSearch={};
 function byNewest(a,b){ return String(b.createdAt||"").localeCompare(String(a.createdAt||"")); }
 
+var boardArgs={};   /* 검색칸에 글자를 칠 때 카드 칸만 다시 그리려고 기억해 둔다 */
 function boardHtml(table,statuses,items,cardFn,fold){
+  boardArgs[table]={statuses:statuses,items:items,cardFn:cardFn,fold:fold};
   var q=(boardSearch[table]||"").trim().toLowerCase();
   if(q) items=items.filter(function(i){
     return ((i.title||"")+" "+(i.memo||"")).toLowerCase().indexOf(q)>=0;
@@ -985,12 +987,21 @@ function boardSearchHtml(table,ph){
   var v=boardSearch[table]||"";
   return '<div class="search-box"><span class="search-ic">⌕</span>'
     + '<input class="input search board-q" id="bq-'+table+'" placeholder="'+esc(ph)+'" value="'+esc(v)+'" />'
-    + (v?'<button class="btn quiet sm board-clear" data-act="board-clear" data-table="'+table+'">지우기</button>':'')
+    + '<button class="btn quiet sm board-clear" data-act="board-clear" data-table="'+table+'"'+(v?'':' hidden')+'>지우기</button>'
     + '</div>';
 }
+/* 글자를 칠 때마다 render() 를 부르면 입력칸이 새로 만들어져 초점을 잃고 한글 조합이 끊긴다(「ㄹ」에서 멈춤 —
+ * 이랑님 「여기 타이핑이 안 됨」, v210). 입력칸은 그대로 두고 카드 칸(.board)만 바꿔 끼운다. */
 function wireBoardSearch(table){
   var el=document.getElementById("bq-"+table); if(!el) return;
-  el.addEventListener("input",function(e){ boardSearch[table]=e.target.value; render(); });
+  el.addEventListener("input",function(e){ boardSearch[table]=e.target.value; boardRefresh(table); });
+}
+function boardRefresh(table){
+  var a=boardArgs[table], b=document.querySelector('.board[data-table="'+table+'"]'); if(!a||!b) return;
+  var tmp=document.createElement("div"); tmp.innerHTML=boardHtml(table,a.statuses,a.items,a.cardFn,a.fold);
+  b.replaceWith(tmp.firstChild);
+  var clr=document.querySelector('.board-clear[data-table="'+table+'"]'); if(clr) clr.hidden=!(boardSearch[table]||"").trim();
+  wireBoardDrag();
 }
 
 function mfdsCard(it,todayKey){

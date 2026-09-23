@@ -1539,6 +1539,7 @@ mark.hl-y{background:#FFF3B0;color:inherit;padding:0 3px;border-radius:3px;}
 .insp-sent .link-btn{flex-shrink:0;}
 .insp-area-sel{width:100%;font-size:var(--fs-md);}
 @media (max-width:640px){ .board-exp{padding-left:0;} }
+.board-clear[hidden]{display:none;}
 .insp-refill{background:var(--warn-bg);border:1px solid var(--warn-bd);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);margin:0 0 var(--sp-3);font-size:var(--fs-md);}
 
 /* 조 전체 보기 — 글자를 끌어 고르면 아래에 뜬다 */

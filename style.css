@@ -1520,8 +1520,8 @@ mark.hl-y{background:#FFF3B0;color:inherit;padding:0 3px;border-radius:3px;}
 .chip .chip-x{font-style:normal;margin-left:6px;padding:0 4px;color:var(--muted);font-size:var(--fs-xs);}
 .insp-row:not(.free) .insp-title-in{width:100%;font-size:var(--fs-base);}
 /* 관리표 — 한 줄 = 담당 항목. 상태 알약은 왼쪽, 문장 틀은 펼쳤을 때 */
-.list.board .insp-row.track{align-items:center;padding:12px 6px;}
-.list.board .insp-row.track.open{flex-wrap:wrap;}
+.list.track-list .insp-row.track{align-items:center;padding:12px 6px;}
+.list.track-list .insp-row.track.open{flex-wrap:wrap;}
 .insp-st{flex-shrink:0;min-width:4.6em;text-align:center;font-size:var(--fs-xs);font-weight:700;border-radius:var(--r-full);padding:4px 8px;cursor:pointer;background:var(--paper);color:var(--muted);border:1px solid var(--line);}
 .st1 .insp-st,.chip.st1.on{background:var(--brass-soft);color:var(--brass);border-color:var(--brass-bd);}
 .st2 .insp-st,.chip.st2.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-soft);}

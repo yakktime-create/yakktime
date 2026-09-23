@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v210";
+var APP_VER="v211";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6700,7 +6700,8 @@ function inspBoardHtml(insp){
   if(!inspTpl) return '<div class="empty-box sm"><p>체크리스트를 불러오는 중…</p></div>';
   if(!rows.length) return '<div class="empty-box sm"><p>담당 영역을 먼저 골라 주세요 — 「담당 영역 고르기」.</p></div>';
   var sents=(inspTpl&&inspTpl.sentences)||{};
-  return '<ul class="list board">'+rows.map(function(b){
+  /* 클래스 이름 「board」는 기고글 칸반(3열 격자)이 쓴다 — 같은 이름을 붙였다가 아이패드 가로에서 세 칸으로 쪼개졌다(v211) */
+  return '<ul class="list track-list">'+rows.map(function(b){
     var tr=inspTrack(insp,b.area), st=(tr&&tr.grade)||"아직", si=Math.max(0,INSP_ST.indexOf(st));
     var finds=all.filter(function(x){ return x.kind==="find"&&x.area===b.area; }), nWarn=finds.filter(function(x){ return x.grade==="보완 예상"; }).length;
     var lines=all.filter(function(x){ return x.area===b.area&&(x.page==="tour"||x.page==="review"); }), nDone=lines.filter(function(x){ return x.done; }).length;

@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v207";
+var APP_VER="v208";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -766,8 +766,9 @@ function renderCalendar(){
       +   whereHtml(t,"mfds")
       +   '<span class="ev-tail"><span class="mfds-badge">식약처</span>'
       +     '<span class="mfds-status">'+esc(t.status)+'</span></span>'
+      +   (t.memo?'<span class="ev-memo" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+t.id+'" title="눌러서 수정">'+esc(t.memo)+'</span>':'')
       + '</div>'
-      + '<span class="row-acts"><button class="del" data-act="mfds-del" data-id="'+t.id+'" title="삭제">✕</button></span></li>'; }).join("");
+      + '<span class="row-acts">'+(t.memo?'':'<button class="memo-add" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+t.id+'" title="메모 적기">메모</button>')+'<button class="del" data-act="mfds-del" data-id="'+t.id+'" title="삭제">✕</button></span></li>'; }).join("");
   function evRowHtml(e){ return '<li class="ev-row'+(isTrip(e)?" trip":"")+'">'
       + '<span class="check-gap"></span>'
       /* 여러 날짜리는 「종일」이 아니라 「출장」이라고 적는다. 하루짜리 일정과
@@ -791,7 +792,10 @@ function renderCalendar(){
               + (e.memo?esc(e.memo):'<span class="none">＋ 메모</span>')+'</span>'
             : '')
       + '</div>'
-      + '<span class="row-acts"><button class="del" data-act="ev-del" data-id="'+e.id+'" title="삭제">✕</button></span></li>'; }
+      + '<span class="row-acts">'
+      /* 메모가 없을 땐 오른쪽 끝에 작은 「메모」만 — 한 줄이 두 줄이 되지 않게 */
+      +   (!e.memo&&!isTrip(e)?'<button class="memo-add" data-act="edit" data-table="events" data-field="memo" data-type="textarea" data-id="'+e.id+'" title="메모 적기">메모</button>':'')
+      +   '<button class="del" data-act="ev-del" data-id="'+e.id+'" title="삭제">✕</button></span></li>'; }
   /* 출장·여행이 맨 위 — 그 날의 큰 틀이라 먼저 눈에 들어와야 한다 (달력 칸과 같은 순서) */
   function isTrip(e){ return !!(e.until&&e.until!==e.key); }
   var tripRows=selEvs.filter(isTrip).map(evRowHtml).join("");
@@ -811,7 +815,8 @@ function renderCalendar(){
     +   (dayKind===KIND_TRIP
         ? '<label class="field memo"><span class="field-lbl">메모 — 비행·숙소처럼 한눈에 볼 것</span>'
           + '<textarea class="input day-memo" id="day-memo" rows="2">'+esc(dayDraft.memo===null?TRIP_MEMO:dayDraft.memo)+'</textarea></label>'
-        : '')
+        /* 일정·식약처 업무도 작은 메모 한 줄 — 챙길 것·만날 사람 정도(v208, 이랑님 「메모 조그맣게 넣는 거 추가」) */
+        : '<input class="input day-memo-sm" id="day-memo" value="'+esc(dayDraft.memo||"")+'" placeholder="메모 (선택) — 챙길 것 · 만날 사람 · 연락처" />')
     +   '<div class="composer-foot">'
     +     segC("day-kind",["일정","식약처 업무","출장·여행"],dayKind)
     +     '<div class="composer-btns"><button class="btn" data-act="day-add">+ 추가</button></div>'
@@ -1304,11 +1309,11 @@ function dayAdd(){
   }
   if(kind==="식약처 업무"){
     /* 일정이 아니라 식약처 업무로 등록. 캘린더는 mfds를 직접 읽으므로 여기에도 그대로 뜬다. */
-    var task={title:title,status:"대기",memo:"",due:calSel,time:time||null,place:place||null};
+    var task={title:title,status:"대기",memo:(val("day-memo")||"").trim(),due:calSel,time:time||null,place:place||null};
     clearDayDraft(); S.mfds.unshift(task); render(); dbInsert("mfds",task); return;
   }
   var item={key:rng?rng.key:calSel,time:time||null,title:title,
-            place:place||null,until:rng?rng.until:null};
+            place:place||null,until:rng?rng.until:null,memo:(val("day-memo")||"").trim()||null};
   S.events.push(item);
   clearDayDraft();
   if(rng) calSel=rng.key;                             /* 시작일로 옮겨 바로 보이게 */

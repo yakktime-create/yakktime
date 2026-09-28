@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v212";
+var APP_VER="v213";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -603,8 +603,9 @@ function renderToday(){
   var inProg=S.articles.filter(function(a){return a.status==="작성중";}).length;
   var mfdsOpen=S.mfds.filter(function(m){return m.status!=="완료";}).length;
   var upcoming=S.events.filter(function(e){return e.key>todayKey;}).sort(evSort).slice(0,4);
-  var todayCnt=S.events.filter(function(e){ return e.key<=todayKey && todayKey<=(e.until||e.key); }).length+S.mfds.filter(function(m){ return m.due===todayKey&&m.status!=="완료"; }).length;
-  var evHtml="", todayList=dayListHtml(todayKey);
+  /* 출장은 오늘 화면에서 뺀다(이랑님 「출장만 빼자」) — 며칠씩 맨 위에 눌러앉아 그날 할 일이 안 보인다. 캘린더에는 그대로 */
+  var todayCnt=S.events.filter(function(e){ return e.key===todayKey&&!isTripEv(e); }).length+S.mfds.filter(function(m){ return m.due===todayKey&&m.status!=="완료"; }).length;
+  var evHtml="", todayList=dayListHtml(todayKey,true);
   if(todayList){ evHtml+='<div class="card"><div class="card-head"><h2>오늘 일정</h2><span class="muted" data-act="tab" data-id="calendar" style="cursor:pointer">캘린더 열기 →</span></div>'+todayList+'</div>'; }
   if(upcoming.length){ evHtml+='<div class="card"><div class="card-head"><h2>다가오는 일정</h2><span class="muted" data-act="tab" data-id="calendar" style="cursor:pointer">캘린더 열기 →</span></div>'+upcoming.map(function(e){ return '<div class="up-row">'
       + '<span class="up-date">'+esc(shortDate(e.key))+'</span>'
@@ -748,8 +749,8 @@ function calEvRow(e){ return '<li class="ev-row'+(isTripEv(e)?" trip":"")+'">'
       /* 메모가 없을 땐 오른쪽 끝에 작은 「메모」만 — 한 줄이 두 줄이 되지 않게 */
       +   (!e.memo&&!isTripEv(e)?'<button class="memo-add" data-act="edit" data-table="events" data-field="memo" data-type="textarea" data-id="'+e.id+'" title="메모 적기">메모</button>':'')
       +   '<button class="del" data-act="ev-del" data-id="'+e.id+'" title="삭제">✕</button></span></li>';}
-function dayListHtml(key){
-  var evs=S.events.filter(function(e){ return e.key<=key && key<=(e.until||e.key); }).sort(evSort);
+function dayListHtml(key,noTrip){
+  var evs=S.events.filter(function(e){ return e.key<=key && key<=(e.until||e.key)&&!(noTrip&&isTripEv(e)); }).sort(evSort);
   var tasks=S.mfds.filter(function(m){ return m.due===key; });
   if(!evs.length&&!tasks.length) return "";
   /* 출장·여행이 맨 위 — 그 날의 큰 틀이라 먼저 눈에 들어와야 한다 (달력 칸과 같은 순서) */

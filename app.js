@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v211";
+var APP_VER="v212";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -602,15 +602,10 @@ function renderToday(){
   var open=todayItems.filter(function(i){return !i.done;});
   var inProg=S.articles.filter(function(a){return a.status==="작성중";}).length;
   var mfdsOpen=S.mfds.filter(function(m){return m.status!=="완료";}).length;
-  var todayEv=S.events.filter(function(e){return e.key===todayKey;}).sort(evSort);
   var upcoming=S.events.filter(function(e){return e.key>todayKey;}).sort(evSort).slice(0,4);
-  var evHtml="";
-  if(todayEv.length){ evHtml+='<div class="card"><div class="card-head"><h2>오늘 일정</h2></div>'+todayEv.map(function(e){ return '<div class="ev-row">'
-      + '<span class="ev-time">'+esc(e.time||"종일")+'</span>'
-      + '<div class="ev-body"><span class="ev-title">'+esc(e.title)+'</span>'
-      +   (e.place? '<span class="ev-place">\ud83d\udccd '+esc(e.place)+'</span>'
-                    +'<button class="link-btn map-btn" data-act="map" data-q="'+esc(e.place)+'">지도 \u2197</button>' : '')
-      + '</div></div>'; }).join("")+'</div>'; }
+  var todayCnt=S.events.filter(function(e){ return e.key<=todayKey && todayKey<=(e.until||e.key); }).length+S.mfds.filter(function(m){ return m.due===todayKey&&m.status!=="완료"; }).length;
+  var evHtml="", todayList=dayListHtml(todayKey);
+  if(todayList){ evHtml+='<div class="card"><div class="card-head"><h2>오늘 일정</h2><span class="muted" data-act="tab" data-id="calendar" style="cursor:pointer">캘린더 열기 →</span></div>'+todayList+'</div>'; }
   if(upcoming.length){ evHtml+='<div class="card"><div class="card-head"><h2>다가오는 일정</h2><span class="muted" data-act="tab" data-id="calendar" style="cursor:pointer">캘린더 열기 →</span></div>'+upcoming.map(function(e){ return '<div class="up-row">'
       + '<span class="up-date">'+esc(shortDate(e.key))+'</span>'
       + '<span class="up-title">'+esc(e.title)
@@ -644,7 +639,7 @@ function renderToday(){
   var tmrD=tomorrow();
   var tmrLabel=(tmrD.getMonth()+1)+"월 "+tmrD.getDate()+"일("+WD[tmrD.getDay()]+")";
   view().innerHTML='<div class="page">'
-    + '<header class="today-hero"><div class="today-date">'+esc(dateStr)+'</div><h1 class="today-greet">'+greet+', 이랑님.</h1><p class="today-line">'+(open.length?("오늘 할 일 "+open.length+"건 남았어요."):"오늘 할 일이 없어요.")+(todayEv.length?" · 오늘 일정 "+todayEv.length+"건.":"")+'</p></header>'
+    + '<header class="today-hero"><div class="today-date">'+esc(dateStr)+'</div><h1 class="today-greet">'+greet+', 이랑님.</h1><p class="today-line">'+(open.length?("오늘 할 일 "+open.length+"건 남았어요."):"오늘 할 일이 없어요.")+(todayCnt?" · 오늘 일정 "+todayCnt+"건.":"")+'</p></header>'
     + '<section class="stat-row">'
     +   statTile("articles","brass",inProg,"작성 중 기고글")
     +   statTile("mfds","blue",mfdsOpen,"진행 중 식약처 업무")
@@ -708,6 +703,59 @@ function tripRangeHtml(){
 }
 
 var CAL_CHIPS=3;   /* 한 칸에 보여줄 일정 수. 아이패드 가로에선 3개까지 들어간다 */
+/* ========== 한 날의 줄들 (v212) ==========
+ * 캘린더의 날짜 칸과 「오늘」 화면이 같은 것을 그린다 — 여러 날짜리 출장·식약처 업무(체크)·일정·메모.
+ * 예전 「오늘」은 그날 시작하는 일정만 보여서, 출장 중이거나 기한이 오늘인 식약처 업무는 빠졌다
+ * (이랑님 「캘린더에서 오늘 해당하는 것들도 오늘 화면에 업데이트」). */
+function isTripEv(e){ return !!(e.until&&e.until!==e.key); }
+function calTaskRow(t){
+    var done=(t.status==="완료");
+    return '<li class="ev-row task'+(done?" done":"")+'">'
+      + '<input class="day-check" type="checkbox" data-act="mfds-done" data-id="'+t.id+'"'+(done?' checked':'')+' />'
+      + '<span class="ev-time" data-act="edit" data-table="mfds" data-field="time" data-id="'+t.id+'" title="눌러서 시간 수정">'+(t.time?esc(t.time):'<span class="none">시간</span>')+'</span>'
+      + '<div class="ev-body">'
+      +   '<span class="ev-title" data-act="edit" data-table="mfds" data-field="title" data-id="'+t.id+'" title="눌러서 수정">'+esc(t.title)+'</span>'
+      +   whereHtml(t,"mfds")
+      +   '<span class="ev-tail"><span class="mfds-badge">식약처</span>'
+      +     '<span class="mfds-status">'+esc(t.status)+'</span></span>'
+      +   (t.memo?'<span class="ev-memo" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+t.id+'" title="눌러서 수정">'+esc(t.memo)+'</span>':'')
+      + '</div>'
+      + '<span class="row-acts">'+(t.memo?'':'<button class="memo-add" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+t.id+'" title="메모 적기">메모</button>')+'<button class="del" data-act="mfds-del" data-id="'+t.id+'" title="삭제">✕</button></span></li>'; }
+function calEvRow(e){ return '<li class="ev-row'+(isTripEv(e)?" trip":"")+'">'
+      + '<span class="check-gap"></span>'
+      /* 여러 날짜리는 「종일」이 아니라 「출장」이라고 적는다. 하루짜리 일정과
+       * 한 줄에 섞여 있어도 무엇인지 바로 보인다. 시간을 적어두면 시간이 이긴다
+       * (몇 시 비행기처럼 출발 시각을 적어두는 경우). */
+      + '<span class="ev-time'+(isTripEv(e)&&!e.time?" trip-tag":"")+'" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'
+      +   (e.time?esc(e.time)
+            : isTripEv(e)?(/여행/.test(e.title||"")?"여행":"출장")   /* 제목에 여행이라 적었으면 여행 */
+            : "종일")+'</span>'
+      + '<div class="ev-body">'
+      +   '<span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span>'
+      +   whereHtml(e,"events")
+      +   (e.until&&e.until!==e.key
+            ? '<span class="ev-span'+(tripEdit&&tripEdit.id===e.id?" on":"")+'" data-act="trip-edit" data-id="'+e.id+'" title="눌러서 달력에서 기간 고치기">'
+              + esc(spanLabel(e.key,e.until))+'</span>' : '')
+      /* 메모는 적어둔 게 있을 때만 보여준다. 빈 「＋ 메모」가 모든 일정마다
+       * 한 줄씩 차지해서, 한 건이 두 줄로 보였다.
+       * 출장·여행은 비행·숙소를 적는 자리라 비어 있어도 남겨 둔다. */
+      +   ((e.memo||isTripEv(e))
+            ? '<span class="ev-memo" data-act="edit" data-table="events" data-field="memo" data-type="textarea" data-id="'+e.id+'" title="눌러서 수정">'
+              + (e.memo?esc(e.memo):'<span class="none">＋ 메모</span>')+'</span>'
+            : '')
+      + '</div>'
+      + '<span class="row-acts">'
+      /* 메모가 없을 땐 오른쪽 끝에 작은 「메모」만 — 한 줄이 두 줄이 되지 않게 */
+      +   (!e.memo&&!isTripEv(e)?'<button class="memo-add" data-act="edit" data-table="events" data-field="memo" data-type="textarea" data-id="'+e.id+'" title="메모 적기">메모</button>':'')
+      +   '<button class="del" data-act="ev-del" data-id="'+e.id+'" title="삭제">✕</button></span></li>';}
+function dayListHtml(key){
+  var evs=S.events.filter(function(e){ return e.key<=key && key<=(e.until||e.key); }).sort(evSort);
+  var tasks=S.mfds.filter(function(m){ return m.due===key; });
+  if(!evs.length&&!tasks.length) return "";
+  /* 출장·여행이 맨 위 — 그 날의 큰 틀이라 먼저 눈에 들어와야 한다 (달력 칸과 같은 순서) */
+  return '<ul class="list">'+evs.filter(isTripEv).map(calEvRow).join("")+tasks.map(calTaskRow).join("")
+    + evs.filter(function(e){ return !isTripEv(e); }).map(calEvRow).join("")+'</ul>';
+}
 function renderCalendar(){
   /* 기간을 고치는 중인 일정 (지워졌으면 그만둔다) */
   var te=tripEdit?S.events.find(function(x){ return x.id===tripEdit.id; }):null;
@@ -753,53 +801,7 @@ function renderCalendar(){
       rng=" rng"+(k===rs?" rng-s":"")+(re&&k===re?" rng-e":"");
     cells+='<div class="cal-cell'+(k===todayKey?" today":"")+(k===calSel?" sel":"")+inTrip+rng+'" data-act="cal-day" data-id="'+k+'"><span class="cal-num">'+d+'</span>'+chips+'</div>'; }
   var wdHtml=WD.map(function(w,i){ return '<div class="cal-wd'+(i===0?" sun":"")+'">'+w+'</div>'; }).join("");
-  var selEvs=S.events.filter(function(e){ return e.key<=calSel && calSel<=(e.until||e.key); }).sort(evSort);
   var selD=new Date(calSel+"T00:00:00");
-  var selTasks=S.mfds.filter(function(m){ return m.due===calSel; });
-  var taskRows=selTasks.map(function(t){
-    var done=(t.status==="완료");
-    return '<li class="ev-row task'+(done?" done":"")+'">'
-      + '<input class="day-check" type="checkbox" data-act="mfds-done" data-id="'+t.id+'"'+(done?' checked':'')+' />'
-      + '<span class="ev-time" data-act="edit" data-table="mfds" data-field="time" data-id="'+t.id+'" title="눌러서 시간 수정">'+(t.time?esc(t.time):'<span class="none">시간</span>')+'</span>'
-      + '<div class="ev-body">'
-      +   '<span class="ev-title" data-act="edit" data-table="mfds" data-field="title" data-id="'+t.id+'" title="눌러서 수정">'+esc(t.title)+'</span>'
-      +   whereHtml(t,"mfds")
-      +   '<span class="ev-tail"><span class="mfds-badge">식약처</span>'
-      +     '<span class="mfds-status">'+esc(t.status)+'</span></span>'
-      +   (t.memo?'<span class="ev-memo" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+t.id+'" title="눌러서 수정">'+esc(t.memo)+'</span>':'')
-      + '</div>'
-      + '<span class="row-acts">'+(t.memo?'':'<button class="memo-add" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+t.id+'" title="메모 적기">메모</button>')+'<button class="del" data-act="mfds-del" data-id="'+t.id+'" title="삭제">✕</button></span></li>'; }).join("");
-  function evRowHtml(e){ return '<li class="ev-row'+(isTrip(e)?" trip":"")+'">'
-      + '<span class="check-gap"></span>'
-      /* 여러 날짜리는 「종일」이 아니라 「출장」이라고 적는다. 하루짜리 일정과
-       * 한 줄에 섞여 있어도 무엇인지 바로 보인다. 시간을 적어두면 시간이 이긴다
-       * (몇 시 비행기처럼 출발 시각을 적어두는 경우). */
-      + '<span class="ev-time'+(isTrip(e)&&!e.time?" trip-tag":"")+'" data-act="edit" data-table="events" data-field="time" data-id="'+e.id+'" title="눌러서 시간 수정">'
-      +   (e.time?esc(e.time)
-            : isTrip(e)?(/여행/.test(e.title||"")?"여행":"출장")   /* 제목에 여행이라 적었으면 여행 */
-            : "종일")+'</span>'
-      + '<div class="ev-body">'
-      +   '<span class="ev-title" data-act="edit" data-table="events" data-field="title" data-id="'+e.id+'" title="눌러서 수정">'+esc(e.title)+'</span>'
-      +   whereHtml(e,"events")
-      +   (e.until&&e.until!==e.key
-            ? '<span class="ev-span'+(tripEdit&&tripEdit.id===e.id?" on":"")+'" data-act="trip-edit" data-id="'+e.id+'" title="눌러서 달력에서 기간 고치기">'
-              + esc(spanLabel(e.key,e.until))+'</span>' : '')
-      /* 메모는 적어둔 게 있을 때만 보여준다. 빈 「＋ 메모」가 모든 일정마다
-       * 한 줄씩 차지해서, 한 건이 두 줄로 보였다.
-       * 출장·여행은 비행·숙소를 적는 자리라 비어 있어도 남겨 둔다. */
-      +   ((e.memo||isTrip(e))
-            ? '<span class="ev-memo" data-act="edit" data-table="events" data-field="memo" data-type="textarea" data-id="'+e.id+'" title="눌러서 수정">'
-              + (e.memo?esc(e.memo):'<span class="none">＋ 메모</span>')+'</span>'
-            : '')
-      + '</div>'
-      + '<span class="row-acts">'
-      /* 메모가 없을 땐 오른쪽 끝에 작은 「메모」만 — 한 줄이 두 줄이 되지 않게 */
-      +   (!e.memo&&!isTrip(e)?'<button class="memo-add" data-act="edit" data-table="events" data-field="memo" data-type="textarea" data-id="'+e.id+'" title="메모 적기">메모</button>':'')
-      +   '<button class="del" data-act="ev-del" data-id="'+e.id+'" title="삭제">✕</button></span></li>'; }
-  /* 출장·여행이 맨 위 — 그 날의 큰 틀이라 먼저 눈에 들어와야 한다 (달력 칸과 같은 순서) */
-  function isTrip(e){ return !!(e.until&&e.until!==e.key); }
-  var tripRows=selEvs.filter(isTrip).map(evRowHtml).join("");
-  var dayRows =selEvs.filter(function(e){ return !isTrip(e); }).map(evRowHtml).join("");
   var panel='<div class="day-panel"><div class="day-title">'+(selD.getMonth()+1)+'월 '+selD.getDate()+'일 ('+WD[selD.getDay()]+')'+(calSel===todayKey?' <span class="day-today">오늘</span>':'')+'</div>'
     + '<div class="card form composer day-form">'
     +   '<input class="input composer-title" id="day-ev" value="'+esc(dayDraft.title)+'" placeholder="무엇을 하나요? (예: GMP 실사 사전회의)" />'
@@ -822,9 +824,7 @@ function renderCalendar(){
     +     '<div class="composer-btns"><button class="btn" data-act="day-add">+ 추가</button></div>'
     +   '</div>'
     + '</div>'
-    + ((selEvs.length||selTasks.length)
-        ? '<ul class="list">'+tripRows+taskRows+dayRows+'</ul>'
-        : '<p class="empty">이 날은 아직 일정이 없어요.</p>')+'</div>';
+    + (dayListHtml(calSel)||'<p class="empty">이 날은 아직 일정이 없어요.</p>')+'</div>';
   var mk=calYear+"-"+pad(calMonth+1);
   var mEv=S.events.filter(function(e){ return e.key.indexOf(mk)===0; }).length;
   var mTask=S.mfds.filter(function(m){ return m.due&&m.due.indexOf(mk)===0; }).length;
@@ -6164,7 +6164,7 @@ document.getElementById("app").addEventListener("click",function(e){
       if(dayKind===KIND_TRIP&&!tripUntil&&id>calSel){ tripUntil=id; render(); focusDayPanel(); break; }
       tripUntil=null; calSel=id; render(); focusDayPanel(); break;
     case "trip-reset": saveDayDraft(); tripUntil=null; render(); break;
-    case "trip-edit":
+    case "trip-edit": { var tev=S.events.find(function(x){ return x.id===id; }); if(tev&&active!=="calendar"){ active="calendar"; calSel=tev.key; calYear=+tev.key.slice(0,4); calMonth=+tev.key.slice(5,7)-1; } }
       tripEdit=(tripEdit&&tripEdit.id===id)?null:{id:id};
       render(); focusCal(); break;
     case "trip-edit-off": tripEdit=null; render(); break;

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- 맥에 로그인하면 AI 일꾼을 띄우고, 죽으면 다시 띄운다.
+       넣기:  cp tools/com.yakktime.aiworker.plist ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/com.yakktime.aiworker.plist
+       빼기:  launchctl unload ~/Library/LaunchAgents/com.yakktime.aiworker.plist
+       기록:  ~/Library/Logs/yakktime-ai-worker.log -->
+  <key>Label</key><string>com.yakktime.aiworker</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/yangseunghun/Library/Mobile Documents/com~apple~CloudDocs/0. 마스터 업무 데스크/업무데스크-app/tools/ai_worker.py</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>/Users/yangseunghun/.local/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>15</integer>
+  <key>StandardOutPath</key><string>/Users/yangseunghun/Library/Logs/yakktime-ai-worker.out.log</string>
+  <key>StandardErrorPath</key><string>/Users/yangseunghun/Library/Logs/yakktime-ai-worker.err.log</string>
+</dict>
+</plist>

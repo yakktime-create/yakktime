@@ -190,7 +190,7 @@ const inList = (xs: any[]) =>
   "in.(" + xs.map((x) => '"' + String(x).replace(/"/g, "") + '"').join(",") + ")";
 
 // ---- Claude 부르기 ----------------------------------------------------
-async function claude(apiKey: string, body: unknown) {
+async function claudeApi(apiKey: string, body: unknown) {
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -205,6 +205,62 @@ async function claude(apiKey: string, body: unknown) {
   try { j = JSON.parse(t); } catch (_) {}
   if (!r.ok) throw new Error(j?.error?.message || `Claude 오류 ${r.status}: ${t.slice(0, 200)}`);
   return j;
+}
+
+// ---- 맥의 Claude Code(구독)로 돌리기 (2026-09-28) --------------------------
+// ai_jobs 표에 일을 한 줄 넣고, 맥에서 도는 일꾼(tools/ai_worker.py)이 `claude -p` 로 답을 적기를 기다린다.
+// 돈이 안 든다(구독). 맥이 자면(심장박동 줄이 45초 넘게 안 갱신) 예전처럼 Anthropic API 로 간다 —
+// 그래서 실사 출장 중에도 막히지 않는다. 이랑님 2026-09-28 「CLI 뚫어줄 수 있어?」.
+// 토큰을 빼내는 게 아니라 맥의 진짜 Claude Code 를 돌리는 것이라 약관 안이다.
+const MAC_HB_ID = "00000000-0000-0000-0000-000000000001";
+const MAC_WAIT_MS = 110_000;
+const MAC_SB_URL = Deno.env.get("SUPABASE_URL") || "";
+const MAC_SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const NL = String.fromCharCode(10);
+const macHeaders = { apikey: MAC_SB_KEY, Authorization: `Bearer ${MAC_SB_KEY}`, "Content-Type": "application/json" };
+async function macAwake(): Promise<boolean> {
+  if (!MAC_SB_URL || !MAC_SB_KEY) return false;
+  try {
+    const r = await fetch(`${MAC_SB_URL}/rest/v1/ai_jobs?id=eq.${MAC_HB_ID}&select=updated_at`, { headers: macHeaders });
+    if (!r.ok) return false;
+    const t = (await r.json())?.[0]?.updated_at;
+    return !!t && Date.now() - Date.parse(t) < 45_000;
+  } catch (_) { return false; }
+}
+// Anthropic 요청 본문 → 일꾼이 받는 꼴 {model, system, prompt, effort, schema}
+function macReq(body: any) {
+  const txt = (c: any) => typeof c === "string" ? c : Array.isArray(c) ? c.map((b: any) => b?.text || "").join(NL) : "";
+  const model = /haiku/.test(body.model) ? "haiku" : /sonnet/.test(body.model) ? "sonnet" : "opus";
+  return { model, system: txt(body.system), prompt: (body.messages || []).map((m: any) => txt(m.content)).join(NL + NL),
+           effort: body.output_config?.effort || undefined, schema: body.output_config?.format?.schema || undefined };
+}
+// 일꾼의 답 → Anthropic 응답 꼴 (아래 코드가 content·stop_reason·usage 를 읽는다). usage 는 0 — 구독이라 값이 없다.
+function macMsg(res: any, model: string) {
+  return { content: [{ type: "text", text: String(res?.text || "") }], stop_reason: "end_turn", model, via: "cli",
+           usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }, mac: res?.usage || null };
+}
+async function claudeViaMac(kind: string, body: any): Promise<any | null> {
+  if (!(await macAwake())) return null;
+  const ins = await fetch(`${MAC_SB_URL}/rest/v1/ai_jobs`, { method: "POST", headers: { ...macHeaders, Prefer: "return=representation" },
+    body: JSON.stringify({ kind, req: macReq(body) }) });
+  const row = (await ins.json().catch(() => null))?.[0];
+  if (!row?.id) return null;
+  const t0 = Date.now();
+  while (Date.now() - t0 < MAC_WAIT_MS) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const r = await fetch(`${MAC_SB_URL}/rest/v1/ai_jobs?id=eq.${row.id}&select=status,res,err`, { headers: macHeaders });
+    const j = (await r.json().catch(() => null))?.[0];
+    if (!j) return null;
+    if (j.status === "done") return macMsg(j.res, body.model);
+    if (j.status === "error") throw new Error("맥의 Claude 가 실패했어요: " + String(j.err || "").slice(0, 200));
+  }
+  throw new Error("맥이 답을 안 줘요(110초). 맥이 켜져 있고 AI 일꾼이 도는지 봐 주세요.");
+}
+// 부르는 쪽은 그대로 claude() — 맥이 깨어 있으면 맥, 아니면 API. 응답에 via 가 실린다.
+async function claude(apiKey: string, body: any, kind = "ai") {
+  const viaMac = await claudeViaMac(kind, body).catch((e) => { console.error(e); return null; });
+  if (viaMac) return viaMac;
+  const j = await claudeApi(apiKey, body); j.via = "api"; return j;
 }
 
 const HEAD = `너는 대한민국 식품의약품안전처 GMP 담당 공무원을 돕는 도구다.
@@ -788,6 +844,8 @@ Deno.serve(async (req) => {
       // 어느 모델이 답했는지 돌려준다. 「왜 이런 답이 나왔지」를 따질 때
       // 제일 먼저 알아야 하는 것이 이것이다 — 실제로 오늘 여기서 갈렸다.
       model: cfg.id,
+      // 어디서 돌았나 — 맥의 Claude Code(구독, 0원) / Anthropic API / 섞임. 화면이 「맥에서 · 구독」을 붙인다.
+      via: (r1?.via === "cli" && r2?.via === "cli") ? "cli" : (r1?.via === "cli" || r2?.via === "cli") ? "mixed" : "api",
     });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) });

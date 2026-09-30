@@ -40,9 +40,11 @@ const MODELS: Record<string, Cfg> = {
   // Opus 5 는 「생각하기」가 기본으로 켜져 있고, max_tokens 가 **생각한 양까지
   // 합쳐서** 자른다. 그대로 두면 JSON 이 한복판에서 끊긴다 — 자리를 넉넉히 준다.
   // effort 는 Haiku 에 없는 값이라(넣으면 오류) Opus 일 때만 붙인다.
-  opus:  { id: "claude-opus-5",             in: 5.0, out: 25.0, effort: "low", room: 6 },
+  opus:  { id: "claude-opus-5-5",           in: 4.0, out: 20.0, effort: "low", room: 6 },
 };
-const CFG: Cfg = MODELS.haiku;
+// 2026-09-30 Haiku → Opus 5.5 (이랑님 「haiku 는 당장 바꿔줘」). 맥 일꾼이 있어 구독(0원)으로 돈다.
+// 거부·잘림이면 askJson() 이 Haiku 로 되받는다 — 독소·병원체 질문이 막히지 않게.
+const CFG: Cfg = MODELS.opus;
 // 조에 딸린 output_config. 스키마는 그대로, effort 는 있을 때만.
 const outCfg = (c: Cfg, schema: unknown) => c.effort
   ? { effort: c.effort, format: { type: "json_schema", schema } }
@@ -258,6 +260,30 @@ async function claudeViaMac(kind: string, body: any): Promise<any | null> {
   console.error("맥이 " + MAC_WAIT_MS / 1000 + "초 안에 답을 안 줬다 — 이 한 번은 API 로");
   return null;
 }
+// **맥이 깨어 있으면 Opus 5.5(구독, 0원), 자면 Haiku(API) — 2026-09-30 이랑님 「나누는 게 좋겠음」.**
+// Opus 는 API 로 가면 한 번에 1,000원쯤이라(월 $5 로 일곱 번) 맥에서만 돌린다. 맥이 늦거나(65초)
+// 거부·잘림으로 JSON 을 못 받으면 Haiku 로 되받는다 — Haiku 도 맥이 깨어 있으면 맥에서 돈다.
+// make(c) 는 모델 설정을 받아 요청 본문을 만든다. 값은 부른 만큼 합친다.
+async function askJson(apiKey: string, make: (c: Cfg) => any) {
+  const big = CFG.id !== MODELS.haiku.id && await macAwake();
+  const plan: Cfg[] = big ? [CFG, MODELS.haiku] : [MODELS.haiku];
+  let res: any = null, p: any = null, usd = 0, cfg: Cfg = plan[0], err: unknown = null;
+  for (let i = 0; i < plan.length; i++) {
+    cfg = plan[i];
+    try {
+      // 큰 모델은 맥에서만 — 맥이 null(늦음·잠)을 주면 API 로 가지 않고 다음(Haiku)으로
+      res = cfg.id === MODELS.haiku.id ? await claude(apiKey, make(cfg)) : await claudeViaMac("ai", make(cfg));
+      err = null;
+      if (!res) continue;
+    }
+    catch (e) { err = e; console.error(e); continue; }
+    usd += usdOf(res?.usage, cfg);
+    p = readJson(res);
+    if (p) return { res, p, usd, cfg, fellBack: i > 0 };
+  }
+  if (err && !res) throw err;
+  return { res, p: null, usd, cfg, fellBack: plan.length > 1 };
+}
 // 부르는 쪽은 그대로 claude() — 맥이 깨어 있으면 맥, 아니면 API. 응답에 via 가 실린다.
 async function claude(apiKey: string, body: any, kind = "ai") {
   const viaMac = await claudeViaMac(kind, body).catch((e) => { console.error(e); return null; });
@@ -448,7 +474,6 @@ Deno.serve(async (req) => {
     if (!apiKey) return json({ error: "ANTHROPIC_API_KEY 가 없어요. Edge Functions 비밀값에 넣어주세요." });
 
     const { q, lawIds, rules: rulesIn } = await req.json().catch(() => ({ q: "", lawIds: null, rules: "" }));
-    const cfg = CFG;
     const question = String(q || "").trim();
     // 담당자가 앱에 적어 둔 「우리 과 규칙」(평문). 1차·2차 프롬프트에 그대로 붙인다.
     const rules = String(rulesIn || "").trim().slice(0, 4000);
@@ -501,7 +526,7 @@ Deno.serve(async (req) => {
     });
 
     // --- 1차: 제목만 보고 후보 추리기 -------------------------------------
-    const r1: any = await claude(apiKey, {
+    const a1 = await askJson(apiKey, (cfg: Cfg) => ({
       model: cfg.id,
       // 700 이었는데 후보 20개 + 낱말 6개 + note 를 다 내면 아슬아슬하다.
       // 잘리면 JSON 이 깨져 통째로 실패하므로 넉넉히 준다 —
@@ -515,12 +540,12 @@ Deno.serve(async (req) => {
       ],
       messages: [{ role: "user", content: `민원 질문:\n${question}${rulesBlock}` }],
       output_config: outCfg(cfg, SCHEMA1),
-    });
-    const p1 = readJson(r1);
+    }));
+    const r1: any = a1.res, p1 = a1.p;
     // 실패는 오류(빨간 토스트 3초)가 아니라 **결과 자리**에 남긴다.
     // 거부는 다시 눌러도 소용없으므로 화면에 남아 있어야 읽힌다.
     if (!p1) return json({ picks: [], ...whyNoJson(r1),
-                           arts: live.length, krw: Math.round(usdOf(r1.usage, cfg) * KRW) });
+                           arts: live.length, krw: Math.round(a1.usd * KRW) });
 
     let cand = (p1.ns || [])
       .map((n: number) => index[n] ? { n, ...index[n] } : null)
@@ -684,7 +709,7 @@ Deno.serve(async (req) => {
     if (!cand.length) {
       return json({ picks: [], note: String(p1.note || "관련 조문을 찾지 못했어요."),
                     arts: live.length, skipped, truncated: arts.length >= MAX_ARTS,
-                    krw: Math.round(usdOf(r1.usage, cfg) * KRW) });
+                    krw: Math.round(a1.usd * KRW) });
     }
 
     // --- 후보의 본문을 읽어 온다 (2차에게 먹이고, 화면 미리보기로도 쓴다) ---
@@ -709,7 +734,7 @@ Deno.serve(async (req) => {
     if (!sheet.trim()) return json({ error: "조문 본문을 못 읽었어요. 잠시 뒤 다시 눌러주세요." });
 
     // --- 2차: 본문을 읽고 최종으로 추리기 ---------------------------------
-    const r2: any = await claude(apiKey, {
+    const a2 = await askJson(apiKey, (cfg: Cfg) => ({
       model: cfg.id,
       // 2000 이었는데 **실측에서 잘렸다.** 후보 10개마다 why(왜 골랐나)와
       // quote(원문에서 옮긴 문장)를 내므로 한 개에 200토큰쯤 든다 —
@@ -719,15 +744,15 @@ Deno.serve(async (req) => {
       system: [{ type: "text", text: RULES2 }],
       messages: [{ role: "user", content: `민원 질문:\n${question}${rulesBlock}${pastBlock}\n\n<핵심>${String(p1.gist || "").trim() || "(1차가 요지를 내지 않았다 — 질문에서 직접 읽는다)"}</핵심>\n\n<조문>${sheet}</조문>` }],
       output_config: outCfg(cfg, SCHEMA2),
-    });
-    const p2 = readJson(r2);
+    }));
+    const r2: any = a2.res, p2 = a2.p;
     if (!p2) {
       const w = whyNoJson(r2);
       return json({ picks: [], ...w,
         // 1차는 통과했으므로 어디까지 갔는지 알려 준다 — 「아무것도 안 됐다」와 다르다.
         note: w.note + ` (제목만 보고 후보 ${cand.length}개까지는 골랐지만, 본문을 읽는 두 번째 단계에서 멈췄어요.)`,
         arts: live.length, skipped,
-        krw: Math.round((usdOf(r1.usage, cfg) + usdOf(r2.usage, cfg)) * KRW) });
+        krw: Math.round((a1.usd + a2.usd) * KRW) });
     }
 
     // --- 등급 계산 --------------------------------------------------------
@@ -842,10 +867,12 @@ Deno.serve(async (req) => {
       gist: String(p1.gist || ""),
       words,
       dbg,
-      krw: Math.round((usdOf(r1.usage, cfg) + usdOf(r2.usage, cfg)) * KRW),
+      krw: Math.round((a1.usd + a2.usd) * KRW),
       // 어느 모델이 답했는지 돌려준다. 「왜 이런 답이 나왔지」를 따질 때
       // 제일 먼저 알아야 하는 것이 이것이다 — 실제로 오늘 여기서 갈렸다.
-      model: cfg.id,
+      model: a2.cfg.id,
+      // 거부·잘림으로 Haiku 가 대신 답했으면 true — 조용히 갈아타면 「오늘은 왜 다르지」를 알 길이 없다.
+      fellBack: a1.fellBack || a2.fellBack,
       // 어디서 돌았나 — 맥의 Claude Code(구독, 0원) / Anthropic API / 섞임. 화면이 「맥에서 · 구독」을 붙인다.
       via: (r1?.via === "cli" && r2?.via === "cli") ? "cli" : (r1?.via === "cli" || r2?.via === "cli") ? "mixed" : "api",
     });

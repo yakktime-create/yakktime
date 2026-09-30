@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v214";
+var APP_VER="v215";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3555,10 +3555,18 @@ function lawAskRun(){
  * 조문 카드는 낱말·뜻 결과와 **한 목록**에 섞여 들어가므로(lawCards), 여기서는 질문·값·요지·설명만 보인다.
  * 예전엔 AI 결과가 따로 한 덩어리라 머리줄·버튼이 두 벌이고 같은 조가 두 번 떴다(이랑님: 「스크롤 왔다갔다
  * 하면서 체크하는 게 불편해」). */
+/* 어느 모델이 답했나 — 「Opus · 0원」. 맥이 깨어 있으면 Opus, 자면 Haiku(API)라서 값만으로는
+ * 「맥인데 Opus 가 거부해 Haiku 가 대신 답한」 경우를 못 가른다(이랑님 2026-09-30 「내가 알 수 있는 건가?」). */
+function aiCostLabel(d){
+  var m=String(d.model||""), who=/haiku/i.test(m)?"Haiku":/opus/i.test(m)?"Opus":/sonnet/i.test(m)?"Sonnet":"";
+  if(who==="Haiku"&&d.fellBack) who="Haiku(Opus 가 못 답함)";
+  /* 「맥에서」는 안 쓴다 — 모델과 금액만(이랑님 「모델이랑 금액만 써도 될 듯」) */
+  return (who?who+" · ":"")+(d.krw||0)+"원";
+}
 function lawAskNoteHtml(){
   var d=lawAsk; if(!d) return "";
   var head='<div class="ask-head"><span class="ask-qt">「'+esc(d.q)+'」</span>'
-    + '<span class="ask-cost">'+(d.via==="cli"?"맥에서 · 구독(0원)":d.via==="mixed"?"일부 맥 · 이번 "+(d.krw||0)+"원":"이번 "+(d.krw||0)+"원")+'</span>'
+    + '<span class="ask-cost">'+esc(aiCostLabel(d))+'</span>'
     + '<button class="link-btn quiet-link ask-x" data-act="ask-close" title="AI 결과 닫기">닫기 ✕</button></div>'
     + (d.gist?'<p class="ask-gist"><b>AI 가 읽은 핵심</b> — '+esc(d.gist)+' <span class="ask-dim">이게 아니면 질문을 고쳐 다시 물어보세요.</span></p>':'');
   if(!d.picks||!d.picks.length)
@@ -5194,7 +5202,7 @@ function ansMake(){
     var v=r&&r.data;
     if(r&&r.error){ d.err=String(r.error.message||r.error); render(); return; }
     if(!v||v.error){ d.err=(v&&v.error)||"응답이 비어 있어요."; render(); return; }
-    d.summary=v.summary||""; d.title=v.title||""; d.topic=v.topic||""; d.help=v.help||""; d.krw=v.krw||0; d.via=v.via||"api"; d.made=true;
+    d.summary=v.summary||""; d.title=v.title||""; d.topic=v.topic||""; d.help=v.help||""; d.krw=v.krw||0; d.via=v.via||"api"; d.model=v.model||""; d.fellBack=!!v.fellBack; d.made=true;
     /* 조문마다 AI 가 짚고 서버가 원문과 대조한 핵심 문장. 없는 조는 "" → 그 조는 전체를 넣는다 */
     (v.keys||[]).forEach(function(k,i){ if(d.cites[i]) d.cites[i].key=k||""; });
     d.cites.forEach(function(c){ if(c.pick) c.key=c.pick; });   /* 사람이 끌어 고른 문장이 있으면 그것 */
@@ -5557,7 +5565,7 @@ function ansModalHtml(){
   return '<div class="ans-back" data-act="ans-close"></div>'
     + '<div class="ans-win" role="dialog">'
     + '<div class="ans-top"><b>답변 초안</b>'
-    +   (d.via==="cli"?'<span class="ans-krw">맥에서 · 구독(0원)</span>':d.krw?'<span class="ans-krw">약 '+d.krw+'원</span>':'')
+    +   (d.via==="cli"||d.krw?'<span class="ans-krw">'+esc(aiCostLabel(d))+'</span>':'')
     +   '<button class="lv-x" data-act="ans-close">✕</button></div>'
     + '<div class="ans-scroll">'
     +   '<label class="ans-lab">민원 내용</label>'

@@ -33,9 +33,10 @@
 type Cfg = { id: string; in: number; out: number; effort?: string; room: number };
 const MODELS: Record<string, Cfg> = {
   haiku: { id: "claude-haiku-4-5-20251001", in: 1.0, out:  5.0, room: 1 },
-  // Opus 5 는 생각하기가 기본으로 켜져 있고 max_tokens 가 생각한 양까지 합쳐
-  // 자르므로 자리를 넉넉히 준다. effort 는 Opus 일 때만 붙인다(Haiku 는 오류).
-  opus:  { id: "claude-opus-5",             in: 5.0, out: 25.0, effort: "low", room: 6 },
+  // Opus 5.5(2026-09-30, Opus 5 보다 20% 쌈). 생각하기를 끌 수 없고 max_tokens 가
+  // 생각한 양까지 합쳐 자르므로 자리를 넉넉히 준다. effort 기본값이 medium 이라
+  // 늘 적어 준다. effort 는 Opus 일 때만 붙인다(Haiku 는 오류).
+  opus:  { id: "claude-opus-5-5",           in: 4.0, out: 20.0, effort: "low", room: 6 },
 };
 const CFG: Cfg = MODELS.opus;
 const ART_MAX   = 3000;    // 조 하나에서 AI 에게 읽힐 최대 글자

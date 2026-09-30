@@ -78,7 +78,7 @@ async function claudeApi(apiKey: string, body: unknown) {
 // ---- 맥의 Claude Code(구독)로 돌리기 (2026-09-28) — law-pick 과 같은 조각 -----
 // ai_jobs 표에 일을 넣고 맥 일꾼(tools/ai_worker.py)이 `claude -p` 로 답을 적기를 기다린다. 맥이 자면 API 로.
 const MAC_HB_ID = "00000000-0000-0000-0000-000000000001";
-const MAC_WAIT_MS = 110_000;
+const MAC_WAIT_MS = 100_000;   // 초안은 한 번만 부른다 — 150초 제한 안에서 넉넉히. 넘기면 API 로
 const MAC_SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const MAC_SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const NL = String.fromCharCode(10);
@@ -117,7 +117,8 @@ async function claudeViaMac(kind: string, body: any): Promise<any | null> {
     if (j.status === "done") return macMsg(j.res, body.model);
     if (j.status === "error") throw new Error("맥의 Claude 가 실패했어요: " + String(j.err || "").slice(0, 200));
   }
-  throw new Error("맥이 답을 안 줘요(110초). 맥이 켜져 있고 AI 일꾼이 도는지 봐 주세요.");
+  console.error("맥이 " + MAC_WAIT_MS / 1000 + "초 안에 답을 안 줬다 — 이 한 번은 API 로");
+  return null;
 }
 async function claude(apiKey: string, body: any, kind = "draft") {
   const viaMac = await claudeViaMac(kind, body).catch((e) => { console.error(e); return null; });

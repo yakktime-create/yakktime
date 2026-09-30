@@ -213,7 +213,8 @@ async function claudeApi(apiKey: string, body: unknown) {
 // 그래서 실사 출장 중에도 막히지 않는다. 이랑님 2026-09-28 「CLI 뚫어줄 수 있어?」.
 // 토큰을 빼내는 게 아니라 맥의 진짜 Claude Code 를 돌리는 것이라 약관 안이다.
 const MAC_HB_ID = "00000000-0000-0000-0000-000000000001";
-const MAC_WAIT_MS = 110_000;
+// 한 번에 65초 — 서버 함수는 150초 안에 끝나야 하고 이 함수는 두 번 부른다. 넘기면 그 한 번만 API 로(첫 실측: 78초 걸려 546 으로 죽었다).
+const MAC_WAIT_MS = 65_000;
 const MAC_SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const MAC_SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const NL = String.fromCharCode(10);
@@ -254,7 +255,8 @@ async function claudeViaMac(kind: string, body: any): Promise<any | null> {
     if (j.status === "done") return macMsg(j.res, body.model);
     if (j.status === "error") throw new Error("맥의 Claude 가 실패했어요: " + String(j.err || "").slice(0, 200));
   }
-  throw new Error("맥이 답을 안 줘요(110초). 맥이 켜져 있고 AI 일꾼이 도는지 봐 주세요.");
+  console.error("맥이 " + MAC_WAIT_MS / 1000 + "초 안에 답을 안 줬다 — 이 한 번은 API 로");
+  return null;
 }
 // 부르는 쪽은 그대로 claude() — 맥이 깨어 있으면 맥, 아니면 API. 응답에 via 가 실린다.
 async function claude(apiKey: string, body: any, kind = "ai") {

@@ -34,7 +34,9 @@ PY
 done
 
 echo "4) launchd 에 일꾼 등록"
-mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
+mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs" "$HOME/.yakktime"
+# launchd 가 띄운 프로그램은 iCloud 폴더를 못 연다 → 일꾼 스크립트를 밖에 복사해 둔다(고칠 때마다 이 스크립트를 다시 돌린다)
+cp "$APP/tools/ai_worker.py" "$HOME/.yakktime/ai_worker.py"
 cp "$APP/tools/com.yakktime.aiworker.plist" "$HOME/Library/LaunchAgents/"
 launchctl unload "$HOME/Library/LaunchAgents/com.yakktime.aiworker.plist" 2>/dev/null || true
 launchctl load "$HOME/Library/LaunchAgents/com.yakktime.aiworker.plist"

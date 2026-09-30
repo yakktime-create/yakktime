@@ -63,11 +63,17 @@ MODEL_ALIAS = {"haiku": "haiku", "sonnet": "sonnet", "opus": "opus"}
 def run_claude(r):
     """r = {model, system, prompt, effort?, schema?} → {text, usage, model, cost_usd, duration_ms}"""
     model = MODEL_ALIAS.get(str(r.get("model", "haiku")).lower(), "haiku")
-    cmd = [CLAUDE, "-p", "--output-format", "json", "--model", model, "--no-session-persistence", "--tools", ""]
+    # MCP 서버(캘린더·메일 연결)는 안 켠다 — 매 호출마다 붙느라 느리다. 2026-09-30 실측(조문 고르기 1차, 49k 자):
+    # 그대로 58초·8,134 토큰 → 생각 끄고 MCP 안 켜니 26초·2,613 토큰. 서버 함수는 150초 안에 두 번을 끝내야 한다.
+    cmd = [CLAUDE, "-p", "--output-format", "json", "--model", model, "--no-session-persistence", "--tools", "",
+           "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}']
     if r.get("system"): cmd += ["--system-prompt", r["system"]]
     if r.get("effort"): cmd += ["--effort", r["effort"]]
     if r.get("schema"): cmd += ["--json-schema", json.dumps(r["schema"], ensure_ascii=False)]
-    p = subprocess.run(cmd, input=r.get("prompt", ""), capture_output=True, text=True, timeout=JOB_TIMEOUT)
+    env = dict(os.environ)
+    if model == "haiku": env["MAX_THINKING_TOKENS"] = "0"   # Haiku 는 고정 생각 예산 — 0 이면 안 생각한다. Opus 는 effort 로 조절
+    p = subprocess.run(cmd, input=r.get("prompt", ""), capture_output=True, text=True, timeout=JOB_TIMEOUT,
+                       env=env, cwd=os.path.dirname(os.path.abspath(__file__)))
     if p.returncode != 0 and not p.stdout.strip():
         raise RuntimeError("claude 종료 코드 %d: %s" % (p.returncode, (p.stderr or "")[-400:]))
     out = json.loads(p.stdout)

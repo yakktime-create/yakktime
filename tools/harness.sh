@@ -51,6 +51,11 @@ setTimeout(function(){ var p=new URLSearchParams(location.search);
 </script></body>''')
 io.open(sys.argv[2]+'/index.html','w',encoding='utf-8').write(h)
 PY
+# 이미 떠 있는 서버가 다른 폴더를 보여 주면(옛 scratchpad 등) 끄고 다시 띄운다 — 2026-10-01 v213 을 보여 줘 헛짚을 뻔했다
+WANT=$(grep -m1 'var APP_VER' "$D/app.js")
+if curl -s -o /dev/null localhost:8777 && [ "$(curl -s localhost:8777/app.js | grep -m1 'var APP_VER')" != "$WANT" ]; then
+  lsof -tiTCP:8777 -sTCP:LISTEN | xargs kill 2>/dev/null; sleep 1
+fi
 cd "$D" && (curl -s -o /dev/null localhost:8777 || (nohup python3 -m http.server 8777 >/dev/null 2>&1 &)); sleep 1
 if [ "$1" = "shot" ]; then
   CH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"; W="${3:-620}"; OUT="$D/shot_$2_$W.png"

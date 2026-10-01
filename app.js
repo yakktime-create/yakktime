@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v215";
+var APP_VER="v216";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -683,6 +683,9 @@ var tripEdit=null;
 /* 입력창에 치던 글자. 마지막 날을 고르면 화면을 다시 그리므로,
  * 그 사이에 적어둔 제목·장소·메모가 날아가지 않게 잠깐 들고 있는다. */
 var dayDraft={title:"",time:"",place:"",memo:null};
+/* 날짜를 누르면 그날 목록이 먼저 — 입력칸은 「＋ 추가」를 눌러야 펼친다(v216).
+ * 보통은 그날 무엇이 있는지 보려고 누르는데, 큰 입력칸이 목록보다 먼저 자리를 차지했다. */
+var dayFormOpen=false;
 function saveDayDraft(){
   if(!document.getElementById("day-ev")) return;
   dayDraft.title=val("day-ev"); dayDraft.time=val("day-time"); dayDraft.place=val("day-place");
@@ -713,14 +716,16 @@ function calTaskRow(t){
     var done=(t.status==="완료");
     return '<li class="ev-row task'+(done?" done":"")+'">'
       + '<input class="day-check" type="checkbox" data-act="mfds-done" data-id="'+t.id+'"'+(done?' checked':'')+' />'
-      + '<span class="ev-time" data-act="edit" data-table="mfds" data-field="time" data-id="'+t.id+'" title="눌러서 시간 수정">'+(t.time?esc(t.time):'<span class="none">시간</span>')+'</span>'
+      + '<span class="ev-time" data-act="edit" data-table="mfds" data-field="time" data-id="'+t.id+'" title="눌러서 시간 수정">'+(t.time?esc(t.time):'<span class="none">＋ 시간</span>')+'</span>'
       + '<div class="ev-body">'
       +   '<span class="ev-title" data-act="edit" data-table="mfds" data-field="title" data-id="'+t.id+'" title="눌러서 수정">'+esc(t.title)+'</span>'
       +   whereHtml(t,"mfds")
-      +   '<span class="ev-tail"><span class="mfds-badge">식약처</span>'
-      +     '<span class="mfds-status">'+esc(t.status)+'</span></span>'
       +   (t.memo?'<span class="ev-memo" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+t.id+'" title="눌러서 수정">'+esc(t.memo)+'</span>':'')
       + '</div>'
+      /* 「식약처 · 상태」는 본문 밖 오른쪽 끝 — 본문 안에 두면 장소가 붙은 줄만 둘째 줄로 밀려나
+       * 같은 업무끼리 높이·자리가 달라졌다(v216, 이랑님 사진). */
+      + '<span class="ev-tail"><span class="mfds-badge">식약처</span>'
+      +   '<span class="mfds-status">'+esc(t.status)+'</span></span>'
       + '<span class="row-acts">'+(t.memo?'':'<button class="memo-add" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+t.id+'" title="메모 적기">메모</button>')+'<button class="del" data-act="mfds-del" data-id="'+t.id+'" title="삭제">✕</button></span></li>'; }
 function calEvRow(e){ return '<li class="ev-row'+(isTripEv(e)?" trip":"")+'">'
       + '<span class="check-gap"></span>'
@@ -803,8 +808,10 @@ function renderCalendar(){
     cells+='<div class="cal-cell'+(k===todayKey?" today":"")+(k===calSel?" sel":"")+inTrip+rng+'" data-act="cal-day" data-id="'+k+'"><span class="cal-num">'+d+'</span>'+chips+'</div>'; }
   var wdHtml=WD.map(function(w,i){ return '<div class="cal-wd'+(i===0?" sun":"")+'">'+w+'</div>'; }).join("");
   var selD=new Date(calSel+"T00:00:00");
-  var panel='<div class="day-panel"><div class="day-title">'+(selD.getMonth()+1)+'월 '+selD.getDate()+'일 ('+WD[selD.getDay()]+')'+(calSel===todayKey?' <span class="day-today">오늘</span>':'')+'</div>'
-    + '<div class="card form composer day-form">'
+  var formOn=dayFormOpen||!!dayDraft.title||!!tripUntil;
+  var panel='<div class="day-panel"><div class="day-title"><span>'+(selD.getMonth()+1)+'월 '+selD.getDate()+'일 ('+WD[selD.getDay()]+')'+(calSel===todayKey?' <span class="day-today">오늘</span>':'')+'</span>'
+    + (formOn?'':'<button class="btn day-open" data-act="day-form">＋ 추가</button>')+'</div>'
+    + (!formOn?'':'<div class="card form composer day-form">'
     +   '<input class="input composer-title" id="day-ev" value="'+esc(dayDraft.title)+'" placeholder="무엇을 하나요? (예: GMP 실사 사전회의)" />'
     +   '<div class="field-row">'
     +     (dayKind===KIND_TRIP
@@ -822,9 +829,9 @@ function renderCalendar(){
         : '<input class="input day-memo-sm" id="day-memo" value="'+esc(dayDraft.memo||"")+'" placeholder="메모 (선택) — 챙길 것 · 만날 사람 · 연락처" />')
     +   '<div class="composer-foot">'
     +     segC("day-kind",["일정","식약처 업무","출장·여행"],dayKind)
-    +     '<div class="composer-btns"><button class="btn" data-act="day-add">+ 추가</button></div>'
+    +     '<div class="composer-btns"><button class="link-btn" data-act="day-form-close">닫기</button><button class="btn" data-act="day-add">+ 추가</button></div>'
     +   '</div>'
-    + '</div>'
+    + '</div>')
     + (dayListHtml(calSel)||'<p class="empty">이 날은 아직 일정이 없어요.</p>')+'</div>';
   var mk=calYear+"-"+pad(calMonth+1);
   var mEv=S.events.filter(function(e){ return e.key.indexOf(mk)===0; }).length;
@@ -1302,6 +1309,7 @@ function placeACBox(id){ return '<div class="ac-list" id="'+id+'" style="display
 
 function dayAdd(){
   var raw=(val("day-ev")||"").trim(); if(!raw) return;
+  dayFormOpen=false;
   var time=normTime(val("day-time"));
   var place=(val("day-place")||"").trim();
   var r=parseNL(raw), title=raw;
@@ -1343,11 +1351,14 @@ function openMap(q){
 }
 
 /* 시간·장소 한 줄 — 일정과 식약처 업무가 같은 모양을 쓴다 */
+/* 장소가 「식약처」 — 식약처 업무 줄에선 분류 표시와 겹치고, 지도로 찾을 곳도 아니다 */
+function isHomePlace(p){ return /^\s*식약처\s*$/.test(p||""); }
 function whereHtml(it,table){
+  if(table==="mfds"&&(!it.place||isHomePlace(it.place))) return "";
   var at=function(f,ph){ return ' data-act="edit" data-table="'+table+'" data-field="'+f+'" data-id="'+it.id+'" title="'+ph+'"'; };
   var out='<span class="ev-place"'+at("place","눌러서 장소 수정")+'>'
     + (it.place? '📍 '+esc(it.place) : '<span class="none">＋ 장소</span>')+'</span>';
-  if(it.place) out+='<button class="link-btn map-btn" data-act="map" data-q="'+esc(it.place)+'">지도 ↗</button>';
+  if(it.place&&!isHomePlace(it.place)) out+='<button class="link-btn map-btn" data-act="map" data-q="'+esc(it.place)+'">지도 ↗</button>';
   return out;
 }
 
@@ -6170,8 +6181,10 @@ document.getElementById("app").addEventListener("click",function(e){
        * 다 고른 뒤 또 누르면 그 날을 시작으로 삼고 처음부터 다시 —
        * 항공권 예매 달력과 같은 방식이라 따로 배울 게 없다. */
       saveDayDraft();
-      if(dayKind===KIND_TRIP&&!tripUntil&&id>calSel){ tripUntil=id; render(); focusDayPanel(); break; }
-      tripUntil=null; calSel=id; render(); focusDayPanel(); break;
+      if(dayFormOpen&&dayKind===KIND_TRIP&&!tripUntil&&id>calSel){ tripUntil=id; render(); focusDayPanel(); break; }
+      tripUntil=null; if(!dayDraft.title) dayFormOpen=false; calSel=id; render(); focusDayPanel(); break;
+    case "day-form": dayFormOpen=true; render(); var de=document.getElementById("day-ev"); if(de) de.focus(); break;
+    case "day-form-close": saveDayDraft(); clearDayDraft(); tripUntil=null; dayKind="일정"; dayFormOpen=false; render(); break;
     case "trip-reset": saveDayDraft(); tripUntil=null; render(); break;
     case "trip-edit": { var tev=S.events.find(function(x){ return x.id===id; }); if(tev&&active!=="calendar"){ active="calendar"; calSel=tev.key; calYear=+tev.key.slice(0,4); calMonth=+tev.key.slice(5,7)-1; } }
       tripEdit=(tripEdit&&tripEdit.id===id)?null:{id:id};

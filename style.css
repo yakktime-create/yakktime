@@ -151,7 +151,8 @@ h1,h2{text-wrap:balance;}
 .cal-ev{font-size:var(--fs-xs);background:var(--accent);color:#fff;border-radius:var(--r-xs);padding:2px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:var(--lh-tight);}
 .cal-more{font-size:var(--fs-xs);color:var(--muted);}
 .day-panel{margin-top:18px;border-top:1px solid var(--line);padding-top:16px;}
-.day-title{font-size:var(--fs-base);font-weight:650;margin-bottom:10px;}
+.day-title{font-size:var(--fs-base);font-weight:650;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);}
+.day-open{flex-shrink:0;}   /* 그날 제목 줄 오른쪽 「＋ 추가」 — 입력칸은 눌러야 펼친다(v216) */
 .ev-row{display:flex;align-items:center;gap:var(--sp-2);padding:9px 4px;border-bottom:1px solid var(--line);}
 .ev-row:last-child{border-bottom:none;}
 /* 여러 날짜리 일정 — 하루짜리와 한 목록에 섞이므로 왼쪽에 옅은 줄 하나로 표시한다.
@@ -277,7 +278,9 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 .mini-due.over{color:#fff;background:var(--brick);}
 
 /* 캘린더 칩 — 식약처는 파랑, 일정은 기존 초록 */
-.cal-ev.mfds{background:var(--blue);}
+/* 식약처 업무는 옅은 칸 + 왼쪽 띠, 일정은 진한 칸 — 달력에서 한눈에 갈린다(v216) */
+.cal-ev.mfds{background:var(--blue-soft);color:var(--blue-deep);box-shadow:inset 3px 0 0 var(--blue);}
+.cal-ev.mfds.done{opacity:.6;}
 .cal-ev.done{background:var(--blue-soft);color:var(--blue-deep);text-decoration:line-through;}
 
 /* 캘린더 목록의 식약처 행 */
@@ -285,7 +288,7 @@ textarea.inline-area{min-height:52px;resize:vertical;}
 .ev-row.task.done .ev-title{color:var(--muted);text-decoration:line-through;}
 .mfds-badge{flex-shrink:0;font-size:var(--fs-xs);font-weight:700;color:var(--blue-deep);
   background:var(--blue-soft);padding:2px 8px;border-radius:var(--r-md);white-space:nowrap;}
-.mfds-status{flex-shrink:0;font-size:var(--fs-xs);color:var(--muted);}
+.mfds-status{flex-shrink:0;font-size:var(--fs-xs);color:var(--muted);background:var(--paper);padding:2px 8px;border-radius:var(--r-md);white-space:nowrap;}   /* 「식약처」와 같은 알약 — 무게를 맞춘다 */
 .day-check{width:17px;height:17px;flex-shrink:0;accent-color:var(--blue);cursor:pointer;margin:0;}
 
 /* 입력줄 체크박스 · 기한 라벨 */
@@ -870,7 +873,8 @@ textarea.input.search.law-input{resize:none;overflow-y:auto;min-height:46px;max-
 .ev-place{cursor:pointer;border-radius:var(--r-xs);padding:1px 4px;
   font-size:var(--fs-sm);color:var(--muted);min-width:0;}
 /* 아직 안 적은 자리 — 너무 흐리면 누를 수 있다는 걸 모른다 */
-.ev-place .none,.ev-time .none{color:var(--muted);opacity:.55;font-weight:500;}
+.ev-place .none{color:var(--muted);opacity:.55;font-weight:500;}
+.ev-time .none{color:var(--muted);opacity:.85;font-weight:500;}   /* 「＋ 시간」 — 누를 수 있다는 게 보이게 */
 .map-btn{font-size:var(--fs-xs);padding:2px 6px;border-radius:var(--r-xs);
   background:var(--accent-soft);flex-shrink:0;}
 
@@ -1547,3 +1551,4 @@ mark.hl-y{background:#FFF3B0;color:inherit;padding:0 3px;border-radius:3px;}
 
 .ans-chip.can-open{cursor:pointer;}
 .ans-chip-tag.ok{color:var(--accent);background:var(--accent-soft);}
+

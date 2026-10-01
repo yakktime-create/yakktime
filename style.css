@@ -1086,6 +1086,20 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
   width:var(--ic-sm);min-height:var(--tap);cursor:pointer;}
 .law-only input{width:16px;height:16px;accent-color:var(--accent);}
 .law-row.only{background:var(--accent-soft);border-radius:var(--r-sm);}
+/* 법령 묶음 (v218) — 공통 / 의약품 / 바이오·첨단바이오. 칩은 목록 머리줄 아래 늘 보이고, 누르면 그 묶음에서만 찾는다 */
+.law-grps{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);margin:0 0 var(--sp-3);}
+.law-grp-chip{font:inherit;font-size:var(--fs-sm);font-weight:600;color:var(--muted);background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r-full);padding:5px 12px;cursor:pointer;}
+.law-grp-chip b{font-weight:700;color:var(--ink);}
+.law-grp-chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
+.law-grp-chip.on b{color:var(--accent);}
+.law-grps-hint{margin-left:auto;font-size:var(--fs-xs);color:var(--muted);}
+/* 줄마다 붙는 묶음 표 — 누르면 차례로 바뀐다 */
+.law-grp-tag{font:inherit;font-size:var(--fs-2xs);font-weight:700;border:none;border-radius:var(--r-full);padding:2px 8px;cursor:pointer;flex-shrink:0;}
+.law-grp-tag.g0{background:var(--paper);color:var(--muted);}
+.law-grp-tag.g1{background:var(--blue-soft);color:var(--blue-deep);}
+.law-grp-tag.g2{background:var(--accent-soft);color:var(--accent);}
+.ask-scope{margin:0 0 var(--sp-3);font-size:var(--fs-xs);color:var(--muted);}
 /* 법령 목록 — 열 몇 개가 되면 아래 내용이 저 멀리 밀려난다. 칸 높이를 잡고
    그 안에서 굴린다. 종류 머리말은 굴려도 위에 붙어 있게 한다. */
 /* 종류별로 묶은 목록. 민원 자료도 .law-list 를 쓰므로 .grouped 로만 좁힌다. */

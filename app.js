@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v217";
+var APP_VER="v218";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3502,8 +3502,42 @@ var lawOnly={};
 /* AI가 고른 조문 중 내가 맞다고 체크한 것 (id → true) */
 var lawAskSel={};   /* (v154 부터 안 쓴다 — 체크는 lawSel 한 벌) */
 function lawOnlyIds(){ return Object.keys(lawOnly).filter(function(k){ return lawOnly[k]; }); }
+/* ---- 법령 묶음 (v218 · 2026-10-01) — 「공통 / 의약품 / 바이오·첨단바이오」.
+ * 법령이 17개가 되자 이랑님: 「유사한 것끼리 묶어서 관리 … 어떤 걸 보고 봤구나를 알 수 있게.
+ * 첨바랑 바이오는 묶어도 될 것 같고, 의약품이랑 바이오는 나눠서」. 묶음은 설정 표 `law_grp`(id→묶음)에
+ * 두고, 안 적힌 법령은 이름으로 짐작한다 — 표 구조는 안 건드린다. 위계(법·규칙·고시) 묶음은 그대로다. */
+var LAW_GRPS=["공통","의약품","바이오·첨단바이오"];
+var LAW_GRP_SHORT={"공통":"공통","의약품":"의약품","바이오·첨단바이오":"바이오"};
+function lawGrpGuess(name){ name=nfc(name||"");
+  if(/첨단|생물|바이오|세포|생균|인체/.test(name)) return "바이오·첨단바이오";
+  if(/약사법|안전에 관한 규칙|시설기준령|의약품 제조 및 품질관리에 관한 규정/.test(name)) return "공통";
+  return "의약품"; }
+function lawGrpMap(){ try{ return JSON.parse(setGet("law_grp")||"{}")||{}; }catch(e){ return {}; } }
+function lawGrpOf(l){ var g=lawGrpMap()[l.id]; return LAW_GRPS.indexOf(g)>=0?g:lawGrpGuess(l.name); }
+function lawGrpSet(l,g){ var m=lawGrpMap(); m[l.id]=g; return setPut("law_grp",JSON.stringify(m)); }
+function lawGrpLaws(g){ return S.laws.filter(function(l){ return lawGrpOf(l)===g; }); }
+/* AI 가 본 범위 — 「공통 4 · 바이오·첨단바이오 10」. 아무것도 안 골랐으면 전부다. */
+function lawScopeLabel(){
+  var ids=lawOnlyIds(); if(!ids.length||ids.length===S.laws.length) ids=S.laws.map(function(l){ return l.id; });
+  var cnt={}; ids.forEach(function(id){ var l=S.laws.find(function(x){ return x.id===id; }); if(!l) return; var g=lawGrpOf(l); cnt[g]=(cnt[g]||0)+1; });
+  return LAW_GRPS.filter(function(g){ return cnt[g]; }).map(function(g){ return g+" "+cnt[g]; }).join(" · ");
+}
+function lawGrpChipsHtml(){
+  var on={}; lawOnlyIds().forEach(function(i){ on[i]=1; });
+  var narrowed=lawOnlyIds().length&&lawOnlyIds().length<S.laws.length;
+  return '<div class="law-grps">'+LAW_GRPS.map(function(g,i){
+    var ls=lawGrpLaws(g); if(!ls.length) return "";
+    var all=ls.every(function(l){ return on[l.id]; });
+    return '<button class="law-grp-chip g'+i+(all?" on":"")+'" data-act="law-only-grp" data-id="'+esc(g)+'" title="이 묶음에서만 찾기">'+esc(g)+' <b>'+ls.length+'</b></button>';
+  }).join("")+'<span class="law-grps-hint">'+(narrowed?"고른 범위에서만 찾아요":"누르면 그 묶음에서만 찾아요")+'</span></div>';
+}
 function lawOnlyLabel(){
   var ids=lawOnlyIds(); if(!ids.length||ids.length===S.laws.length) return "";
+  /* 고른 것이 묶음 몇 개를 통째로 고른 것과 같으면 묶음 이름으로 — 「바이오·첨단바이오 묶음만」 */
+  var on={}; ids.forEach(function(i){ on[i]=1; });
+  var full=LAW_GRPS.filter(function(g){ var ls=lawGrpLaws(g); return ls.length&&ls.every(function(l){ return on[l.id]; }); });
+  var covered=full.reduce(function(n,g){ return n+lawGrpLaws(g).length; },0);
+  if(full.length&&covered===ids.length) return full.join("·")+" 묶음";
   /* 법령 이름이 길어서 그대로 쓰면 배지가 줄을 밀어낸다 */
   var first=String(lawName(ids[0])||"");
   if(first.length>16) first=first.slice(0,16)+"…";
@@ -3546,12 +3580,12 @@ function lawAskRun(){
   },4200);
   render();
   function done(){ lawAskStop(); lawAsking=false; render(); }
-  var only=lawOnlyIds();
+  var only=lawOnlyIds(), scopeLbl=lawScopeLabel();   /* 결과가 올 때 범위를 바꿨을 수 있으니 지금 적어 둔다 */
   sb.functions.invoke("law-pick",{body:{q:q,lawIds:(only.length&&only.length<S.laws.length)?only:null,rules:setGet("ai_rules")}}).then(function(r){
     var d=r&&r.data;
     if(!d){ showToast("물어보지 못했어요: "+((r&&r.error&&r.error.message)||"응답이 비었어요"),true); done(); return; }
     if(d.error){ showToast(d.error,true); done(); return; }
-    d.q=q; lawAsk=d; lawAskMore=false; lawSel={};
+    d.q=q; d.scope=scopeLbl; lawAsk=d; lawAskMore=false; lawSel={};
     if((d.picks||[]).length){ lawHelpOpen=false; lawListOpen=false; }
     if(d.krw!=null) lawAskLast=d.krw;
     /* 처음부터 체크되는 것은 **등급(중간 이상)으로만** 정한다. 전에 답변에 쓴 조문은
@@ -3590,7 +3624,8 @@ function lawAskNoteHtml(){
   var head='<div class="ask-head"><span class="ask-qt">「'+esc(d.q)+'」</span>'
     + '<span class="ask-cost">'+esc(aiCostLabel(d))+'</span>'
     + '<button class="link-btn quiet-link ask-x" data-act="ask-close" title="AI 결과 닫기">닫기 ✕</button></div>'
-    + (d.gist?'<p class="ask-gist"><b>AI 가 읽은 핵심</b> — '+esc(d.gist)+' <span class="ask-dim">이게 아니면 질문을 고쳐 다시 물어보세요.</span></p>':'');
+    + (d.gist?'<p class="ask-gist"><b>AI 가 읽은 핵심</b> — '+esc(d.gist)+' <span class="ask-dim">이게 아니면 질문을 고쳐 다시 물어보세요.</span></p>':'')
+    + (d.scope?'<p class="ask-scope">본 범위 — '+esc(d.scope)+'</p>':'');
   if(!d.picks||!d.picks.length)
     return '<div class="ask-box">'+head
       + '<p class="ask-none">'+(d.stopped
@@ -5942,7 +5977,8 @@ function renderLaws(){
             + (lawBusy?'<span class="law-head-sep">·</span><span class="law-toggle-hint">처리 중…</span>':'')
             + '<button class="link-btn quiet-link" data-act="law-list">접기</button>'
           : '')
-      + '</div>';
+      + '</div>'
+      + lawGrpChipsHtml();
     if(lawListOpen){
       lawTidyNames();
       /* 종류별로 묶고 위계 순으로 세운다 — 열 몇 개가 되면 이름만 죽 늘어놔서는
@@ -5963,6 +5999,7 @@ function renderLaws(){
         /* 하나도 안 고르면 전부 본다. 「고른 것만」은 좁힐 때만 쓰는 장치다. */
         + '<label class="law-only"><input type="checkbox" data-act="law-only" data-id="'+l.id+'"'+(onlyOn?" checked":"")+' title="이 법령에서만 찾기" /></label>'
         + '<span class="law-name" data-act="edit" data-table="laws" data-field="name" data-id="'+l.id+'" title="눌러서 이름 수정">'+esc(l.name)+'</span>'
+        + '<button class="law-grp-tag g'+LAW_GRPS.indexOf(lawGrpOf(l))+'" data-act="law-grp" data-id="'+l.id+'" title="누르면 묶음이 바뀌어요 (공통 → 의약품 → 바이오)">'+esc(LAW_GRP_SHORT[lawGrpOf(l)])+'</button>'
         + (lawIsOld(l)?'<span class="law-old-tag">겹침</span>':'')
         /* 종류 배지는 뺐다 — 바로 위 묶음 머리말과 같은 말이다.
          * 시행일·쪽수는 폭을 고정해 세로로 줄을 맞춘다. */
@@ -6233,6 +6270,14 @@ document.getElementById("app").addEventListener("click",function(e){
       var allOn=kn.length&&kn.every(function(x){ return lawOnly[x.id]; });
       kn.forEach(function(x){ if(allOn) delete lawOnly[x.id]; else lawOnly[x.id]=true; });
       render(); break; }
+    /* 묶음 칩 — 그 묶음을 통째로 켜고 끈다. 줄의 묶음 표 — 공통 → 의약품 → 바이오 차례로 바뀐다 */
+    case "law-only-grp": {
+      var gl=lawGrpLaws(id); var gOn=gl.length&&gl.every(function(x){ return lawOnly[x.id]; });
+      gl.forEach(function(x){ if(gOn) delete lawOnly[x.id]; else lawOnly[x.id]=true; });
+      render(); break; }
+    case "law-grp": { var gw=S.laws.find(function(x){ return x.id===id; }); if(!gw) break;
+      var ng=LAW_GRPS[(LAW_GRPS.indexOf(lawGrpOf(gw))+1)%LAW_GRPS.length];
+      lawGrpSet(gw,ng).then(function(){ showToast("「"+gw.name.slice(0,18)+"」 → "+ng); }); render(); break; }
     case "ask-more": lawAskMore=true; renderLawResults(); break;
     case "law-list": lawListOpen=!lawListOpen; render(); break;
     case "law-view": openLawView(id,parseInt(el.getAttribute("data-page"),10)||1); break;

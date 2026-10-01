@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v216";
+var APP_VER="v217";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -402,17 +402,29 @@ function startEdit(el,table,id,field,type){
   } else {
     el.replaceWith(inp);
   }
+  /* 시간은 숫자만 — 숫자 자판을 띄우고 다른 글자는 걸러 낸다(v217). 한글이 들어가 「ㅓ」가 저장된 적이 있다.
+   * 「930」→9:30 · 「14」→14:00 은 normTime 이 맞춰 준다. 비우면 시간이 없어진다(일정은 「종일」). */
+  var isTime=(field==="time");
+  if(isTime){
+    inp.setAttribute("inputmode","numeric"); inp.placeholder="930 · 비우면 종일";
+    inp.addEventListener("input",function(e){ if(e.isComposing) return;
+      var c=inp.value.replace(/[^0-9:]/g,""); if(c!==inp.value) inp.value=c; });
+  }
+  /* 메모: Enter 는 저장하고 닫는다, 줄바꿈은 Shift+Enter(v217 — 이랑님 「엔터 치면 계속 밑으로 내려가서 화면 터치해야」).
+   * 출장·여행 메모만은 비행·숙소를 여러 줄로 적는 자리라 Enter 가 줄바꿈이다. */
+  var multiLine=area&&table==="events"&&isTripEv(item);
   inp.focus();
   if(isPlace) wirePlaceAC("inline-place","inline-place-ac");
   if(!type) { try{ inp.setSelectionRange(cur.length,cur.length); }catch(e){} }
   var settled=false;
   /* 날짜는 비워서 저장할 수 있어야 한다 (기한을 없애면 캘린더에서도 빠짐) */
-  var allowEmpty=(type==="date"||area);   /* 기한·메모는 비워서 지울 수 있어야 한다 */
+  var allowEmpty=(type==="date"||area||field==="time");   /* 기한·메모·시간은 비워서 지울 수 있어야 한다 */
   function commit(save){
     if(settled) return;
     settled=true; editingId=null;
     var nv=inp.value.trim();
-    if(field==="time") nv=normTime(nv);
+    if(field==="time"){ nv=normTime(nv.replace(/[^0-9:]/g,""));
+      if(nv&&!/^\d{1,2}:\d{2}$/.test(nv)){ save=false; showToast("시간은 숫자로 적어 주세요 (예: 930 → 09:30)",true); } }
     if(save&&(nv||allowEmpty)&&nv!==cur){
       item[field]=nv||null;
       var patch={}; patch[field]=nv||null;
@@ -421,8 +433,7 @@ function startEdit(el,table,id,field,type){
     render();
   }
   inp.addEventListener("keydown",function(e){
-    /* 메모는 줄바꿈을 써야 하므로 Enter로 저장하지 않는다 (blur 또는 ⌘/Ctrl+Enter) */
-    if(e.key==="Enter"&&(!area||e.metaKey||e.ctrlKey)){ e.preventDefault(); commit(true); }
+    if(e.key==="Enter"&&(!area||e.metaKey||e.ctrlKey||(!multiLine&&!e.shiftKey))){ e.preventDefault(); commit(true); }
     else if(e.key==="Escape"){ e.preventDefault(); commit(false); }
   });
   inp.addEventListener("blur",function(){ commit(true); });

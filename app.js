@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v218";
+var APP_VER="v219";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3506,9 +3506,10 @@ function lawOnlyIds(){ return Object.keys(lawOnly).filter(function(k){ return la
  * 법령이 17개가 되자 이랑님: 「유사한 것끼리 묶어서 관리 … 어떤 걸 보고 봤구나를 알 수 있게.
  * 첨바랑 바이오는 묶어도 될 것 같고, 의약품이랑 바이오는 나눠서」. 묶음은 설정 표 `law_grp`(id→묶음)에
  * 두고, 안 적힌 법령은 이름으로 짐작한다 — 표 구조는 안 건드린다. 위계(법·규칙·고시) 묶음은 그대로다. */
-var LAW_GRPS=["공통","의약품","바이오·첨단바이오"];
-var LAW_GRP_SHORT={"공통":"공통","의약품":"의약품","바이오·첨단바이오":"바이오"};
+var LAW_GRPS=["공통","의약품","바이오·첨단바이오","의약외품"];   /* 의약외품은 따로(이랑님 10/2) */
+var LAW_GRP_SHORT={"공통":"공통","의약품":"의약품","바이오·첨단바이오":"바이오","의약외품":"의약외품"};
 function lawGrpGuess(name){ name=nfc(name||"");
+  if(/의약외품/.test(name)) return "의약외품";
   if(/첨단|생물|바이오|세포|생균|인체/.test(name)) return "바이오·첨단바이오";
   if(/약사법|안전에 관한 규칙|시설기준령|의약품 제조 및 품질관리에 관한 규정/.test(name)) return "공통";
   return "의약품"; }
@@ -5999,7 +6000,7 @@ function renderLaws(){
         /* 하나도 안 고르면 전부 본다. 「고른 것만」은 좁힐 때만 쓰는 장치다. */
         + '<label class="law-only"><input type="checkbox" data-act="law-only" data-id="'+l.id+'"'+(onlyOn?" checked":"")+' title="이 법령에서만 찾기" /></label>'
         + '<span class="law-name" data-act="edit" data-table="laws" data-field="name" data-id="'+l.id+'" title="눌러서 이름 수정">'+esc(l.name)+'</span>'
-        + '<button class="law-grp-tag g'+LAW_GRPS.indexOf(lawGrpOf(l))+'" data-act="law-grp" data-id="'+l.id+'" title="누르면 묶음이 바뀌어요 (공통 → 의약품 → 바이오)">'+esc(LAW_GRP_SHORT[lawGrpOf(l)])+'</button>'
+        + '<button class="law-grp-tag g'+LAW_GRPS.indexOf(lawGrpOf(l))+'" data-act="law-grp" data-id="'+l.id+'" title="누르면 묶음이 바뀌어요 (공통 → 의약품 → 바이오 → 의약외품)">'+esc(LAW_GRP_SHORT[lawGrpOf(l)])+'</button>'
         + (lawIsOld(l)?'<span class="law-old-tag">겹침</span>':'')
         /* 종류 배지는 뺐다 — 바로 위 묶음 머리말과 같은 말이다.
          * 시행일·쪽수는 폭을 고정해 세로로 줄을 맞춘다. */

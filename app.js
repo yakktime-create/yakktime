@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v220";
+var APP_VER="v221";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3506,11 +3506,11 @@ function lawOnlyIds(){ return Object.keys(lawOnly).filter(function(k){ return la
  * 법령이 17개가 되자 이랑님: 「유사한 것끼리 묶어서 관리 … 어떤 걸 보고 봤구나를 알 수 있게.
  * 첨바랑 바이오는 묶어도 될 것 같고, 의약품이랑 바이오는 나눠서」. 묶음은 설정 표 `law_grp`(id→묶음)에
  * 두고, 안 적힌 법령은 이름으로 짐작한다 — 표 구조는 안 건드린다. 위계(법·규칙·고시) 묶음은 그대로다. */
-var LAW_GRPS=["공통","의약품","바이오·첨단바이오","의약외품","내부 규정"];   /* 의약외품은 따로(이랑님 10/2) */
-var LAW_GRP_SHORT={"공통":"공통","의약품":"의약품","바이오·첨단바이오":"바이오","의약외품":"의약외품","내부 규정":"내부"};
+var LAW_GRPS=["공통","의약품","바이오·첨단바이오","의약외품","소관 판단용"];   /* 「내부 규정」은 애매하다고(10/6) → 쓰임새 그대로 */   /* 의약외품은 따로(이랑님 10/2) */
+var LAW_GRP_SHORT={"공통":"공통","의약품":"의약품","바이오·첨단바이오":"바이오","의약외품":"의약외품","소관 판단용":"소관"};
 /* 「내부 규정」(직제 시행규칙·민원처리 규정)은 답변 근거가 아니라 **우리 사정**이다 — 조문 찾기·검색 범위에서 평소엔 빠지고,
  * 소관 판단(lawTriage)에만 쓴다. 칩을 눌러 고르면 그때만 찾는다(v220 · 2026-10-06). */
-var LAW_GRP_INTERNAL="내부 규정";
+var LAW_GRP_INTERNAL="소관 판단용";
 function lawGrpGuess(name){ name=nfc(name||"");
   if(/직제|민원 처리에 관한 규정|민원처리|훈령|예규/.test(name)) return LAW_GRP_INTERNAL;
   if(/의약외품/.test(name)) return "의약외품";
@@ -3518,7 +3518,7 @@ function lawGrpGuess(name){ name=nfc(name||"");
   if(/약사법|안전에 관한 규칙|시설기준령|의약품 제조 및 품질관리에 관한 규정/.test(name)) return "공통";
   return "의약품"; }
 function lawGrpMap(){ try{ return JSON.parse(setGet("law_grp")||"{}")||{}; }catch(e){ return {}; } }
-function lawGrpOf(l){ var g=lawGrpMap()[l.id]; return LAW_GRPS.indexOf(g)>=0?g:lawGrpGuess(l.name); }
+function lawGrpOf(l){ var g=lawGrpMap()[l.id]; if(g==="내부 규정") g=LAW_GRP_INTERNAL; return LAW_GRPS.indexOf(g)>=0?g:lawGrpGuess(l.name); }
 function lawGrpSet(l,g){ var m=lawGrpMap(); m[l.id]=g; return setPut("law_grp",JSON.stringify(m)); }
 function lawGrpLaws(g){ return S.laws.filter(function(l){ return lawGrpOf(l)===g; }); }
 /* 찾을 범위의 법령 id — 고른 게 없으면 내부 규정만 뺀 전부. 고른 게 있으면 그것(내부 규정도 고르면 들어간다). */
@@ -3542,7 +3542,7 @@ function lawGrpChipsHtml(){
     var ls=lawGrpLaws(g); if(!ls.length) return "";
     var all=ls.every(function(l){ return on[l.id]; });
     return '<button class="law-grp-chip g'+i+(all?" on":"")+'" data-act="law-only-grp" data-id="'+esc(g)+'" title="이 묶음에서만 찾기">'+esc(g)+' <b>'+ls.length+'</b></button>';
-  }).join("")+'<span class="law-grps-hint">'+(narrowed?"고른 범위에서만 찾아요":"누르면 그 묶음에서만 찾아요 · 내부 규정은 눌러야 찾아요")+'</span></div>';
+  }).join("")+'<span class="law-grps-hint">'+(narrowed?"고른 범위에서만 찾아요":"누르면 그 묶음에서만 찾아요 · 소관 판단용은 조문 찾기엔 안 써요")+'</span></div>';
 }
 function lawOnlyLabel(){
   var ids=lawOnlyIds(); if(!ids.length||ids.length===S.laws.length) return "";
@@ -6029,7 +6029,8 @@ function renderLaws(){
        * 어느 게 법이고 어느 게 지침인지 알 수 없다. 칸 높이를 잡아 그 안에서
        * 굴리게 하고, 아래 내용이 저 멀리 밀려나지 않게 한다. */
       var cur=null;
-      list+='<div class="law-list grouped">'+lawSorted().map(function(l){
+      var internals=lawSorted().filter(function(l){ return lawGrpOf(l)===LAW_GRP_INTERNAL; });
+      list+='<div class="law-list grouped">'+lawSorted().filter(function(l){ return lawGrpOf(l)!==LAW_GRP_INTERNAL; }).map(function(l){
       var onlyOn=!!lawOnly[l.id], kd=lawKindOf(l), head="";
       if(kd.t!==cur){ cur=kd.t;
         var kn=lawSorted().filter(function(x){ return lawKindOf(x).n===kd.n; });
@@ -6055,7 +6056,13 @@ function renderLaws(){
             ? '<button class="law-ic" data-act="law-site" data-id="'+l.id+'" title="법제처에서 보기">↗</button>'
             : '<button class="law-ic" data-act="law-pdf" data-id="'+l.id+'" data-page="1" title="PDF 원문 열기">↗</button>')
         + '<button class="law-ic del" data-act="law-del" data-id="'+l.id+'" title="삭제">✕</button></div>';
-      }).join("")+'</div>';
+      }).join("")
+      /* 소관 판단용(직제 시행규칙·민원처리 규정)은 맨 아래 한 줄로 접는다 — 소관 판단에만 쓰고 조문 후보엔 안 든다 */
+      + (internals.length?'<div class="law-internal">소관 판단용 '+internals.length+'개 — '
+          + internals.map(function(l){ return '<span class="law-internal-n">'+esc(l.name)+'</span>'; }).join(" · ")
+          + ' <span class="dim">조문 찾기엔 안 써요. 묶음 표를 바꾸면 보통 법령처럼 다룹니다.</span>'
+          + internals.map(function(l){ return '<button class="law-grp-tag g4" data-act="law-grp" data-id="'+l.id+'" title="누르면 묶음이 바뀌어요">소관</button>'; }).join("")+'</div>':'')
+      + '</div>';
     }
   }
 

@@ -1110,6 +1110,9 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .triage-mine.m-no{background:#FBECE4;color:var(--brick);}
 .triage-note{display:block;margin-top:4px;font-size:var(--fs-xs);color:var(--muted);}
 .law-grp-tag.g4{background:#EEE;color:var(--muted);}
+.law-internal{padding:8px 10px;font-size:var(--fs-xs);color:var(--muted);border-top:1px dashed var(--line);margin-top:var(--sp-2);display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-2);align-items:center;}
+.law-internal-n{color:var(--ink);}
+.law-internal .dim{opacity:.8;}
 /* 법령 목록 — 열 몇 개가 되면 아래 내용이 저 멀리 밀려난다. 칸 높이를 잡고
    그 안에서 굴린다. 종류 머리말은 굴려도 위에 붙어 있게 한다. */
 /* 종류별로 묶은 목록. 민원 자료도 .law-list 를 쓰므로 .grouped 로만 좁힌다. */

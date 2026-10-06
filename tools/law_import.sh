@@ -59,7 +59,11 @@ PY
 curl -s -o /dev/null localhost:8778 || (cd "$R" && nohup python3 serve.py >/dev/null 2>&1 &); sleep 1
 : > "$R/run.log"
 NAMES=$(python3 -c "import sys,urllib.parse;print(urllib.parse.quote('|'.join(sys.argv[1:])))" "$@")
-pkill -f "headless=new" 2>/dev/null; sleep 1
+pkill -f "headless=new" 2>/dev/null || true; sleep 3   # set -e 라 pkill 이 아무것도 못 찾으면(1) 여기서 죽는다 — 10/6 두 번 헛돌았다
+# --screenshot 모드는 10/6 부터 페이지 스크립트가 돌기 전에 멈췄다 → --dump-dom 으로 띄우고, run.log 에 DONE 이 찍히면 크롬을 죽인다(최대 300초)
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu --user-data-dir=/tmp/claude-501/chromeprof \
-  --virtual-time-budget=60000 --window-size=1200,900 --screenshot="$R/shot.png" "http://localhost:8778/index_real.html?tab=laws&names=$NAMES" >/dev/null 2>&1
-sleep 2; grep -v " toast " "$R/run.log"
+  --virtual-time-budget=120000 --dump-dom "http://localhost:8778/index_real.html?tab=laws&names=$NAMES" >/dev/null 2>&1 &
+CP=$!
+for i in $(seq 1 300); do sleep 1; grep -q "DONE" "$R/run.log" 2>/dev/null && break; kill -0 $CP 2>/dev/null || break; done
+kill $CP 2>/dev/null; sleep 1
+grep -v " toast " "$R/run.log"

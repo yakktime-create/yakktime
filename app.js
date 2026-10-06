@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v219";
+var APP_VER="v220";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3506,9 +3506,13 @@ function lawOnlyIds(){ return Object.keys(lawOnly).filter(function(k){ return la
  * 법령이 17개가 되자 이랑님: 「유사한 것끼리 묶어서 관리 … 어떤 걸 보고 봤구나를 알 수 있게.
  * 첨바랑 바이오는 묶어도 될 것 같고, 의약품이랑 바이오는 나눠서」. 묶음은 설정 표 `law_grp`(id→묶음)에
  * 두고, 안 적힌 법령은 이름으로 짐작한다 — 표 구조는 안 건드린다. 위계(법·규칙·고시) 묶음은 그대로다. */
-var LAW_GRPS=["공통","의약품","바이오·첨단바이오","의약외품"];   /* 의약외품은 따로(이랑님 10/2) */
-var LAW_GRP_SHORT={"공통":"공통","의약품":"의약품","바이오·첨단바이오":"바이오","의약외품":"의약외품"};
+var LAW_GRPS=["공통","의약품","바이오·첨단바이오","의약외품","내부 규정"];   /* 의약외품은 따로(이랑님 10/2) */
+var LAW_GRP_SHORT={"공통":"공통","의약품":"의약품","바이오·첨단바이오":"바이오","의약외품":"의약외품","내부 규정":"내부"};
+/* 「내부 규정」(직제 시행규칙·민원처리 규정)은 답변 근거가 아니라 **우리 사정**이다 — 조문 찾기·검색 범위에서 평소엔 빠지고,
+ * 소관 판단(lawTriage)에만 쓴다. 칩을 눌러 고르면 그때만 찾는다(v220 · 2026-10-06). */
+var LAW_GRP_INTERNAL="내부 규정";
 function lawGrpGuess(name){ name=nfc(name||"");
+  if(/직제|민원 처리에 관한 규정|민원처리|훈령|예규/.test(name)) return LAW_GRP_INTERNAL;
   if(/의약외품/.test(name)) return "의약외품";
   if(/첨단|생물|바이오|세포|생균|인체/.test(name)) return "바이오·첨단바이오";
   if(/약사법|안전에 관한 규칙|시설기준령|의약품 제조 및 품질관리에 관한 규정/.test(name)) return "공통";
@@ -3517,9 +3521,17 @@ function lawGrpMap(){ try{ return JSON.parse(setGet("law_grp")||"{}")||{}; }catc
 function lawGrpOf(l){ var g=lawGrpMap()[l.id]; return LAW_GRPS.indexOf(g)>=0?g:lawGrpGuess(l.name); }
 function lawGrpSet(l,g){ var m=lawGrpMap(); m[l.id]=g; return setPut("law_grp",JSON.stringify(m)); }
 function lawGrpLaws(g){ return S.laws.filter(function(l){ return lawGrpOf(l)===g; }); }
-/* AI 가 본 범위 — 「공통 4 · 바이오·첨단바이오 10」. 아무것도 안 골랐으면 전부다. */
+/* 찾을 범위의 법령 id — 고른 게 없으면 내부 규정만 뺀 전부. 고른 게 있으면 그것(내부 규정도 고르면 들어간다). */
+function lawScopeIds(){
+  var ids=lawOnlyIds();
+  if(ids.length) return ids;
+  return S.laws.filter(function(l){ return lawGrpOf(l)!==LAW_GRP_INTERNAL; }).map(function(l){ return l.id; });
+}
+/* 서버에 보낼 lawIds — 전부(내부 규정 없을 때)면 null, 아니면 목록 */
+function lawScopeParam(){ var ids=lawScopeIds(); return ids.length===S.laws.length?null:ids; }
+/* AI 가 본 범위 — 「공통 4 · 바이오·첨단바이오 10」. */
 function lawScopeLabel(){
-  var ids=lawOnlyIds(); if(!ids.length||ids.length===S.laws.length) ids=S.laws.map(function(l){ return l.id; });
+  var ids=lawScopeIds();
   var cnt={}; ids.forEach(function(id){ var l=S.laws.find(function(x){ return x.id===id; }); if(!l) return; var g=lawGrpOf(l); cnt[g]=(cnt[g]||0)+1; });
   return LAW_GRPS.filter(function(g){ return cnt[g]; }).map(function(g){ return g+" "+cnt[g]; }).join(" · ");
 }
@@ -3530,7 +3542,7 @@ function lawGrpChipsHtml(){
     var ls=lawGrpLaws(g); if(!ls.length) return "";
     var all=ls.every(function(l){ return on[l.id]; });
     return '<button class="law-grp-chip g'+i+(all?" on":"")+'" data-act="law-only-grp" data-id="'+esc(g)+'" title="이 묶음에서만 찾기">'+esc(g)+' <b>'+ls.length+'</b></button>';
-  }).join("")+'<span class="law-grps-hint">'+(narrowed?"고른 범위에서만 찾아요":"누르면 그 묶음에서만 찾아요")+'</span></div>';
+  }).join("")+'<span class="law-grps-hint">'+(narrowed?"고른 범위에서만 찾아요":"누르면 그 묶음에서만 찾아요 · 내부 규정은 눌러야 찾아요")+'</span></div>';
 }
 function lawOnlyLabel(){
   var ids=lawOnlyIds(); if(!ids.length||ids.length===S.laws.length) return "";
@@ -3581,8 +3593,9 @@ function lawAskRun(){
   },4200);
   render();
   function done(){ lawAskStop(); lawAsking=false; render(); }
-  var only=lawOnlyIds(), scopeLbl=lawScopeLabel();   /* 결과가 올 때 범위를 바꿨을 수 있으니 지금 적어 둔다 */
-  sb.functions.invoke("law-pick",{body:{q:q,lawIds:(only.length&&only.length<S.laws.length)?only:null,rules:setGet("ai_rules")}}).then(function(r){
+  var scopeLbl=lawScopeLabel();   /* 결과가 올 때 범위를 바꿨을 수 있으니 지금 적어 둔다 */
+  lawTriageAsk(q);                 /* 소관 판단은 따로, 같이 돈다 — 쪽지 한 줄 */
+  sb.functions.invoke("law-pick",{body:{q:q,lawIds:lawScopeParam(),rules:setGet("ai_rules")}}).then(function(r){
     var d=r&&r.data;
     if(!d){ showToast("물어보지 못했어요: "+((r&&r.error&&r.error.message)||"응답이 비었어요"),true); done(); return; }
     if(d.error){ showToast(d.error,true); done(); return; }
@@ -3620,13 +3633,41 @@ function aiCostLabel(d){
   /* 「맥에서」는 안 쓴다 — 모델과 금액만(이랑님 「모델이랑 금액만 써도 될 듯」) */
   return (who?who+" · ":"")+(d.krw||0)+"원";
 }
+/* ---- 소관 판단 (v220 · 2026-10-06) — 이랑님 「내가 어떤 과에 있는지 먼저 체크하고 내가 답변할 게 맞는지」.
+ * law-pick 의 op:"triage" 가 직제 시행규칙 분장 + 민원처리 규정 제7조를 읽고 주관·협조·지방청 몫을 낸다(맥에서 0원).
+ * 조문 찾기와 **같이** 돌고 결과는 쪽지 맨 위 한 줄. 내 과는 설정 my_div(없으면 바이오의약품품질관리과). */
+var lawTriage=null;   /* {q, data|null, err|null} */
+function lawTriageAsk(q){
+  lawTriage={q:q,data:null,err:null};
+  sb.functions.invoke("law-pick",{body:{op:"triage",q:q,myDiv:setGet("my_div")||"바이오의약품품질관리과"}}).then(function(r){
+    if(!lawTriage||lawTriage.q!==q) return;
+    var d=r&&r.data;
+    if(!d||d.error) lawTriage.err=(d&&d.error)||((r&&r.error&&r.error.message)||"응답이 비었어요");
+    else lawTriage.data=d;
+    if(lawAsk&&lawAsk.q===q) renderLawResults();
+  },function(e){ if(lawTriage&&lawTriage.q===q){ lawTriage.err=String(e&&e.message||e); if(lawAsk&&lawAsk.q===q) renderLawResults(); } });
+}
+function lawTriageHtml(q){
+  var t=lawTriage; if(!t||t.q!==q) return "";
+  if(t.err) return '<p class="ask-triage dim">소관을 가르지 못했어요 — '+esc(t.err)+'</p>';
+  if(!t.data) return '<p class="ask-triage dim">소관 가르는 중…</p>';
+  var d=t.data, mine=d.mine||"";
+  var pill='<span class="triage-mine m-'+(mine==="주관"?"own":mine==="협조"?"coop":"no")+'">'+esc(mine==="아님"?"우리 과 아님":"우리 과 "+mine)+'</span>';
+  var parts=['<b>주관</b> '+esc(d.owner||"?")+(d.ownerBasis?' <span class="dim">('+esc(d.ownerBasis)+')</span>':'')];
+  (d.coop||[]).forEach(function(c){ parts.push('<b>협조</b> '+esc(c.div)+(c.why?' <span class="dim">('+esc(c.why)+')</span>':'')); });
+  if(d.local) parts.push('<b>지방청</b> '+esc(d.localWhy||"개별 허가·시설 적합 판단"));
+  return '<p class="ask-triage">'+pill+' '+parts.join(' · ')
+    + (d.note?'<span class="triage-note">'+esc(d.note)+'</span>':'')
+    + (mine==="아님"?'<span class="triage-note">우리 과 몫이 아니면 민원처리 규정 제7조②에 따라 재분류 신청을 검토하세요.</span>':'')+'</p>';
+}
 function lawAskNoteHtml(){
   var d=lawAsk; if(!d) return "";
   var head='<div class="ask-head"><span class="ask-qt">「'+esc(d.q)+'」</span>'
     + '<span class="ask-cost">'+esc(aiCostLabel(d))+'</span>'
     + '<button class="link-btn quiet-link ask-x" data-act="ask-close" title="AI 결과 닫기">닫기 ✕</button></div>'
     + (d.gist?'<p class="ask-gist"><b>AI 가 읽은 핵심</b> — '+esc(d.gist)+' <span class="ask-dim">이게 아니면 질문을 고쳐 다시 물어보세요.</span></p>':'')
-    + (d.scope?'<p class="ask-scope">본 범위 — '+esc(d.scope)+'</p>':'');
+    + (d.scope?'<p class="ask-scope">본 범위 — '+esc(d.scope)+'</p>':'')
+    + lawTriageHtml(d.q);
   if(!d.picks||!d.picks.length)
     return '<div class="ask-box">'+head
       + '<p class="ask-none">'+(d.stopped
@@ -3693,8 +3734,8 @@ function lawSemSearch(q,auto){
   sb.functions.invoke("law-embed",{body:{op:"query",q:q,k:SEM_HITS*2}}).then(function(r){
     var d=r&&r.data;
     if(!d||d.error) throw new Error((d&&d.error)||((r&&r.error&&r.error.message)||"응답이 비었어요"));
-    var rows=d.rows||[], only=lawOnlyIds();
-    if(only.length&&only.length<S.laws.length) rows=rows.filter(function(x){ return only.indexOf(String(x.law_id))>=0; });
+    var rows=d.rows||[], only=lawScopeIds();
+    if(only.length<S.laws.length) rows=rows.filter(function(x){ return only.indexOf(String(x.law_id))>=0; });
     rows=rows.filter(function(x){ return Number(x.sim)>=SEM_FLOOR; }).slice(0,SEM_HITS);
     if(!rows.length){ lawSearching=false; lawHits=[]; renderLawResults(); return; }
     var ids=rows.map(function(x){ return x.id; });
@@ -3745,6 +3786,8 @@ function lawSearch(){
     return withAuthRetry(function(){
       var qb=sb.from("law_articles")
         .select("id,law_id,seq,label,num,page,page_end,content"+(lawTblCol?",tbl":""));
+      /* 고른 범위(없으면 내부 규정 뺀 전부)에서만 — 낱말 검색은 그동안 범위를 안 걸었다(v220) */
+      var scope=lawScopeIds(); if(scope.length<S.laws.length) qb=qb.in("law_id",scope);
       /* 낱말마다 조건을 겹쳐 걸면 모두 들어 있는 조문만 남는다 (교집합) */
       lawTermList.forEach(function(t){ qb=qb.ilike("content","%"+escLike(t)+"%"); });
       /* **잘린 줄 모르는 것이 제일 위험하다.** 「제조」「의약품」「시험」「관리」

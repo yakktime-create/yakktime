@@ -22,7 +22,7 @@ MOCK.mfds=[{id:"m2",title:"이진호 선생님에게 문서 전달",status:"대�
 MOCK.schedule=[{id:"s1",text:"보완 회신 검토",due_date:K(0),done:false,star:true}];
 MOCK.laws=[{id:"l1",name:"약사법",kind:"법률",src:"api",arts:216},{id:"l2",name:"의약품 등의 안전에 관한 규칙",kind:"총리령",src:"api",arts:456},
   {id:"l3",name:"의약품 제조 및 품질관리에 관한 규정",kind:"고시",src:"api",arts:261},{id:"l4",name:"바이오의약품 사전 GMP 평가 지침",kind:"지침",pages:52,arts:120},
-  {id:"l5",name:"첨단바이오의약품 안전 및 지원에 관한 규칙",kind:"총리령",src:"api",arts:82},{id:"l6",name:"의약품등 품목별 사전 GMP 평가 운영지침[공무원 지침서]",kind:"지침",pages:27,arts:90},{id:"l7",name:"의약외품 품목허가·신고·심사 규정",kind:"고시",src:"api",arts:52}];
+  {id:"l5",name:"첨단바이오의약품 안전 및 지원에 관한 규칙",kind:"총리령",src:"api",arts:82},{id:"l6",name:"의약품등 품목별 사전 GMP 평가 운영지침[공무원 지침서]",kind:"지침",pages:27,arts:90},{id:"l7",name:"의약외품 품목허가·신고·심사 규정",kind:"고시",src:"api",arts:52},{id:"l8",name:"식품의약품안전처 민원 처리에 관한 규정",kind:"훈령",src:"api",arts:27}];
 MOCK.articles=[{id:"a1",title:"반려동물 항생제 오남용",status:"기획",memo:"10월호"},{id:"a2",title:"동물용 백신 콜드체인",status:"작성중",memo:""},{id:"a3",title:"수의사 처방전 제도",status:"기고완료",memo:"9월호"}];
 (function(){ var TPL=window.__TPL; if(!TPL) return; var id="insp-1";
   MOCK.inspections=[{id:id,title:"AstraZeneca Pharmaceuticals LP",site:null,start_date:"2026-09-14",end_date:"2026-09-18",buildings:[{name:"633",mode:"변경만"},{name:"636",mode:"전체"}],areas:TPL.mine.slice(),partner:"김해인 선생님",status:"진행",notes:null,tpl:TPL.version}];

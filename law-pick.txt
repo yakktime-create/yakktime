@@ -473,8 +473,50 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) return json({ error: "ANTHROPIC_API_KEY 가 없어요. Edge Functions 비밀값에 넣어주세요." });
 
-    const { q, lawIds, rules: rulesIn } = await req.json().catch(() => ({ q: "", lawIds: null, rules: "" }));
+    const bodyIn = await req.json().catch(() => ({ q: "", lawIds: null, rules: "" }));
+    const { q, lawIds, rules: rulesIn } = bodyIn;
     const question = String(q || "").trim();
+    // ---- 소관 판단 (op:"triage" · 2026-10-06) ----------------------------------------
+    // 이랑님 「내가 어떤 과에 있는지 먼저 체크하고 내가 답변할 게 맞는지」. 직제 시행규칙의 과별 분장과
+    // 민원처리 규정 제7조(분류 기준: 직제상 분장 → 항목 수·난이도 → 종전 처리부서 → 상위 서열 → 협의)를 읽고
+    // 주관 과·협조 과·지방청 몫인지를 짧게 낸다. 조문 후보가 아니라 **쪽지 한 줄**이다 — 답변 근거로 인용하지 않는다.
+    if (bodyIn?.op === "triage") {
+      if (question.length < 5) return json({ error: "질문을 조금 더 길게 적어주세요." });
+      const { data: laws } = await pg("laws?select=id,name");
+      const jj = (laws || []).find((l: any) => /직제 시행규칙/.test(l.name));
+      const mw = (laws || []).find((l: any) => /민원 처리에 관한 규정/.test(l.name));
+      if (!jj) return json({ error: "직제 시행규칙이 아직 법령 탭에 없어요." });
+      const { data: jjArts } = await pgAll("law_articles?select=label,content&order=seq&law_id=eq." + jj.id, 3000);
+      // 과장 분장 문단이 있는 조만, 그중 의약품·바이오·의료기기·허가·심사 쪽 국(局)만 — 식품 쪽은 뺀다
+      const divs = (jjArts || []).filter((a: any) => /과장은 다음 사항을 분장한다/.test(a.content) &&
+        /의약품|바이오|의료기기|허가|심사|생약|지방식품의약품안전청/.test(a.label + a.content.slice(0, 400)));
+      let sheet = divs.map((a: any) => `[${a.label}]\n${a.content.slice(0, 14000)}`).join("\n\n");
+      if (sheet.length > 90000) sheet = sheet.slice(0, 90000);
+      let art7 = "";
+      if (mw) { const { data: m } = await pg("law_articles?select=content&law_id=eq." + mw.id + "&label=like.*%EC%A0%9C7%EC%A1%B0*&limit=1"); art7 = m?.[0]?.content || ""; }
+      const myDiv = String(bodyIn.myDiv || "바이오의약품품질관리과");
+      const TRIAGE_SCHEMA = { type: "object", properties: {
+        owner: { type: "string" }, ownerBasis: { type: "string" },
+        coop: { type: "array", items: { type: "object", properties: { div: { type: "string" }, why: { type: "string" } }, required: ["div", "why"], additionalProperties: false } },
+        local: { type: "boolean" }, localWhy: { type: "string" },
+        mine: { type: "string", enum: ["주관", "협조", "아님"] }, note: { type: "string" } },
+        required: ["owner", "ownerBasis", "coop", "local", "localWhy", "mine", "note"], additionalProperties: false };
+      const sys = `너는 식품의약품안전처 민원을 어느 부서가 맡을지 가르는 도구다. 답은 JSON 하나만 낸다.
+기준은 「식품의약품안전처 민원 처리에 관한 규정」 제7조다: 2개 이상 부서에 걸치면 가장 관계가 많은 부서 하나가 주관.
+재분류 순서: ① 직제상 업무분장 ② 검토 항목 수·난이도 ③ 종전 처리부서 ④ 직제상 상위 서열 ⑤ 부서 간 협의.
+- owner: 주관 과 이름 하나(직제 시행규칙에 있는 이름 그대로). ownerBasis: 「과 이름 분장 N호 '…'」 꼴로 근거 호를 짚는다.
+- coop: 질문의 다른 갈래를 맡는 과(있을 때만). 각각 분장 호를 why 에 적는다.
+- local: 개별 업 허가·시설 적합 판단처럼 **관할 지방식품의약품안전청**이 하는 일이 섞여 있으면 true, localWhy 에 한 줄.
+- mine: 담당자의 과(${myDiv})가 주관이면 "주관", 협조면 "협조", 둘 다 아니면 "아님".
+- note: 한두 문장. 질문이 여러 갈래면 갈래마다 어느 과인지. 분장에 없는 말은 지어내지 않는다.
+모두 한국어.`;
+      const prompt = `민원 질문:\n${question}\n\n<민원처리 규정 제7조>\n${art7}\n</민원처리 규정 제7조>\n\n<직제 시행규칙 과별 분장>\n${sheet}\n</직제 시행규칙 과별 분장>`;
+      const a = await askJson(apiKey, (cfg: Cfg) => ({
+        model: cfg.id, max_tokens: 1200 * cfg.room, system: sys,
+        messages: [{ role: "user", content: prompt }], output_config: outCfg(cfg, TRIAGE_SCHEMA) }));
+      if (!a.p) return json({ error: "소관을 가르지 못했어요.", ...whyNoJson(a.res), krw: Math.round(a.usd * KRW) });
+      return json({ ...a.p, divs: divs.length, krw: Math.round(a.usd * KRW), model: a.cfg.id, via: a.res?.via || "api", fellBack: a.fellBack });
+    }
     // 담당자가 앱에 적어 둔 「우리 과 규칙」(평문). 1차·2차 프롬프트에 그대로 붙인다.
     const rules = String(rulesIn || "").trim().slice(0, 4000);
     const rulesBlock = rules ? `\n\n<담당자 규칙>\n${rules}\n</담당자 규칙>` : "";

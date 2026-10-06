@@ -1101,6 +1101,15 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .law-grp-tag.g2{background:var(--accent-soft);color:var(--accent);}
 .law-grp-tag.g3{background:#F5EEDC;color:var(--brass);}   /* 의약외품 — 놋쇠색 */
 .ask-scope{margin:0 0 var(--sp-3);font-size:var(--fs-xs);color:var(--muted);}
+/* 소관 판단 한 줄 (v220) — 쪽지 맨 위. 우리 과 주관/협조/아님 알약 + 주관·협조·지방청 */
+.ask-triage{margin:0 0 var(--sp-3);font-size:var(--fs-sm);color:var(--ink);line-height:var(--lh-body);}
+.ask-triage .dim,.ask-triage.dim{color:var(--muted);}
+.triage-mine{display:inline-block;font-size:var(--fs-xs);font-weight:700;padding:2px 9px;border-radius:var(--r-full);margin-right:var(--sp-2);vertical-align:1px;}
+.triage-mine.m-own{background:var(--accent-soft);color:var(--accent);}
+.triage-mine.m-coop{background:var(--blue-soft);color:var(--blue-deep);}
+.triage-mine.m-no{background:#FBECE4;color:var(--brick);}
+.triage-note{display:block;margin-top:4px;font-size:var(--fs-xs);color:var(--muted);}
+.law-grp-tag.g4{background:#EEE;color:var(--muted);}
 /* 법령 목록 — 열 몇 개가 되면 아래 내용이 저 멀리 밀려난다. 칸 높이를 잡고
    그 안에서 굴린다. 종류 머리말은 굴려도 위에 붙어 있게 한다. */
 /* 종류별로 묶은 목록. 민원 자료도 .law-list 를 쓰므로 .grouped 로만 좁힌다. */

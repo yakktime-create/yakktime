@@ -1093,6 +1093,7 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .law-grp-chip b{font-weight:700;color:var(--ink);}
 .law-grp-chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
 .law-grp-chip.on b{color:var(--accent);}
+.law-grps.is-busy .law-grp-chip{opacity:.45;cursor:default;}   /* 조문 찾는 동안 잠금 (v224) */
 .law-grps-hint{margin-left:auto;font-size:var(--fs-xs);color:var(--muted);}
 /* 줄마다 붙는 묶음 표 — 누르면 차례로 바뀐다 */
 .law-grp-tag{font:inherit;font-size:var(--fs-2xs);font-weight:700;border:none;border-radius:var(--r-full);padding:2px 8px;cursor:pointer;flex-shrink:0;}

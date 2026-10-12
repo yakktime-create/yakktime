@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v223";
+var APP_VER="v224";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3539,11 +3539,11 @@ function lawScopeLabel(){
 function lawGrpChipsHtml(){
   var on={}; lawOnlyIds().forEach(function(i){ on[i]=1; });
   var narrowed=lawOnlyIds().length&&lawOnlyIds().length<S.laws.length;
-  return '<div class="law-grps">'+LAW_GRPS.map(function(g,i){
+  return '<div class="law-grps'+(lawAsking?" is-busy":"")+'">'+LAW_GRPS.map(function(g,i){
     var ls=lawGrpLaws(g); if(!ls.length) return "";
     var all=ls.every(function(l){ return on[l.id]; });
-    return '<button class="law-grp-chip g'+i+(all?" on":"")+'" data-act="law-only-grp" data-id="'+esc(g)+'" title="이 묶음에서만 찾기">'+esc(g)+' <b>'+ls.length+'</b></button>';
-  }).join("")+'<span class="law-grps-hint">'+(narrowed?"고른 범위에서만 찾아요":"누르면 그 묶음에서만 찾아요 · 소관 판단용은 조문 찾기엔 안 써요")+'</span></div>';
+    return '<button class="law-grp-chip g'+i+(all?" on":"")+'"'+(lawAsking?' disabled':'')+' data-act="law-only-grp" data-id="'+esc(g)+'" title="이 묶음에서만 찾기">'+esc(g)+' <b>'+ls.length+'</b></button>';
+  }).join("")+'<span class="law-grps-hint">'+(lawAsking?"조문을 찾는 동안은 범위를 바꿀 수 없어요 — 지금 범위로 찾고 있어요":narrowed?"고른 범위에서만 찾아요":"누르면 그 묶음에서만 찾아요 · 소관 판단용은 조문 찾기엔 안 써요")+'</span></div>';
 }
 function lawOnlyLabel(){
   var ids=lawOnlyIds(); if(!ids.length||ids.length===S.laws.length) return "";
@@ -3596,6 +3596,7 @@ function lawAskRun(){
   },4200);
   render();
   var scopeLbl=lawScopeLabel();   /* 결과가 올 때 범위를 바꿨을 수 있으니 지금 적어 둔다 */
+  lawAskScopeIds=lawScopeParam();  /* 범위도 누른 순간 것으로 고정 */
   /* ① 소관 판단 → ② 우리 몫 갈래만으로 조문 찾기 (2026-10-12 — 이랑님 「협조 질의가 들어오면 우리가 답변할 조문만 찾도록」).
    * 소관 판단이 실패하면 예전처럼 전체 질문으로 간다 — 막히지 않는다. */
   lawTriageAsk(q).then(function(){
@@ -3611,7 +3612,7 @@ function lawAskRun(){
   });
 }
 /* 갈래 고르기 — 소관 판단의 parts 가운데 조문 찾기에 넣을 번호. 기본은 「아님」이 아닌 것 전부. */
-var lawFocusSel=[];
+var lawFocusSel=[], lawAskScopeIds;
 function lawTriParts(){ var t=lawTriage; return (t&&t.data&&t.data.parts)||[]; }
 function lawFocusInit(){ lawFocusSel=lawTriParts().filter(function(p){ return p.mine!=="아님"; }).map(function(p){ return p.no; }); }
 /* AI 에게 보낼 글 — 전부 우리 몫이면 민원 그대로, 아니면 배경 + 고른 갈래만 */
@@ -3630,7 +3631,7 @@ function lawPickRun(q,scopeLbl){
   renderLawResults();
   function done(){ lawAskStop(); lawAsking=false; render(); }
   var fq=lawFocusText(q), used=lawFocusSel.slice(), partial=fq!==q;
-  sb.functions.invoke("law-pick",{body:{q:fq,lawIds:lawScopeParam(),rules:setGet("ai_rules")}}).then(function(r){
+  sb.functions.invoke("law-pick",{body:{q:fq,lawIds:lawAskScopeIds===undefined?lawScopeParam():lawAskScopeIds,rules:setGet("ai_rules")}}).then(function(r){
     var d=r&&r.data;
     if(!d){ showToast("물어보지 못했어요: "+((r&&r.error&&r.error.message)||"응답이 비었어요"),true); done(); return; }
     if(d.error){ showToast(d.error,true); done(); return; }
@@ -6403,9 +6404,9 @@ document.getElementById("app").addEventListener("click",function(e){
     case "law-upload": lawUploadClick(); break;
     case "law-search": lawSearch(); break;
     case "law-ask": lawAskRun(); break;
-    case "law-only": { if(lawOnly[id]) delete lawOnly[id]; else lawOnly[id]=true; render(); break; }
-    case "law-only-all": { lawOnly={}; S.laws.forEach(function(l){ lawOnly[l.id]=true; }); render(); break; }
-    case "law-only-none": { lawOnly={}; render(); break; }
+    case "law-only": { if(lawAsking){ showToast("조문을 찾는 동안은 범위를 바꿀 수 없어요"); break; } if(lawOnly[id]) delete lawOnly[id]; else lawOnly[id]=true; render(); break; }
+    case "law-only-all": { if(lawAsking){ showToast("조문을 찾는 동안은 범위를 바꿀 수 없어요"); break; } lawOnly={}; S.laws.forEach(function(l){ lawOnly[l.id]=true; }); render(); break; }
+    case "law-only-none": { if(lawAsking){ showToast("조문을 찾는 동안은 범위를 바꿀 수 없어요"); break; } lawOnly={}; render(); break; }
     /* 묶음 머리말을 누르면 그 묶음만 — 「고시만 보고 싶다」가 흔한 일이다.
      * 이미 그 묶음이 다 켜져 있으면 끈다 (같은 자리를 두 번 누르면 되돌아온다). */
     case "law-only-kind": {
@@ -6415,6 +6416,7 @@ document.getElementById("app").addEventListener("click",function(e){
       render(); break; }
     /* 묶음 칩 — 그 묶음을 통째로 켜고 끈다. 줄의 묶음 표 — 공통 → 의약품 → 바이오 차례로 바뀐다 */
     case "law-only-grp": {
+      if(lawAsking){ showToast("조문을 찾는 동안은 범위를 바꿀 수 없어요"); break; }
       var gl=lawGrpLaws(id); var gOn=gl.length&&gl.every(function(x){ return lawOnly[x.id]; });
       gl.forEach(function(x){ if(gOn) delete lawOnly[x.id]; else lawOnly[x.id]=true; });
       render(); break; }

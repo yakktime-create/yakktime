@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v236";
+var APP_VER="v237";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6630,6 +6630,9 @@ document.getElementById("app").addEventListener("click",function(e){
     case "insp-f": { if(id==="all") inspFilter={day:"",mine:false,bld:"",area:""}; else if(id==="area:") inspFilter.area=""; else if(id==="mine") inspFilter.mine=!inspFilter.mine; else if(id.indexOf("day:")===0){ var dv=id.slice(4); inspFilter.day=(inspFilter.day===dv)?"":dv; } else if(id.indexOf("bld:")===0){ var bv=id.slice(4); inspFilter.bld=(inspFilter.bld===bv)?"":bv; } render(); break; }
     case "insp-areas": inspAreasOpen=!inspAreasOpen; render(); break;
     case "insp-roombld": inspRoomBld=id; render(); var ra=document.getElementById("insp-add"); if(ra) ra.focus(); break;
+    case "insp-sec": inspSecOpen[id]=!inspSecOpen[id]; render(); break;
+    case "insp-secall": inspSecAll=!inspSecAll; inspSecOpen={}; render(); break;
+    case "insp-hwpxfind": inspHwpxFinds(); break;
     case "insp-hints": inspHints=!inspHints; try{ localStorage.setItem("insp_hints",inspHints?"1":"0"); }catch(e){} render(); break;
     case "insp-bldadd": inspBldAdding=true; render(); var bi=document.getElementById("insp-bld-in"); if(bi) bi.focus(); break;
     case "insp-blddel": { e.stopPropagation(); var ins3=S.inspections.find(function(x){ return x.id===inspOpenId; }); if(!ins3) break;
@@ -6640,7 +6643,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "insp-agenda": inspAgendaOpen=!inspAgendaOpen; try{ localStorage.setItem("insp_agenda",inspAgendaOpen?"1":"0"); }catch(e){} render(); break;
     case "insp-refill": { var ir=S.inspections.find(function(x){ return x.id===id; }); if(ir&&confirm("체크리스트를 새 것으로 바꿉니다. 체크·메모는 옮겨 오고, 직접 적은 줄·방·발견은 그대로예요. 할까요?")) inspRefill(ir); break; }
     case "insp-back": inspOpenId=null; render(); break;
-    case "insp-page": inspPage=id; inspExpand={}; render(); window.scrollTo(0,0); break;
+    case "insp-page": inspPage=id; inspExpand={}; inspSecOpen={}; inspSecAll=false; render(); window.scrollTo(0,0); break;
     case "insp-done": { var it1=inspItem(id); if(it1){ it1.done=!it1.done; inspSave(it1); render(); } break; }
     case "insp-track-st": { var insT=S.inspections.find(function(x){ return x.id===inspOpenId; }); if(!insT) break; var trk=inspTrack(insT,id,true); trk.grade=el.getAttribute("data-g"); inspSave(trk); render(); break; }
     case "insp-goarea": inspFilter={day:"",mine:false,bld:"",area:id}; { var insA=S.inspections.find(function(x){ return x.id===inspOpenId; }); var hasRev=insA&&inspItems(insA.id).some(function(x){ return x.page==="review"&&x.area===id; }); inspPage=hasRev?"review":"tour"; } inspExpand={}; render(); window.scrollTo(0,0); break;
@@ -6792,11 +6795,14 @@ ensureSession().then(function(session){
 /* 페이지 여섯: 준비(챙길 것) · 일정(3일 흐름·서류 요청 시점) · 현장(돌면서 보기·묻기) · 서류 검토(호텔에서, 별첨 45항목 녹임) · 방 · 발견.
  * 「일차」「질문」「내 담당」 페이지는 v166 에서 뺐다 — 같은 것을 두 번 묻고 현장·서류가 섞였다(이랑님 「UX/UI 가 너무 안 좋은 것 같아」).
  * 날·내 담당·건물은 페이지가 아니라 위의 거르기(inspFilter)다. */
-var INSP_PAGES=[["board","관리표"],["prep","준비"],["plan","일정"],["tour","현장"],["review","서류 검토"],["rooms","방"],["findings","발견"]];
+var INSP_PAGES=[["board","관리표"],["prep","준비"],["tour","현장"],["review","서류 검토"],["findings","발견"]];   /* 일정은 준비에, 방은 발견에 (v237 · 이랑님 「너무 자잘히 많은 느낌」) */
+var INSP_TAB_PAGES={board:["board"],prep:["prep","plan"],tour:["tour"],review:["review"],findings:["findings","rooms"]};   /* 탭 → 줄의 page 값 */
+function inspTabOf(p){ return p==="plan"?"prep":p==="rooms"?"findings":p; }
+function inspInTab(x,tab){ return (INSP_TAB_PAGES[tab]||[tab]).indexOf(x.page)>=0; }
 var INSP_OLD_PAGE={d1:"plan",d2:"plan",d3:"plan",docs:"plan",questions:"review",mine:"tour"};
 var INSP_DAY_LABEL={d1:"1일차",d2:"2일차",d3:"3일차",d4:"4일차",d5:"5일차"};
 var inspFilter={day:"",mine:false,bld:"",area:""};
-var INSP_PAGE_LABEL={}; INSP_PAGES.forEach(function(p){ INSP_PAGE_LABEL[p[0]]=p[1]; });
+var INSP_PAGE_LABEL={plan:"일정",rooms:"방"}; INSP_PAGES.forEach(function(p){ INSP_PAGE_LABEL[p[0]]=p[1]; });
 var inspOpenId=null, inspPage="board", inspTpl=null, inspNewOpen=false, inspExpand={}, inspTimers={};
 /* 「내 담당」 기본값은 본의 업무분장(mine)이다 — 이랑님이 칩을 열두 번 켤 일이 없게. 한 번이라도 손대면 그대로 둔다 */
 var inspNewAreas=["압축공기·가스"], inspAreasTouched=false;
@@ -7004,6 +7010,7 @@ function inspRowHtml(x,insp){
         + '<button class="link-btn quiet-link" data-act="insp-del" data-id="'+esc(x.id)+'">지우기</button></div></div>':'')
     + '</li>';
 }
+var inspSecOpen={}, inspSecAll=false;   /* 묶음 펼침 — 기본은 접힘. 관리표에서 한 영역으로 들어오면(inspFilter.area) 펼친 채 */
 function inspSectionsHtml(items,insp,showPage){
   if(!items.length) return '<div class="empty-box sm"><p>여기엔 아직 아무것도 없어요.</p></div>';
   var order=[], by={};
@@ -7015,8 +7022,12 @@ function inspSectionsHtml(items,insp,showPage){
     var rows=by[k], n=rows.filter(function(x){ return x.done; }).length, cnt=rows.filter(inspCountable).length;
     if(isRooms) return '<section class="insp-sec rooms"><div class="insp-sec-h band"><span>'+esc(k)+'</span><span class="muted">방 '+rows.length+'</span></div><ul class="list cards">'
       + rows.map(function(x){ return inspRowHtml(x,insp); }).join("")+'</ul></section>';
-    return '<section class="insp-sec"><div class="insp-sec-h"><span>'+esc(k)+'</span>'+(cnt?'<span class="muted">'+n+'/'+cnt+'</span>':'')+'</div><ul class="list'+(rows[0]&&rows[0].kind==="find"?" cards":"")+'">'
-      + rows.map(function(x){ return inspRowHtml(x,insp); }).join("")+'</ul></section>';
+    var isFind=rows[0]&&rows[0].kind==="find", sk=inspTabOf(inspPage)+"|"+k;
+    var open=isFind||inspSecAll||!!inspFilter.area||!!inspSecOpen[sk];
+    if(isFind) return '<section class="insp-sec"><ul class="list cards">'+rows.map(function(x){ return inspRowHtml(x,insp); }).join("")+'</ul></section>';
+    return '<section class="insp-sec'+(open?"":" closed")+'"><button class="insp-sec-h" data-act="insp-sec" data-id="'+esc(sk)+'"><span>'+esc(k)+'</span>'
+      + (cnt?'<span class="muted">'+n+'/'+cnt+'</span>':'<span class="muted">'+rows.length+'</span>')+'<i class="insp-sec-c">'+(open?"⌃":"⌄")+'</i></button>'
+      + (open?'<ul class="list">'+rows.map(function(x){ return inspRowHtml(x,insp); }).join("")+'</ul>':'')+'</section>';
   }).join("");
 }
 function inspAddRowHtml(page){
@@ -7028,7 +7039,7 @@ function inspAddRowHtml(page){
     /* 「＋ 건물」 — 노트를 만들 때 안 적은 건물이 나오면 여기서 더한다(v203, 이랑님 「볼 빌딩이 추가로 있으면?」) */
     pre='<div class="insp-room-bld"><span class="muted">건물</span>'+bs.map(function(b){ var on=inspRoomBld===b.name; return '<button class="chip'+(on?" on":"")+'" data-act="insp-roombld" data-id="'+esc(b.name)+'">B'+esc(b.name)+(on?'<i class="chip-x" data-act="insp-blddel" data-id="'+esc(b.name)+'" title="이 건물 빼기">✕</i>':'')+'</button>'; }).join("")
       +(inspBldAdding?'<input class="input insp-bld-in" id="insp-bld-in" placeholder="건물 번호 (예: 660) — Enter" />':'<button class="chip quiet" data-act="insp-bldadd">＋ 건물</button>')+'</div>'; }
-  return pre+'<div class="add-row quick insp-add"><input class="input" id="insp-add" placeholder="'+ph+'" /></div>';
+  return pre+'<div class="add-row quick insp-add"><input class="input" data-page="'+page+'"'+(page===inspTabOf(inspPage)||page==="findings"?' id="insp-add"':'')+' placeholder="'+ph+'" /></div>';
 }
 function inspFilterHtml(insp,items){
   var days=[]; items.forEach(function(x){ if(x.day&&days.indexOf(x.day)<0) days.push(x.day); }); days.sort();
@@ -7106,7 +7117,7 @@ function inspBoardHtml(insp){
 }
 var inspRoomBld="", inspBldAdding=false;   /* 방을 넣을 때 고른 건물 · 건물을 더하는 중 */
 /* 「왜·확인」 설명을 접어 두기 — 익숙해지면 접고 다닌다(v207, 이랑님 「2번 ㄱㄱ」). 기기에 기억 */
-var inspHints=(function(){ try{ return localStorage.getItem("insp_hints")!=="0"; }catch(e){ return true; } })();
+var inspHints=(function(){ try{ return localStorage.getItem("insp_hints")==="1"; }catch(e){ return false; } })();   /* 기본 접힘(v237) — 두 번째 실사부터는 아는 말 */
 /* 영역 칩은 분장표(=보고서) 차례로 번호를 달아 묶는다 — 「개요 · 1) · 2) …」. 본의 report 가 순서를 정한다(이랑님 「실태조사 순서는 업무분장 항목 분류 순서대로」) */
 function inspAreaChips(areas,on,act){
   var rep=(inspTpl&&inspTpl.report)||[], used={}, out="";
@@ -7144,23 +7155,33 @@ function inspAgendaHtml(){
     + '<div class="insp-ag-f">진한 줄이 내가 들어가는 자리예요 · 숫자는 조사관 번호</div></div>';
 }
 function inspNoteHtml(insp){
-  var all=inspItems(insp.id), pg=inspPage, body="";
-  var counts={}; INSP_PAGES.forEach(function(p){ var it=all.filter(function(x){ return x.page===p[0]&&inspCountable(x); }); counts[p[0]]=it.length?it.filter(function(x){ return x.done; }).length+"/"+it.length:""; });
+  var all=inspItems(insp.id), pg=inspTabOf(inspPage), body="";
+  var counts={}; INSP_PAGES.forEach(function(p){ var it=all.filter(function(x){ return inspInTab(x,p[0])&&inspCountable(x); }); counts[p[0]]=it.length?it.filter(function(x){ return x.done; }).length+"/"+it.length:""; });
   counts.rooms=String(all.filter(function(x){ return x.kind==="room"; }).length||"");
   var brows=inspBoardRows(insp); counts.board=brows.length?brows.filter(function(b){ var tr=inspTrack(insp,b.area); return tr&&tr.grade==="확인 끝"; }).length+"/"+brows.length:"";
   counts.findings=String(all.filter(function(x){ return x.kind==="find"; }).length||"");
-  var items=all.filter(function(x){ return x.page===pg; });
-  var filt=(pg==="tour"||pg==="review"||pg==="plan");
+  var items=all.filter(function(x){ return inspInTab(x,pg); });
+  var filt=(pg==="tour"||pg==="review"||pg==="prep");
   if(filt) items=inspApplyFilter(items,insp);
   var areasHtml="";
   if(inspAreasOpen){
     var areas=(inspTpl&&inspTpl.areas)||[]; (insp.areas||[]).forEach(function(a){ if(areas.indexOf(a)<0) areas=areas.concat([a]); });
     areasHtml='<div class="insp-areas"><span class="muted">내 담당 — 켜 둔 영역이 「내 담당만」에 모여요. 번호는 보고서 항목</span>'+inspAreaChips(areas,insp.areas||[],"insp-area")+'</div>';
   }
-  var intro='<p class="insp-intro">'+((inspTpl&&inspTpl.intro&&inspTpl.intro[pg])?esc(inspTpl.intro[pg])+' ':'')+'<button class="link-btn quiet-link" data-act="insp-hints">'+(inspHints?"설명 접기":"설명 펴기")+'</button></p>';   /* 처음 보는 사람도 이 페이지가 뭘 하는 곳인지 알게(v191) */
-  body=intro+(filt?inspFilterHtml(insp,all.filter(function(x){ return x.page===pg; }))+areasHtml:"")
-    +(pg==="plan"?inspAgendaHtml():"")+inspAddRowHtml(pg)+(pg==="board"?inspBoardHtml(insp):inspSectionsHtml(items,insp,false));
-  if(pg==="findings"&&items.length) body+='<div class="insp-foot-acts"><button class="btn quiet sm" data-act="insp-copyfind">발견 전부 복사</button><span class="muted">검토서에 붙일 때 — 한글 내보내기는 다음 판에</span></div>';
+  /* 소개 글은 비어 있을 때만. 묶음은 접힌 채 시작하니 「모두 펴기」와 「설명」 토글만 한 줄에(v237) */
+  var intro=(pg!=="board"&&!items.length&&inspTpl&&inspTpl.intro&&inspTpl.intro[pg])?'<p class="insp-intro">'+esc(inspTpl.intro[pg])+'</p>':'';
+  var tools=(pg==="board")?'':'<div class="insp-tools">'
+    + (pg!=="findings"?'<button class="link-btn quiet-link" data-act="insp-secall">'+(inspSecAll?"묶음 모두 접기":"묶음 모두 펴기")+'</button>':'')
+    + (pg==="tour"||pg==="review"?'<button class="link-btn quiet-link" data-act="insp-hints">'+(inspHints?"왜·확인 설명 접기":"왜·확인 설명 펴기")+'</button>':'')
+    + '</div>';
+  var finds=items.filter(function(x){ return x.kind==="find"; }), rooms=items.filter(function(x){ return x.kind==="room"; });
+  body=intro+(filt?inspFilterHtml(insp,all.filter(function(x){ return inspInTab(x,pg); }))+areasHtml:"")+tools
+    +(pg==="prep"?inspAgendaHtml():"")
+    +(pg==="findings"
+        ? inspAddRowHtml("findings")+(finds.length?inspSectionsHtml(finds,insp,false):'')
+          + '<div class="insp-sub-h">방 <span class="muted">'+(rooms.length||"")+'</span></div>'+inspAddRowHtml("rooms")+(rooms.length?inspSectionsHtml(rooms,insp,false):'')
+        : inspAddRowHtml(pg)+(pg==="board"?inspBoardHtml(insp):inspSectionsHtml(items,insp,pg==="prep")));
+  if(pg==="findings"&&finds.length) body+='<div class="insp-foot-acts"><button class="btn quiet sm" data-act="insp-copyfind">발견 전부 복사</button><button class="btn quiet sm" data-act="insp-hwpxfind">한글 파일로 받기</button><span class="muted">보고서 차례(개요 → 1) → … → 기타)로 묶여요</span></div>';
   var refill=inspNeedsRefill(insp)?'<div class="insp-refill">체크리스트가 새로 정리됐어요. <button class="link-btn" data-act="insp-refill" data-id="'+esc(insp.id)+'">새 체크리스트로 바꾸기</button> <span class="muted">체크·메모는 옮겨 오고, 직접 적은 줄·방·발견은 그대로예요.</span></div>':"";
   /* 맨 위 고정 띠 — 「검토서는 오프라인에서」. 체크할 것이 아니라 늘 보고 있어야 하는 말이라 줄이 아니라 띠다(이랑님, v182) */
   var notice=(inspTpl&&inspTpl.notice)?'<div class="insp-notice">⚠ '+esc(inspTpl.notice)+'</div>':"";
@@ -7212,8 +7233,9 @@ function wireInspNote(insp){
       setTimeout(function(){ if(inspExpand[id]&&!(row&&row.contains(document.activeElement))){ inspExpand[id]=false; render(); } },300);
     });
   });
-  var add=document.getElementById("insp-add");
-  if(add) add.addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); inspAdd(inspPage); } });
+  Array.prototype.forEach.call(root.querySelectorAll(".insp-add .input[data-page]"),function(add){
+    add.addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); inspAdd(add.getAttribute("data-page")); } });
+  });
   var bin=document.getElementById("insp-bld-in");
   if(bin){
     bin.addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); inspBldAdd(bin.value); } if(e.key==="Escape"){ inspBldAdding=false; render(); } });
@@ -7236,7 +7258,7 @@ function inspBldAdd(v){
   var a=document.getElementById("insp-add"); if(a) a.focus();
 }
 function inspAdd(page){
-  var el=document.getElementById("insp-add"); var v=(el&&el.value||"").trim(); if(!v) return;
+  var el=document.querySelector('.insp-add .input[data-page="'+page+'"]')||document.getElementById("insp-add"); var v=(el&&el.value||"").trim(); if(!v) return;
   var insp=S.inspections.find(function(x){ return x.id===inspOpenId; }); if(!insp) return;
   var kind=page==="rooms"?"room":page==="findings"?"find":page==="review"?"q":"task";
   var seq=Math.max.apply(null,[0].concat(inspItems(insp.id).map(function(x){ return x.seq||0; })))+1;
@@ -7244,7 +7266,7 @@ function inspAdd(page){
   if(kind==="room"||kind==="find") inspExpand[it.id]=true;
   S.insp_items.push(it); inspSave(it); render();
   if(kind==="room"||kind==="find"){ var m=document.querySelector('.insp-memo[data-id="'+it.id+'"]'); if(m) m.focus(); }
-  else { var a=document.getElementById("insp-add"); if(a) a.focus(); }
+  else { var a=document.querySelector('.insp-add .input[data-page="'+page+'"]'); if(a) a.focus(); }
 }
 function inspToFind(id){
   var src=inspItem(id); if(!src||src.kind==="find") return;
@@ -7285,8 +7307,10 @@ function inspCreate(){
     showToast("✓ 노트를 만들었어요 — 항목 "+items.length+"개, 캘린더에 일정도 넣었어요");
   },function(e){ inspBusy=false; showToast(e.message,true); });
 }
-function inspCopyFinds(){
-  var insp=S.inspections.find(function(x){ return x.id===inspOpenId; }); if(!insp) return;
+function inspCopyFinds(){ var b=inspFindsBuild(); if(!b) return; inspCopyFindsGo(b.text,b.finds); }
+/* 발견을 보고서 차례로 묶은 글 — 복사와 한글 파일이 같은 글을 쓴다(v237) */
+function inspFindsBuild(){
+  var insp=S.inspections.find(function(x){ return x.id===inspOpenId; }); if(!insp) return null;
   var fs=inspItems(insp.id).filter(function(x){ return x.kind==="find"; });
   /* 보고서 차례(개요 → 1) 품질경영 → … → 기타)로 묶는다 — 본의 report 가 영역을 항목에 잇는다. 영역이 없거나 안 잡히면 맨 뒤 */
   var rep=(inspTpl&&inspTpl.report)||[], secOf=function(x){ for(var i=0;i<rep.length;i++) if(x.area&&(rep[i].areas||[]).indexOf(x.area)>=0) return i; return rep.length; };
@@ -7299,6 +7323,25 @@ function inspCopyFinds(){
       return "■ "+head+"\n"+groups[k].map(function(x){ return line(x,n++); }).join("\n");
     }).join("\n\n");
   } else t=fs.map(line).join("\n");
+  return {text:t,finds:fs,insp:insp};
+}
+function inspCopyFindsGo(t,fs){
   var done=function(){ showToast("✓ 발견 "+fs.length+"건을 복사했어요"); };
   if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done,function(){ lawCopyFallback(t,done); }); else lawCopyFallback(t,done);
+}
+function inspHwpxFinds(){
+  var b=inspFindsBuild(); if(!b||!b.finds.length){ showToast("내보낼 발견이 없어요."); return; }
+  var blocks=[{t:b.insp.title+" 실태조사 — 발견 "+b.finds.length+"건",lv:9},{t:inspDates(b.insp)+(b.insp.partner?" · "+b.insp.partner:""),lv:9},{t:"",lv:9}];
+  b.text.split("\n").forEach(function(L){
+    if(!L.trim()){ blocks.push({t:"",lv:9}); return; }
+    if(/^■ /.test(L)) blocks.push({t:L.slice(2),lv:9});
+    else if(/^\s{3}/.test(L)) blocks.push({t:L.trim(),lv:1});
+    else blocks.push({t:L.trim(),lv:0});
+  });
+  try{
+    var bf=hwpxMake(blocks,"실태조사 발견"), a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob([bf],{type:"application/hwp+zip"}));
+    a.download="실태조사_발견_"+keyOf(new Date())+".hwpx"; a.click();
+    showToast("✓ 한글 파일로 받았어요 — 발견 "+b.finds.length+"건");
+  }catch(e){ showToast("한글 파일을 만들지 못했어요",true); }
 }

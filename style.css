@@ -1691,3 +1691,14 @@ input[type=checkbox].law-check:checked::after,.ask-check input[type=checkbox]:ch
 .set-row i{grid-area:i;font-style:normal;font-size:var(--fs-2xl);font-weight:300;color:var(--t4);}
 .set-out{width:100%;min-height:48px;color:var(--brick);font-size:var(--fs-base);}
 .rail-foot .foot-btn{min-height:40px;}
+/* ===== 실태조사 — 묶음 접힘 · 페이지 다섯 (v237 · 2026-10-12) ===== */
+.insp-tools{display:flex;gap:var(--sp-4);align-items:center;margin:0 0 var(--sp-3);font-size:var(--fs-sm);}
+.insp-sec-h{width:100%;display:flex;align-items:center;gap:var(--sp-2);background:none;border:none;font:inherit;text-align:left;cursor:pointer;
+  min-height:48px;padding:0 var(--sp-1);font-size:var(--fs-base);font-weight:700;letter-spacing:var(--ls-head);color:var(--ink);border-bottom:1px solid var(--line);}
+.insp-sec-h .muted{font-weight:500;font-size:var(--fs-sm);}
+.insp-sec-c{margin-left:auto;font-style:normal;color:var(--t4);font-size:var(--fs-lg);}
+.insp-sec.closed{margin-bottom:0;}
+.insp-sec.closed .insp-sec-h{border-bottom:1px solid var(--line);}
+.insp-sec-h.band{min-height:40px;}
+.insp-sub-h{display:flex;align-items:baseline;gap:var(--sp-2);font-size:var(--fs-lg);font-weight:750;letter-spacing:var(--ls-head);margin:var(--sp-6) 0 var(--sp-2);}
+.insp-foot-acts{flex-wrap:wrap;}

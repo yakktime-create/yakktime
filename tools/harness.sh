@@ -15,7 +15,7 @@ cat > "$D/mocksb.js" <<'EOF'
 var MOCK={inspections:[],insp_items:[],schedule:[],events:[],articles:[],mfds:[],archive:[],docs:[],laws:[],refs:[],answers:[],settings:[]};
 function K(off){ var d=new Date(); d.setDate(d.getDate()+off); return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2); }
 MOCK.events=[{id:"t1",event_date:K(-2),event_time:null,title:"아스트라제네카 실태조사",place:null,until:K(3),memo:"가는 편 09:20 인천"},
-             {id:"t2",event_date:K(0),event_time:"11:30",title:"채주영 선생님 점심",place:"오송",memo:null},
+             {id:"t2",event_date:K(0),event_time:"11:30",title:"채주영 선생님 점심",place:"오송",memo:null,done:true},
              {id:"t3",event_date:K(5),event_time:"10:00",title:"GMP 교육",place:null,memo:null}];
 MOCK.mfds=[{id:"m2",title:"이진호 선생님에게 문서 전달",status:"대기",memo:"",due_date:K(0),due_time:"09:00",place:"식약처"},
            {id:"m3",title:"국외여비명세서 물어보기",status:"완료",memo:"",due_date:K(0),due_time:"09:00",place:"식약처"}];

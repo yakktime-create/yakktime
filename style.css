@@ -291,7 +291,7 @@ textarea.inline-area{min-height:52px;resize:none;overflow-y:auto;overscroll-beha
 
 /* 캘린더 목록의 식약처 행 */
 .ev-row.task{gap:var(--sp-2);}
-.ev-row.task.done .ev-title{color:var(--muted);text-decoration:line-through;}
+.ev-row.done .ev-title{color:var(--muted);text-decoration:line-through;}   /* 업무·일정 모두 — 체크하면 취소선(v235) */
 .mfds-badge{flex-shrink:0;font-size:var(--fs-xs);font-weight:700;color:var(--blue-deep);
   background:var(--blue-soft);padding:2px 8px;border-radius:var(--r-md);white-space:nowrap;}
 .mfds-status{flex-shrink:0;font-size:var(--fs-xs);color:var(--muted);background:var(--paper);padding:2px 8px;border-radius:var(--r-md);white-space:nowrap;}   /* 「식약처」와 같은 알약 — 무게를 맞춘다 */

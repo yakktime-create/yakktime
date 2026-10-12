@@ -1702,3 +1702,26 @@ input[type=checkbox].law-check:checked::after,.ask-check input[type=checkbox]:ch
 .insp-sec-h.band{min-height:40px;}
 .insp-sub-h{display:flex;align-items:baseline;gap:var(--sp-2);font-size:var(--fs-lg);font-weight:750;letter-spacing:var(--ls-head);margin:var(--sp-6) 0 var(--sp-2);}
 .insp-foot-acts{flex-wrap:wrap;}
+/* ===== 오늘 — 입력칸 하나 · 이번 주 한 줄 (v238 · 2026-10-12) ===== */
+.add-row.quick.quick-top{background:var(--paper);margin-bottom:var(--sp-4);padding:6px;}
+.add-row.quick.quick-top .input{font-size:var(--fs-base);padding:12px 12px;}
+.add-row.quick.quick-top:focus-within{background:#fff;}
+.week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin-bottom:var(--sp-5);}
+.wk{display:flex;flex-direction:column;gap:3px;min-height:92px;min-width:0;background:none;border:none;border-radius:var(--r-md);padding:10px 8px 8px;
+  font-family:inherit;text-align:left;cursor:pointer;color:var(--ink);-webkit-tap-highlight-color:transparent;}
+.wk.has{background:var(--paper);}
+.wk.today{background:var(--accent-soft);}
+.wk-d{font-size:var(--fs-xs);font-weight:600;color:var(--t3);}
+.wk.sun .wk-d{color:var(--brick);}
+.wk.today .wk-d{color:var(--accent);}
+.wk-n{font-size:var(--fs-lg);font-weight:700;letter-spacing:var(--ls-head);line-height:1.1;}
+.wk-dots{display:none;gap:3px;margin-top:2px;}
+.wk-dots i{width:6px;height:6px;border-radius:50%;background:var(--accent);}
+.wk-dots i.mfds{background:var(--blue);} .wk-dots i.trip{background:var(--brass);} .wk-dots i.done{background:var(--fill-3);}
+.wk-chips{display:flex;flex-direction:column;gap:3px;margin-top:2px;min-width:0;}
+.wk .cal-ev{font-size:var(--fs-2xs);}
+.wk .cal-ev.trip{display:block;}
+@media (max-width:600px){
+  .wk{min-height:64px;padding:8px 6px;}
+  .wk-chips{display:none;} .wk-dots{display:flex;}
+}

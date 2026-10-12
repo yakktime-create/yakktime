@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v237";
+var APP_VER="v238";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -612,6 +612,46 @@ function statTile(tab,tone,num,label){
     + '<span class="stat-go">→</span></button>';
 }
 
+/* 빠른 입력 — 앞머리 말로 날짜를 정한다(v238). 「내일 보완 회신」 → 내일 · 「다음 주 …」 → 다음 월요일 · 「언젠가 …」 → 날짜 없음 · 「10/20 …」「월 …」. 없으면 오늘 */
+function quickDue(text){
+  var t=String(text||"").trim(), now=new Date(), d=null, m;
+  var at=function(n){ var x=new Date(now); x.setDate(x.getDate()+n); return keyOf(x); };
+  if((m=/^오늘\s+/.exec(t))) d=at(0);
+  else if((m=/^내일\s+/.exec(t))) d=at(1);
+  else if((m=/^모레\s+/.exec(t))) d=at(2);
+  else if((m=/^(언젠가|나중에)\s+/.exec(t))) d=SOMEDAY;
+  else if((m=/^다음\s?주\s+/.exec(t))) d=at(((8-now.getDay())%7)||7);
+  else if((m=/^(\d{1,2})\s*일\s*(뒤|후)\s+/.exec(t))) d=at(parseInt(m[1],10));
+  else if((m=/^(\d{1,2})[\/.월]\s?(\d{1,2})일?\s+/.exec(t))){ var y=now.getFullYear(), x=new Date(y,parseInt(m[1],10)-1,parseInt(m[2],10)); if(keyOf(x)<keyOf(now)) x.setFullYear(y+1); d=keyOf(x); }
+  else if((m=/^([월화수목금토일])(요일)?\s+/.exec(t))){ var wd=WD.indexOf(m[1]); d=at(((wd-now.getDay()+7)%7)||7); }
+  if(m) t=t.slice(m[0].length).trim();
+  return {due:d||at(0),text:t};
+}
+function addScheduleQuick(){
+  var el=document.getElementById("new-s"), v=(el&&el.value||"").trim(); if(!v) return;
+  var q=quickDue(v); if(!q.text) return;
+  var item={text:q.text,done:false,star:false,due:q.due===SOMEDAY?null:q.due};
+  S.schedule.unshift(item); dbInsert("schedule",item); render();   /* dbInsert 가 id 를 먼저 박는다(v226) */
+  var tk=keyOf(new Date()); if(q.due===SOMEDAY) showToast("「언젠가 할 일」에 넣었어요"); else if(q.due!==tk) showToast(shortDate(q.due)+" 할 일에 넣었어요");
+  var n=document.getElementById("new-s"); if(n) n.focus();
+}
+/* 이번 주 한 줄(v238) — 오늘부터 7일. 달력 칩과 같은 색. 누르면 그 날 달력으로. 「다가오는 일정」 카드를 대신한다 */
+function weekStripHtml(todayKey){
+  var cells="", now=new Date();
+  for(var i=0;i<7;i++){ var dt=new Date(now); dt.setDate(dt.getDate()+i); var k=keyOf(dt);
+    var evs=S.events.filter(function(e){ return e.key<=k&&k<=(e.until||e.key); }).sort(evSort);
+    var tasks=S.mfds.filter(function(m){ return m.due===k&&m.status!=="완료"; });
+    var chips=[];
+    evs.forEach(function(e){ var trip=(e.until||e.key)!==e.key; chips.push({cls:trip?"trip":(e.done?"done":""),label:trip?e.title:((e.time?e.time+" ":"")+e.title)}); });
+    tasks.forEach(function(m){ chips.push({cls:"mfds",label:m.title}); });
+    var inner=chips.slice(0,2).map(function(c){ return '<div class="cal-ev '+c.cls+'">'+esc(c.label)+'</div>'; }).join("")+(chips.length>2?'<div class="cal-more">+'+(chips.length-2)+'</div>':'');
+    cells+='<button class="wk'+(i===0?" today":"")+(dt.getDay()===0?" sun":"")+(chips.length?" has":"")+'" data-act="week-day" data-id="'+k+'">'
+      + '<span class="wk-d">'+(i===0?"오늘":WD[dt.getDay()])+'</span><span class="wk-n">'+dt.getDate()+'</span>'
+      + '<span class="wk-dots">'+chips.slice(0,3).map(function(c){ return '<i class="'+c.cls+'"></i>'; }).join("")+'</span>'
+      + '<div class="wk-chips">'+inner+'</div></button>';
+  }
+  return '<section class="week">'+cells+'</section>';
+}
 function renderToday(){
   var now=new Date(), h=now.getHours();
   var greet=h<6?"새벽이에요":h<12?"좋은 아침이에요":h<18?"좋은 오후예요":"수고한 하루예요";
@@ -628,18 +668,10 @@ function renderToday(){
   var open=todayItems.filter(function(i){return !i.done;});
   var inProg=S.articles.filter(function(a){return a.status==="작성중";}).length;
   var mfdsOpen=S.mfds.filter(function(m){return m.status!=="완료";}).length;
-  var upcoming=S.events.filter(function(e){return e.key>todayKey;}).sort(evSort).slice(0,4);
   /* 출장은 오늘 화면에서 뺀다(이랑님 「출장만 빼자」) — 며칠씩 맨 위에 눌러앉아 그날 할 일이 안 보인다. 캘린더에는 그대로 */
   var todayCnt=S.events.filter(function(e){ return e.key===todayKey&&!isTripEv(e)&&!e.done; }).length+S.mfds.filter(function(m){ return m.due===todayKey&&m.status!=="완료"; }).length;
   var evHtml="", todayList=dayListHtml(todayKey,true);
   if(todayList){ evHtml+='<div class="card"><div class="card-head"><h2>오늘 일정</h2><span class="muted" data-act="tab" data-id="calendar" style="cursor:pointer">캘린더 열기 →</span></div>'+todayList+'</div>'; }
-  if(upcoming.length){ evHtml+='<div class="card"><div class="card-head"><h2>다가오는 일정</h2><span class="muted" data-act="tab" data-id="calendar" style="cursor:pointer">캘린더 열기 →</span></div>'+upcoming.map(function(e){ return '<div class="up-row">'
-      + '<span class="up-date">'+esc(shortDate(e.key))+'</span>'
-      + '<span class="up-title">'+esc(e.title)
-      +   (e.place? ' <span class="up-place">📍 '+esc(e.place)+'</span>'
-                    +'<button class="link-btn map-btn" data-act="map" data-q="'+esc(e.place)+'">지도 ↗</button>' : '')
-      + '</span>'
-      + '<span class="up-time">'+esc(e.time||"")+'</span></div>'; }).join("")+'</div>'; }
   /* 할 일 목록 HTML (오늘/내일 두 곳에서 재사용) */
   function schedRows(items,emptyMsg,showDate){
     var o=items.filter(function(i){return !i.done;}).sort(function(a,b){return (b.star?1:0)-(a.star?1:0);});
@@ -667,23 +699,21 @@ function renderToday(){
   var tmrLabel=(tmrD.getMonth()+1)+"월 "+tmrD.getDate()+"일("+WD[tmrD.getDay()]+")";
   view().innerHTML='<div class="page">'
     + '<header class="today-hero"><div class="today-date">'+esc(dateStr)+'</div><h1 class="today-greet">'+greet+', 이랑님.</h1><p class="today-line">'+(open.length?("오늘 할 일 "+open.length+"건 남았어요."):"오늘 할 일이 없어요.")+(todayCnt?" · 오늘 일정 "+todayCnt+"건.":"")+'</p></header>'
+    /* 입력칸은 하나(v238) — 「내일 」「다음 주 」「언젠가 」「10/20 」로 시작하면 그 날로. 셋이던 칸을 합쳤다 */
+    + '<div class="add-row quick quick-top"><input class="input" id="new-s" placeholder="할 일 — 「내일」「다음 주」「언젠가」「10/20」으로 시작하면 그 날로 가요" /><button class="btn" data-act="s-quick">+ 추가</button></div>'
     + '<section class="stat-row">'
     +   statTile("articles","brass",inProg,"작성 중 기고글")
     +   statTile("mfds","blue",mfdsOpen,"진행 중 식약처 업무")
-    + '</section>'+evHtml
-    + '<section class="card"><div class="card-head"><h2>오늘 할 일</h2><span class="muted">별표는 위로 · 항목을 누르면 수정</span></div>'
-    +   '<div class="add-row quick"><input class="input" id="new-s" placeholder="할 일을 적고 Enter" /><button class="btn" data-act="s-add" data-id="'+todayKey+'" data-input="new-s">+ 추가</button></div>'+rows
     + '</section>'
-    + '<section class="card"><div class="card-head"><h2>앞으로 할 일</h2><span class="muted">'+tmrLabel+' 부터</span></div>'
-    +   '<div class="add-row quick"><input class="input" id="new-s2" placeholder="앞으로 할 일을 적고 Enter (내일 날짜로 들어가요)" /><button class="btn" data-act="s-add" data-id="'+tmrKey+'" data-input="new-s2">+ 추가</button></div>'+tmrRows
-    + '</section>'
-    + '<section class="card"><div class="card-head"><h2>언젠가 할 일</h2><span class="muted">날짜 없이 · 항목을 누르면 수정</span></div>'
-    +   '<div class="add-row quick"><input class="input" id="new-s3" placeholder="언젠가 할 일을 적고 Enter" /><button class="btn" data-act="s-add" data-id="'+SOMEDAY+'" data-input="new-s3">+ 추가</button></div>'+someRows
-    + '</section></div>';
-  document.getElementById("new-s").addEventListener("keydown",function(e){ if(e.key==="Enter") addSchedule(todayKey,"new-s"); });
-  document.getElementById("new-s2").addEventListener("keydown",function(e){ if(e.key==="Enter") addSchedule(tmrKey,"new-s2"); });
-  document.getElementById("new-s3").addEventListener("keydown",function(e){ if(e.key==="Enter") addSchedule(SOMEDAY,"new-s3"); });
+    + weekStripHtml(todayKey)
+    + evHtml
+    + '<section class="card"><div class="card-head"><h2>오늘 할 일</h2>'+(open.length?'<span class="muted">'+open.length+'건 남음</span>':'')+'</div>'+rows+'</section>'
+    + (tmrItems.length?'<section class="card"><div class="card-head"><h2>앞으로 할 일</h2><span class="muted">'+tmrLabel+' 부터</span></div>'+tmrRows+'</section>':'')
+    + (someItems.length?'<section class="card"><div class="card-head"><h2>언젠가 할 일</h2><span class="muted">날짜 없이</span></div>'+someRows+'</section>':'')
+    + '</div>';
+  var qs=document.getElementById("new-s"); if(qs) qs.addEventListener("keydown",function(e){ if(e.key==="Enter") addScheduleQuick(); });
 }
+
 
 /* 캘린더 입력창에서 고른 종류. 출장일 때만 「마지막 날」과 메모 칸이 나타난다 —
  * 평소엔 안 보이므로 화면이 안 늘어난다. */
@@ -6425,6 +6455,8 @@ document.getElementById("app").addEventListener("click",function(e){
   switch(act){
     case "tab": active=id; closeForms(); render(); break;
     case "s-add": addSchedule(id,el.getAttribute("data-input")); break;
+    case "s-quick": addScheduleQuick(); break;
+    case "week-day": active="calendar"; calSel=id; calYear=+id.slice(0,4); calMonth=+id.slice(5,7)-1; render(); break;
     case "edit":
       if(Date.now()-dragEndedAt<350) break;   /* 드래그 직후 따라오는 click은 무시 */
       startEdit(el,el.getAttribute("data-table"),id,el.getAttribute("data-field"),el.getAttribute("data-type"));

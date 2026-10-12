@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v242";
+var APP_VER="v243";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6409,9 +6409,15 @@ function lawManageSheetHtml(){
       + '<button class="law-ic del" data-act="law-del" data-id="'+l.id+'" title="삭제">'+TRASH+'</button></div>';
   }).join("")
   /* 소관 판단용(직제 시행규칙·민원처리 규정)은 맨 아래 한 줄로 접는다 — 소관 판단에만 쓰고 조문 후보엔 안 든다 */
-  + (internals.length?'<div class="law-internal">소관 판단용 '+internals.length+'개 — '
-      + internals.map(function(l){ return '<span class="law-internal-n">'+esc(l.name)+'</span>'; }).join(" · ")
-      + ' <span class="dim">조문 찾기엔 안 써요.</span></div>':'');
+  /* 소관 판단용도 보통 줄처럼 — 법제처에서 열어 보고 지울 수 있어야 한다(이랑님 10/12 「직접 보고 싶은데 어딨어?」). 조문 찾기엔 평소 안 쓴다 */
+  + (internals.length?'<div class="law-kind g5"><span>소관 판단용</span><span class="law-kind-hint" style="color:var(--t4);font-weight:500">소관 판단에만 써요 · 범위 칩을 켜면 조문 찾기에도</span></div>'
+      + internals.map(function(l){ var onlyOn=!!lawOnly[l.id];
+        return '<div class="law-row'+(onlyOn?" only":"")+'">'
+          + '<label class="law-only"><input type="checkbox" data-act="law-only" data-id="'+l.id+'"'+(onlyOn?" checked":"")+' title="이 법령에서도 찾기" /></label>'
+          + '<div class="law-name-w"><span class="law-name">'+esc(l.name)+'</span>'
+          +   '<span class="law-sub"><span class="law-grp-tag g5">소관</span>'+(l.src==="api"?'법제처':(l.pages||0)+'쪽')+(lawEffOf(l)?' · '+esc(lawEffOf(l))+' 시행':'')+(l.arts?' · 조문 '+l.arts:'')+'</span></div>'
+          + (l.src==="api"?'<button class="law-ic" data-act="law-site" data-id="'+l.id+'" title="법제처에서 보기">↗</button>':'<button class="law-ic" data-act="law-pdf" data-id="'+l.id+'" data-page="1" title="PDF 원문 열기">↗</button>')
+          + '<button class="law-ic del" data-act="law-del" data-id="'+l.id+'" title="삭제">'+TRASH+'</button></div>'; }).join(""):'');
   return '<div class="sheet-back" data-act="law-list"></div>'
     + '<div class="sheet law-sheet" role="dialog"><div class="sheet-grab"></div>'
     + '<div class="sheet-h"><h2>법령 관리</h2><button class="lv-x" data-act="law-list" title="닫기">✕</button></div>'

@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v222";
+var APP_VER="v223";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3506,14 +3506,15 @@ function lawOnlyIds(){ return Object.keys(lawOnly).filter(function(k){ return la
  * 법령이 17개가 되자 이랑님: 「유사한 것끼리 묶어서 관리 … 어떤 걸 보고 봤구나를 알 수 있게.
  * 첨바랑 바이오는 묶어도 될 것 같고, 의약품이랑 바이오는 나눠서」. 묶음은 설정 표 `law_grp`(id→묶음)에
  * 두고, 안 적힌 법령은 이름으로 짐작한다 — 표 구조는 안 건드린다. 위계(법·규칙·고시) 묶음은 그대로다. */
-var LAW_GRPS=["공통","의약품","바이오·첨단바이오","의약외품","소관 판단용"];   /* 「내부 규정」은 애매하다고(10/6) → 쓰임새 그대로 */   /* 의약외품은 따로(이랑님 10/2) */
-var LAW_GRP_SHORT={"공통":"공통","의약품":"의약품","바이오·첨단바이오":"바이오","의약외품":"의약외품","소관 판단용":"소관"};
+var LAW_GRPS=["공통","의약품","바이오·첨단바이오","임상시험용","의약외품","소관 판단용"];   /* 임상시험용은 임상정책과 소관이라 따로(이랑님 10/12 「지금 구분 좀 이상해」) */   /* 「내부 규정」은 애매하다고(10/6) → 쓰임새 그대로 */   /* 의약외품은 따로(이랑님 10/2) */
+var LAW_GRP_SHORT={"공통":"공통","의약품":"의약품","바이오·첨단바이오":"바이오","임상시험용":"임상","의약외품":"의약외품","소관 판단용":"소관"};
 /* 「내부 규정」(직제 시행규칙·민원처리 규정)은 답변 근거가 아니라 **우리 사정**이다 — 조문 찾기·검색 범위에서 평소엔 빠지고,
  * 소관 판단(lawTriage)에만 쓴다. 칩을 눌러 고르면 그때만 찾는다(v220 · 2026-10-06). */
 var LAW_GRP_INTERNAL="소관 판단용";
 function lawGrpGuess(name){ name=nfc(name||"");
   if(/직제|민원 처리에 관한 규정|민원처리|훈령|예규/.test(name)) return LAW_GRP_INTERNAL;
   if(/의약외품/.test(name)) return "의약외품";
+  if(/임상시험/.test(name)) return "임상시험용";   /* 임상시험용의약품 GMP 평가 가이드라인 · 임상시험 계획 승인 규정 — 바이오 글자가 섞여도 임상시험용이 먼저 */
   if(/첨단|생물|바이오|세포|생균|인체/.test(name)) return "바이오·첨단바이오";
   if(/약사법|안전에 관한 규칙|시설기준령|의약품 제조 및 품질관리에 관한 규정/.test(name)) return "공통";
   return "의약품"; }

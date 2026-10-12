@@ -1099,7 +1099,8 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .law-grp-tag.g0{background:var(--paper);color:var(--muted);}
 .law-grp-tag.g1{background:var(--blue-soft);color:var(--blue-deep);}
 .law-grp-tag.g2{background:var(--accent-soft);color:var(--accent);}
-.law-grp-tag.g3{background:#F5EEDC;color:var(--brass);}   /* 의약외품 — 놋쇠색 */
+.law-grp-tag.g3{background:var(--warn-bg);color:var(--warn-fg);}   /* 임상시험용 (v223) */
+.law-grp-tag.g4{background:#F5EEDC;color:var(--brass);}   /* 의약외품 — 놋쇠색 */
 .ask-scope{margin:0 0 var(--sp-3);font-size:var(--fs-xs);color:var(--muted);}
 /* 소관 판단 한 줄 (v220) — 쪽지 맨 위. 우리 과 주관/협조/아님 알약 + 주관·협조·지방청 */
 .ask-triage{margin:0 0 var(--sp-3);font-size:var(--fs-sm);color:var(--ink);line-height:var(--lh-body);}
@@ -1120,7 +1121,7 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .tri-again{margin-left:var(--sp-2);font-size:var(--fs-xs);font-weight:700;}
 .ans-coop{margin:0 0 var(--sp-2);font-size:var(--fs-xs);display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2);}
 .rules-divinfo{margin-top:-4px;}
-.law-grp-tag.g4{background:#EEE;color:var(--muted);}
+.law-grp-tag.g5{background:#EEE;color:var(--muted);}   /* 소관 판단용 — 번호는 LAW_GRPS 자리다. 묶음을 끼우면 여기도 민다 */
 .law-internal{padding:8px 10px;font-size:var(--fs-xs);color:var(--muted);border-top:1px dashed var(--line);margin-top:var(--sp-2);display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-2);align-items:center;}
 .law-internal-n{color:var(--ink);}
 .law-internal .dim{opacity:.8;}

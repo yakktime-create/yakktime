@@ -1750,3 +1750,10 @@ input[type=checkbox].law-check:checked::after,.ask-check input[type=checkbox]:ch
 .quick-when .chip{min-height:34px;padding:0 13px;}
 .quick-date{flex:0 0 auto;width:160px;min-width:0;padding:6px 10px;font-size:var(--fs-sm);}
 .quick-date[hidden]{display:none;}
+/* 시트 스크롤 (v241) — 시트 안만 굴리고 뒤 화면은 멈춘다. 끝에 닿아도 뒤로 넘어가지 않게 */
+.sheet-body{overscroll-behavior:contain;}
+.sheet,.sheet-back{overscroll-behavior:contain;touch-action:pan-y;}
+body.has-sheet .main{overflow:hidden;}
+/* 줄 높이는 단추와 상관없이 같다 (v241) — 체크한 줄엔 별표가 없어서 줄이 낮아졌다(이랑님 「체크하면 왜 위아래 박스 크기 달라지는」) */
+.row,.ev-row{min-height:56px;}
+.row-acts{min-height:var(--tap);align-items:center;}

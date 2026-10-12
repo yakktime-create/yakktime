@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v240";
+var APP_VER="v241";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6357,6 +6357,7 @@ function renderLaws(){
   renderAnsModal();
   renderLawResults();
   renderLawModal();
+  document.body.classList.toggle("has-sheet",!!lawListOpen);
   var q=document.getElementById("law-q");
   if(q){
     /* Enter 는 예전처럼 검색. 줄바꿈이 필요하면 Shift+Enter.
@@ -6370,6 +6371,15 @@ function renderLaws(){
   }
 }
 
+function lawScopeRefresh(){
+  if(!lawListOpen){ render(); return; }
+  var sh=document.querySelector(".law-sheet");
+  if(sh){ var body=sh.querySelector(".sheet-body"), top=body?body.scrollTop:0;
+    var tmp=document.createElement("div"); tmp.innerHTML=lawManageSheetHtml(); var ns=tmp.querySelector(".law-sheet");
+    if(ns){ sh.innerHTML=ns.innerHTML; var nb=sh.querySelector(".sheet-body"); if(nb) nb.scrollTop=top; } }
+  var g=document.querySelector(".law-grps"); if(g){ var t2=document.createElement("div"); t2.innerHTML=lawGrpChipsHtml('<button class="link-btn law-manage" data-act="law-list">법령 관리 <i>'+S.laws.length+'</i> ›</button>'); g.replaceWith(t2.firstChild); }
+  var bt=document.querySelector(".ask-bar-t"); if(bt&&!lawAsking) bt.innerHTML=lawOnlyLabel()?"<b>"+esc(lawOnlyLabel())+"</b>에서 AI 로 조문 찾기":"<b>AI 로 조문 찾기</b>";
+}
 /* 「법령 관리」 — 아래에서 올라오는 시트. 받기·올리기·체크(이 법령에서만 찾기)·법제처/PDF 보기·삭제. 가끔 쓰는 것이라 평소 화면엔 없다. */
 function lawManageSheetHtml(){
   var items=S.laws; lawTidyNames();
@@ -6618,16 +6628,16 @@ document.getElementById("app").addEventListener("click",function(e){
     case "law-upload": lawUploadClick(); break;
     case "law-search": lawSearch(); break;
     case "law-ask": lawAskRun(); break;
-    case "law-only": { if(lawAsking){ showToast("조문을 찾는 동안은 범위를 바꿀 수 없어요"); break; } if(lawOnly[id]) delete lawOnly[id]; else lawOnly[id]=true; render(); break; }
-    case "law-only-all": { if(lawAsking){ showToast("조문을 찾는 동안은 범위를 바꿀 수 없어요"); break; } lawOnly={}; S.laws.forEach(function(l){ lawOnly[l.id]=true; }); render(); break; }
-    case "law-only-none": { if(lawAsking){ showToast("조문을 찾는 동안은 범위를 바꿀 수 없어요"); break; } lawOnly={}; render(); break; }
+    case "law-only": { if(lawAsking){ showToast("조문을 찾는 동안은 범위를 바꿀 수 없어요"); break; } if(lawOnly[id]) delete lawOnly[id]; else lawOnly[id]=true; lawScopeRefresh(); break; }
+    case "law-only-all": { if(lawAsking){ showToast("조문을 찾는 동안은 범위를 바꿀 수 없어요"); break; } lawOnly={}; S.laws.forEach(function(l){ lawOnly[l.id]=true; }); lawScopeRefresh(); break; }
+    case "law-only-none": { if(lawAsking){ showToast("조문을 찾는 동안은 범위를 바꿀 수 없어요"); break; } lawOnly={}; lawScopeRefresh(); break; }
     /* 묶음 머리말을 누르면 그 묶음만 — 「고시만 보고 싶다」가 흔한 일이다.
      * 이미 그 묶음이 다 켜져 있으면 끈다 (같은 자리를 두 번 누르면 되돌아온다). */
     case "law-only-kind": {
       var kn=S.laws.filter(function(x){ return String(lawKindOf(x).n)===id; });
       var allOn=kn.length&&kn.every(function(x){ return lawOnly[x.id]; });
       kn.forEach(function(x){ if(allOn) delete lawOnly[x.id]; else lawOnly[x.id]=true; });
-      render(); break; }
+      lawScopeRefresh(); break; }
     /* 묶음 칩 — 그 묶음을 통째로 켜고 끈다. 줄의 묶음 표 — 공통 → 의약품 → 바이오 차례로 바뀐다 */
     case "law-only-grp": {
       if(lawAsking){ showToast("조문을 찾는 동안은 범위를 바꿀 수 없어요"); break; }
@@ -6827,6 +6837,7 @@ function rulesDivCheck(name){
 var settingsOpen=false;
 function renderSettingsModal(){
   var el=document.getElementById("settings-modal"); if(!el) return;
+  document.body.classList.toggle("has-sheet",!!settingsOpen||(active==="laws"&&lawListOpen));
   if(!settingsOpen){ el.innerHTML=""; return; }
   el.innerHTML='<div class="sheet-back" data-act="settings"></div>'
     + '<div class="sheet set-sheet" role="dialog"><div class="sheet-grab"></div>'

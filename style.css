@@ -1653,7 +1653,7 @@ input[type=checkbox].law-check:checked::after,.ask-check input[type=checkbox]:ch
 .law-list.grouped.sheet-list{max-height:none;background:none;padding:0;overflow:visible;}
 .sheet-list .law-row{padding:14px 2px;border-radius:0;}
 .sheet-list .law-row+.law-row,.sheet-list .law-kind+.law-row{box-shadow:inset 0 1px 0 var(--line);}
-.sheet-list .law-row.only{background:var(--accent-soft);border-radius:var(--r-md);box-shadow:none;}
+.sheet-list .law-row.only{background:none;}   /* 체크 동그라미만으로 안다 — 줄마다 상자를 깔면 다 고를 때 줄줄이 붙는다(v242) */
 .sheet-list .law-kind{position:static;background:none;margin:var(--sp-4) 0 var(--sp-1);padding:0 2px;}
 .sheet-list .law-kind:first-child{margin-top:0;}
 .law-name-w{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}

@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v241";
+var APP_VER="v242";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6390,10 +6390,11 @@ function lawManageSheetHtml(){
     var onlyOn=!!lawOnly[l.id], kd=lawKindOf(l), head="";
     if(kd.t!==cur){ cur=kd.t;
       var kn=lawSorted().filter(function(x){ return lawKindOf(x).n===kd.n; });
-      var kOn=kn.length&&kn.every(function(x){ return lawOnly[x.id]; });
-      head='<button class="law-kind g'+kd.n+(kOn?" on":"")+'" data-act="law-only-kind" data-id="'+kd.n+'"'
+      var kOn=kn.length&&kn.every(function(x){ return lawOnly[x.id]; }), narrowed=lawOnlyIds().length&&lawOnlyIds().length<items.length;
+      /* 「이 묶음만 보는 중」은 정말 좁혔을 때만 — 전체를 다 켜 두면 모든 머리에 붙어 말이 안 됐다(이랑님 10/12) */
+      head='<button class="law-kind g'+kd.n+(kOn&&narrowed?" on":"")+'" data-act="law-only-kind" data-id="'+kd.n+'"'
          + ' title="이 묶음만 고르기"><span>'+esc(kd.t)+'</span>'
-         + '<span class="law-kind-hint">'+(kOn?"이 묶음만 보는 중":"")+'</span></button>'; }
+         + '<span class="law-kind-hint">'+(kOn&&narrowed?"이 묶음만 보는 중":"")+'</span></button>'; }
     return head+'<div class="law-row'+(onlyOn?" only":"")+'">'
       /* 하나도 안 고르면 전부 본다. 「고른 것만」은 좁힐 때만 쓰는 장치다. */
       + '<label class="law-only"><input type="checkbox" data-act="law-only" data-id="'+l.id+'"'+(onlyOn?" checked":"")+' title="이 법령에서만 찾기" /></label>'

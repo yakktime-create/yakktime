@@ -84,6 +84,16 @@ const MAC_SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const MAC_SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const NL = String.fromCharCode(10);
 const macHeaders = { apikey: MAC_SB_KEY, Authorization: `Bearer ${MAC_SB_KEY}`, "Content-Type": "application/json" };
+// 초안 일감 줄(kind "draft-job") 쓰기 — 앱이 폴링해 읽는다. 일꾼의 맥 일감(kind "draft", status queued)과는 다른 줄이다.
+async function jobPut(id: string, patch: Record<string, unknown>) {
+  const row = { id, ...patch, updated_at: new Date().toISOString() };
+  await fetch(`${MAC_SB_URL}/rest/v1/ai_jobs?on_conflict=id`, { method: "POST",
+    headers: { ...macHeaders, Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(row) }).catch(() => {});
+  if (patch.status === "running") {
+    const old = new Date(Date.now() - 86400e3).toISOString();
+    fetch(`${MAC_SB_URL}/rest/v1/ai_jobs?kind=eq.draft-job&created_at=lt.${encodeURIComponent(old)}`, { method: "DELETE", headers: macHeaders }).catch(() => {});
+  }
+}
 async function macAwake(): Promise<boolean> {
   if (!MAC_SB_URL || !MAC_SB_KEY) return false;
   try {
@@ -234,6 +244,9 @@ Deno.serve(async (req) => {
     if (!apiKey) return json({ error: "ANTHROPIC_API_KEY 가 없어요. Supabase → Edge Functions → Secrets 에 넣어주세요." });
 
     const body = await req.json().catch(() => ({}));
+    // ---- 일감 방식 (2026-10-12, law-pick 과 같은 꼴) — 초안 20초가 한 요청이라 아이패드 5G 에서 끊기면 답을 잃었다.
+    const jobId = (typeof body?.job === "string" && /^[0-9a-f-]{36}$/i.test(body.job)) ? body.job : "";
+    const main = async (): Promise<any> => {
     const q = nfc(String(body?.q || "")).trim().slice(0, Q_MAX);
     const mode = body?.mode === "help" ? "help" : "plain";
     const cites = Array.isArray(body?.cites) ? body.cites : [];
@@ -249,8 +262,8 @@ Deno.serve(async (req) => {
       ? "\n\n[담당자가 전에 보낸 비슷한 답변 — 말투·구성·참고의 본보기]\n" + examples.map((e, i) => `(${i + 1}) 「${e.title}」\n${e.text}`).join("\n\n")
       : "";
 
-    if (!q) return json({ error: "민원 내용을 적어주세요." });
-    if (!cites.length) return json({ error: "근거 조문을 하나 이상 골라주세요." });
+    if (!q) return ({ error: "민원 내용을 적어주세요." });
+    if (!cites.length) return ({ error: "근거 조문을 하나 이상 골라주세요." });
 
     // 조문을 AI 에게 보여준다. 요지를 정확히 잡으려면 무엇에 관한 조문인지
     // 알아야 하고, help 를 쓰려면 조문을 읽어야 한다.
@@ -299,7 +312,7 @@ Deno.serve(async (req) => {
       if (String(got?.summary || "").trim()) { out = got; fellBack = i > 0; break; }
       why = whyStop(res);
     }
-    if (!out) return json({ error: why || "AI 답을 읽지 못했어요.", krw });
+    if (!out) return ({ error: why || "AI 답을 읽지 못했어요.", krw });
 
 
     // **말로 시켜도 샌다 — 서버가 한 번 더 거른다.**
@@ -336,7 +349,7 @@ Deno.serve(async (req) => {
       return sq(String(c?.text || "")).includes(sq(k)) ? k : "";
     });
 
-    return json({
+    return ({
       summary: nfc(String(out?.summary || "")).trim(),
       title: nfc(String(out?.title || "")).replace(/\s+/g, " ").trim().slice(0, 40),
       topic: nfc(String(out?.topic || "")).replace(/\s+/g, " ").replace(/^['‘"「]|['’"」]$/g, "").trim().slice(0, 30),
@@ -352,6 +365,14 @@ Deno.serve(async (req) => {
       // 조용히 갈아타면 「오늘은 왜 초안이 다르지」를 알 길이 없다.
       fellBack,
     });
+    };
+    if (!jobId) return json(await main());
+    await jobPut(jobId, { kind: "draft-job", status: "running", req: { q: String(body?.q || "").slice(0, 300) } });
+    // deno-lint-ignore no-explicit-any
+    (globalThis as any).EdgeRuntime?.waitUntil(
+      main().then((out) => jobPut(jobId, { status: "done", res: out }),
+                  (e) => jobPut(jobId, { status: "error", err: String((e as Error)?.message || e).slice(0, 500) })));
+    return json({ job: jobId });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) });
   }

@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v227";
+var APP_VER="v228";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -5427,14 +5427,10 @@ function ansMake(){
     var a=S.answers.find(function(y){ return y.id===x.id; }); if(!a) return null;
     var t=String(a.final||a.draft||"").trim(); return t.length>=40?{title:a.title||"",text:t.slice(0,1800)}:null;
   }).filter(Boolean).slice(0,2);
-  sb.functions.invoke("law-draft",{body:{
-    q:d.q, mode:"help",     /* 늘 둘 다 만든다 — 나란히 보여주기로 했다 */
-    rules:setGet("ai_rules"), examples:examples, scope:ansScopeText(d),
-    cites:d.cites.map(function(c){ return {law:c.law,num:c.num,text:c.text}; })
-  }}).then(function(r){
+  /* 초안도 일감 방식(v228) — 시작 접수증을 받고 ai_jobs 줄을 2초마다 읽는다. 시작 요청이 끊겨도 줄을 읽어 보고, 20초 넘게 줄이 없으면 실패로. */
+  var job=uuid(), t0=Date.now(), sawRow=false;
+  function finish(v){
     d.busy=false;
-    var v=r&&r.data;
-    if(r&&r.error){ d.err=String(r.error.message||r.error); render(); return; }
     if(!v||v.error){ d.err=(v&&v.error)||"응답이 비어 있어요."; render(); return; }
     d.summary=v.summary||""; d.title=v.title||""; d.topic=v.topic||""; d.help=v.help||""; d.krw=v.krw||0; d.via=v.via||"api"; d.model=v.model||""; d.fellBack=!!v.fellBack; d.made=true;
     /* 조문마다 AI 가 짚고 서버가 원문과 대조한 핵심 문장. 없는 조는 "" → 그 조는 전체를 넣는다 */
@@ -5444,7 +5440,31 @@ function ansMake(){
     d.final=ansText(d.mode||"plain"); d.gen=d.final;
     d.dropped=!!v.dropped;
     render();
-  },function(e){ d.busy=false; d.err=String(e&&e.message||e); render(); });
+  }
+  function fail(msg){ d.busy=false; d.err=msg; render(); }
+  function poll(){
+    if(ansDraft!==d) return;
+    var el=Date.now()-t0;
+    if(el>180e3){ fail("시간이 지났어요 — 다시 만들기를 눌러 주세요"); return; }
+    if(!sawRow&&el>20e3){ fail("요청이 서버에 닿지 않았어요 — 다시 만들기를 눌러 주세요"); return; }
+    withAuthRetry(function(){ return sb.from("ai_jobs").select("status,res,err").eq("id",job).maybeSingle(); }).then(function(r){
+      var row=r&&r.data; if(row) sawRow=true;
+      if(row&&row.status==="done"&&row.res){ finish(row.res); return; }
+      if(row&&row.status==="error"){ fail(row.err||"서버에서 멈췄어요"); return; }
+      setTimeout(poll,2000);
+    },function(){ setTimeout(poll,3000); });
+  }
+  sb.functions.invoke("law-draft",{body:{
+    q:d.q, mode:"help",     /* 늘 둘 다 만든다 — 나란히 보여주기로 했다 */
+    rules:setGet("ai_rules"), examples:examples, scope:ansScopeText(d), job:job,
+    cites:d.cites.map(function(c){ return {law:c.law,num:c.num,text:c.text}; })
+  }}).then(function(r){
+    var v=r&&r.data;
+    if(!v){ poll(); return; }            /* 시작 응답을 못 받아도 서버가 받았을 수 있다 */
+    if(v.error){ fail(v.error); return; }
+    if(v.job){ poll(); return; }
+    finish(v);                           /* 옛 서버면 결과가 바로 온다 */
+  },function(){ poll(); });
 }
 
 /* ---------- 조립 ---------- */

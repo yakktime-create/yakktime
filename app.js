@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v231";
+var APP_VER="v232";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3540,14 +3540,23 @@ function lawScopeLabel(){
   var cnt={}; ids.forEach(function(id){ var l=S.laws.find(function(x){ return x.id===id; }); if(!l) return; var g=lawGrpOf(l); cnt[g]=(cnt[g]||0)+1; });
   return LAW_GRPS.filter(function(g){ return cnt[g]; }).map(function(g){ return g+" "+cnt[g]; }).join(" · ");
 }
-function lawGrpChipsHtml(){
+function lawGrpChipsHtml(extra){
   var on={}; lawOnlyIds().forEach(function(i){ on[i]=1; });
   var narrowed=lawOnlyIds().length&&lawOnlyIds().length<S.laws.length;
-  return '<div class="law-grps'+(lawAsking?" is-busy":"")+'">'+LAW_GRPS.map(function(g,i){
-    var ls=lawGrpLaws(g); if(!ls.length) return "";
-    var all=ls.every(function(l){ return on[l.id]; });
-    return '<button class="law-grp-chip g'+i+(all?" on":"")+'"'+(lawAsking?' disabled':'')+' data-act="law-only-grp" data-id="'+esc(g)+'" title="이 묶음에서만 찾기">'+esc(g)+' <b>'+ls.length+'</b></button>';
-  }).join("")+'<span class="law-grps-hint">'+(lawAsking?"조문을 찾는 동안은 범위를 바꿀 수 없어요 — 지금 범위로 찾고 있어요":narrowed?"고른 범위에서만 찾아요":"누르면 그 묶음에서만 찾아요 · 소관 판단용은 조문 찾기엔 안 써요")+'</span></div>';
+  var dis=lawAsking?' disabled':'';
+  /* 「전체」가 기본이고 칩 하나가 곧 범위다. 소관 판단용은 선 하나 건너 흐리게 — 조문 찾기엔 평소 안 쓴다(토스 결 시안 2, 2026-10-12) */
+  return '<div class="law-grps'+(lawAsking?" is-busy":"")+'">'
+    + '<button class="law-grp-chip'+(narrowed?"":" on")+'"'+dis+' data-act="law-only-none" title="전체에서 찾기">전체</button>'
+    + LAW_GRPS.map(function(g,i){
+      var ls=lawGrpLaws(g); if(!ls.length) return "";
+      var all=ls.every(function(l){ return on[l.id]; }), internal=g===LAW_GRP_INTERNAL;
+      return (internal?'<span class="law-grp-sep"></span>':'')
+        + '<button class="law-grp-chip g'+i+(all?" on":"")+(internal?" int":"")+'"'+dis+' data-act="law-only-grp" data-id="'+esc(g)+'"'
+        + ' title="'+(internal?"소관 판단에만 써요 — 누르면 여기서도 찾아요":"이 묶음에서만 찾기")+'">'+esc(g)+' <b>'+ls.length+'</b></button>';
+    }).join("")
+    + (extra||"")
+    + (lawAsking?'<span class="law-grps-hint">지금 범위로 찾고 있어요 — 끝날 때까지 범위는 못 바꿔요</span>':'')
+    + '</div>';
 }
 function lawOnlyLabel(){
   var ids=lawOnlyIds(); if(!ids.length||ids.length===S.laws.length) return "";
@@ -3739,72 +3748,85 @@ function lawTriageAsk(q){
     fin(d);                               /* 옛 서버면 결과가 바로 온다 */
   },function(){ return poll(); });
 }
-function lawTriageHtml(q){
+/* 소관 판단의 「자세히」 몫 — 주관·협조·지방청·근거·메모. 결론 한 줄과 갈래 칩은 lawAskNoteHtml 이 위에 그린다 */
+function lawTriageDetailHtml(q){
   var t=lawTriage; if(!t||t.q!==q) return "";
   if(t.err) return '<p class="ask-triage dim">소관을 가르지 못했어요 — '+esc(t.err)+'</p>';
   if(!t.data) return '<p class="ask-triage dim">소관 가르는 중…</p>';
   var d=t.data, mine=d.mine||"";
-  var pill='<span class="triage-mine m-'+(mine==="주관"?"own":mine==="협조"?"coop":"no")+'">'+esc(mine==="아님"?"우리 과 아님":"우리 과 "+mine)+'</span>';
   var parts=['<b>주관</b> '+esc(d.owner||"?")+(d.ownerBasis?' <span class="dim">('+esc(d.ownerBasis)+')</span>':'')];
   (d.coop||[]).forEach(function(c){ parts.push('<b>협조</b> '+esc(c.div)+(c.why?' <span class="dim">('+esc(c.why)+')</span>':'')); });
   if(d.local) parts.push('<b>지방청</b> '+esc(d.localWhy||"개별 허가·시설 적합 판단"));
-  /* 갈래 칩 — 누르면 켜고 끈다(AI 가 틀렸을 때). 켜진 것과 마지막으로 찾은 것이 다르면 「이 갈래로 다시 찾기」 */
-  var ps=d.parts||[], chips="";
-  if(ps.length){
-    chips='<span class="tri-list">'+ps.map(function(p){
-      var on=lawFocusSel.indexOf(p.no)>=0, k=p.mine==="아님"?"no":p.mine==="협조"?"coop":"own";
-      return '<button class="tri-part m-'+k+(on?" on":"")+'" data-act="tri-part" data-id="'+esc(p.no)+'" title="'+esc((p.gist?p.gist+" — ":"")+(p.basis||p.owner||""))+'">'
-        + '<b>'+esc(p.no)+'</b> '+esc(p.mine==="아님"?(p.owner||"다른 과"):"우리")+(on?' ✓':'')+'</button>';
-    }).join("")+'</span>';
-    /* 마지막으로 찾은 갈래: 일부면 focus, 전체면 null, 우리 몫 없음이면 [] */
-    var used=(lawAsk&&lawAsk.q===q)?(lawAsk.focus||(lawAsk.noMine?[]:null)):null;
-    var same=used===null?(lawFocusSel.length===ps.length):(used.join(",")===lawFocusSel.join(","));
-    if(lawAsk&&lawAsk.q===q&&!lawAsking&&!same)
-      chips+=' <button class="link-btn tri-again" data-act="ask-refocus">'+(lawFocusSel.length?'이 갈래로 다시 찾기':'갈래를 하나는 켜 주세요')+'</button>';
-    if(lawAsk&&lawAsk.q===q&&lawAsk.focus) chips+='<span class="triage-note">'+esc(lawFocusLabel(lawAsk.focus))+' 만으로 조문을 찾았어요 — 다른 갈래의 조문은 후보에 없어요.</span>';
-  }
-  return '<p class="ask-triage">'+pill+' '+parts.join(' · ')
+  return '<p class="ask-triage">'+parts.join(' · ')
     + (d.note?'<span class="triage-note">'+esc(d.note)+'</span>':'')
-    + chips
     + (mine==="아님"?'<span class="triage-note">우리 과 몫이 아니면 민원처리 규정 제7조②에 따라 재분류 신청을 검토하세요.</span>':'')+'</p>';
 }
+/* 갈래 칩 — 누르면 켜고 끈다(AI 가 틀렸을 때). 켜진 것과 마지막으로 찾은 것이 다르면 「이 갈래로 다시 찾기」 */
+function lawTriChipsHtml(q){
+  var ps=lawTriParts(); if(!ps.length||!lawTriage||lawTriage.q!==q) return {chips:"",after:""};
+  var chips='<span class="tri-list">'+ps.map(function(p){
+    var on=lawFocusSel.indexOf(p.no)>=0, k=p.mine==="아님"?"no":p.mine==="협조"?"coop":"own";
+    return '<button class="tri-part m-'+k+(on?" on":"")+'" data-act="tri-part" data-id="'+esc(p.no)+'" title="'+esc((p.gist?p.gist+" — ":"")+(p.basis||p.owner||""))+'">'
+      + '<b>'+esc(p.no)+'</b> '+esc(p.mine==="아님"?(p.owner||"다른 과"):"우리")+(on?' ✓':'')+'</button>';
+  }).join("")+'</span>';
+  var after="";
+  var used=(lawAsk&&lawAsk.q===q)?(lawAsk.focus||(lawAsk.noMine?[]:null)):null;
+  var same=used===null?(lawFocusSel.length===ps.length):(used.join(",")===lawFocusSel.join(","));
+  if(lawAsk&&lawAsk.q===q&&!lawAsking&&!same)
+    after+='<button class="link-btn tri-again" data-act="ask-refocus">'+(lawFocusSel.length?'이 갈래로 다시 찾기':'갈래를 하나는 켜 주세요')+'</button>';
+  if(lawAsk&&lawAsk.q===q&&lawAsk.focus) after+='<span class="triage-note">'+esc(lawFocusLabel(lawAsk.focus))+' 만으로 조문을 찾았어요 — 다른 갈래의 조문은 후보에 없어요.</span>';
+  return {chips:chips,after:after};
+}
+var lawAskDetail=false;   /* 쪽지의 「자세히」 — 질문·범위·주관 근거·후보 보강·지난 답변·표시 뜻. 평소엔 결론 한 줄과 갈래 칩만(토스 결 시안 2) */
 function lawAskNoteHtml(){
   var d=lawAsk; if(!d) return "";
-  var head='<div class="ask-head"><span class="ask-qt">「'+esc(d.q)+'」</span>'
-    + '<span class="ask-cost">'+esc(aiCostLabel(d))+'</span>'
-    + '<button class="link-btn quiet-link ask-x" data-act="ask-close" title="AI 결과 닫기">닫기 ✕</button></div>'
-    + (d.gist?'<p class="ask-gist"><b>AI 가 읽은 핵심</b> — '+esc(d.gist)+' <span class="ask-dim">이게 아니면 질문을 고쳐 다시 물어보세요.</span></p>':'')
-    + (d.scope?'<p class="ask-scope">본 범위 — '+esc(d.scope)+'</p>':'')
-    + lawTriageHtml(d.q);
+  var t=(lawTriage&&lawTriage.q===d.q)?lawTriage:null, td=t&&t.data, mine=(td&&td.mine)||"", owner=(td&&td.owner)||"";
+  var title="", sub="";
+  if(td&&mine==="주관") title="우리 과 주관"+((td.coop||[]).length?" — 협조 "+td.coop.map(function(c){ return c.div; }).join("·"):"");
+  else if(td&&mine==="협조") title="우리 과는 협조 — 주관은 "+(owner||"다른 과");
+  else if(td&&mine==="아님") title="우리 과 몫이 아니에요 — 주관은 "+(owner||"다른 과");
+  if(title) sub=d.gist||""; else title=d.gist||("「"+d.q.slice(0,60)+(d.q.length>60?"…":"")+"」");
+  var tc=lawTriChipsHtml(d.q);
+  var none="";
   if(!d.picks||!d.picks.length)
-    return '<div class="ask-box">'+head
-      + '<p class="ask-none">'+(d.noMine
-          ? '우리 과 몫인 갈래가 없어 조문은 찾지 않았어요. <button class="link-btn" data-act="ask-all">그래도 민원 전체로 찾기</button>'
-          : d.stopped
-          ? (d.stopped==="refusal"?"AI 가 답하기를 거부했어요."
-            :d.stopped==="max_tokens"?"AI 답이 중간에서 잘렸어요."
-            :"AI 답을 읽지 못했어요.")
-          : "올려둔 법령에서는 관련 조문을 못 찾았어요.")+'</p>'
-      + (d.note?'<p class="ask-note">'+esc(d.note)+'</p>':'')+'</div>';
+    none='<p class="ask-none">'+(d.noMine
+        ? '우리 과 몫인 갈래가 없어 조문은 찾지 않았어요. <button class="link-btn" data-act="ask-all">그래도 민원 전체로 찾기</button>'
+        : d.stopped
+        ? (d.stopped==="refusal"?"AI 가 답하기를 거부했어요."
+          :d.stopped==="max_tokens"?"AI 답이 중간에서 잘렸어요."
+          :"AI 답을 읽지 못했어요.")
+        : "올려둔 법령에서는 관련 조문을 못 찾았어요.")+'</p>';
+  /* 자세히 */
+  var det=['<p><b>질문</b> 「'+esc(d.q.length>400?d.q.slice(0,400)+"…":d.q)+'」</p>'];
+  if(d.scope) det.push('<p><b>본 범위</b> '+esc(d.scope)+'</p>');
+  var tri=lawTriageDetailHtml(d.q); if(tri) det.push(tri);
+  if(d.note) det.push('<p class="ask-note">'+esc(d.note)+'</p>');
+  if(d.truncated) det.push('<p class="ask-warn">올려둔 조문이 너무 많아 <b>앞쪽 '+d.arts+'개만</b> 봤어요. 위에서 범위를 좁혀주세요.</p>');
   var extra=[];
   if(d.boosted) extra.push("낱말로 "+d.boosted+"개"+(d.words&&d.words.length?"("+d.words.join("·")+")":""));
   if(d.semantic) extra.push("뜻으로 "+d.semantic+"개");
   if(d.pastBoost) extra.push("지난 답변에서 "+d.pastBoost+"개");
   if(d.skipped) extra.push("시행 전 조문 "+d.skipped+"개 제외");
-  var past=(d.similar||[]).filter(function(x){ return S.answers.some(function(a){ return a.id===x.id; }); });
-  var pastHtml=past.length
-    ? '<p class="ask-past"><b>비슷한 지난 답변</b> — '+past.map(function(x){
-        return '<button class="link-btn ask-past-btn" data-act="ans-jump" data-id="'+esc(x.id)+'">'+esc(x.title||"(제목 없음)")+'</button>';
-      }).join(" · ")+' <span class="ask-dim">그때 인용한 조문을 후보에 먼저 넣었고, 초안의 말투 본보기로도 써요.</span></p>'
-    : "";
   if(d.looked) extra.push("본문 읽음 "+d.looked+"개");
-  return '<div class="ask-box">'+head
-    + (d.note?'<p class="ask-note">'+esc(d.note)+'</p>':'')
-    + (d.truncated?'<p class="ask-warn">올려둔 조문이 너무 많아 <b>앞쪽 '+d.arts+'개만</b> 봤어요. 위에서 법령을 골라 범위를 좁혀주세요.</p>':'')
-    + (extra.length?'<p class="ask-dim ask-extra">후보 보강 — '+esc(extra.join(" · "))+'</p>':'')
-    + pastHtml
-    + '<p class="ask-legend"><span class="ask-score n-1">인용 필수</span> 표시가 붙은 조는 처음부터 체크돼 있어요. '
-    +   '<span>있으면 좋음</span><span>없어도 됨</span>은 보고 고르세요. 조문 원문은 카드를 누르면 열려요.</p>'
+  if(extra.length) det.push('<p><b>후보 보강</b> '+esc(extra.join(" · "))+'</p>');
+  var past=(d.similar||[]).filter(function(x){ return S.answers.some(function(a){ return a.id===x.id; }); });
+  if(past.length) det.push('<p class="ask-past"><b>비슷한 지난 답변</b> — '+past.map(function(x){
+        return '<button class="link-btn ask-past-btn" data-act="ans-jump" data-id="'+esc(x.id)+'">'+esc(x.title||"(제목 없음)")+'</button>';
+      }).join(" · ")+' <span class="ask-dim">그때 인용한 조문을 후보에 먼저 넣었고, 초안의 말투 본보기로도 써요.</span></p>');
+  if(d.picks&&d.picks.length) det.push('<p class="ask-legend"><span class="ask-score n-1">인용 필수</span> 표시가 붙은 조는 처음부터 체크돼 있어요. '
+    +   '<span>있으면 좋음</span><span>없어도 됨</span>은 보고 고르세요. 조문 원문은 카드를 누르면 열려요.</p>');
+  /* 지난 답변이 있으면 접힌 채로도 한 줄은 보인다 — 본보기가 있다는 건 알아야 한다 */
+  var pastLine=(!lawAskDetail&&past.length)?'<p class="ask-past"><b>비슷한 지난 답변</b> — '+past.map(function(x){
+        return '<button class="link-btn ask-past-btn" data-act="ans-jump" data-id="'+esc(x.id)+'">'+esc(x.title||"(제목 없음)")+'</button>'; }).join(" · ")+'</p>':"";
+  return '<div class="ask-box">'
+    + '<div class="ask-meta"><span>'+esc(aiCostLabel(d))+'</span>'
+    +   '<button class="link-btn quiet-link ask-x" data-act="ask-close" title="AI 결과 닫기">✕</button></div>'
+    + '<h3 class="ask-h3">'+esc(title)+'</h3>'
+    + (sub?'<p class="ask-sub">'+esc(sub)+'</p>':'')
+    + none
+    + '<div class="ask-row">'+tc.chips+'<button class="link-btn ask-detail-btn" data-act="ask-detail">'+(lawAskDetail?"접기":"자세히")+'</button></div>'
+    + (tc.after?'<div class="ask-after">'+tc.after+'</div>':'')
+    + (lawAskDetail?'<div class="ask-detail">'+det.join("")+'</div>':pastLine)
     + '</div>';
 }
 
@@ -3826,9 +3848,12 @@ function lawAskFits(t){ return String(t||"").trim().length>=12; }
 /* 칸이 내용만큼 자라게 + ✦ 줄을 보이거나 감추기 */
 function lawQBox(q){
   q.style.height="auto";
-  q.style.height=Math.min(q.scrollHeight,118)+"px";   /* 네 줄까지. 그 뒤는 칸 안에서 스크롤 */
+  q.style.height=Math.min(q.scrollHeight,180)+"px";   /* 여섯 줄쯤까지. 그 뒤는 칸 안에서 스크롤 */
+  /* ✦ 단추는 늘 보이고, 글이 짧을 땐 흐리기만 한다(시안 2). 「지우기」는 글이 있을 때만 */
   var bar=document.querySelector(".ask-bar");
-  if(bar) bar.classList.toggle("gone",!lawAskFits(q.value));
+  if(bar) bar.classList.toggle("idle",!lawAskFits(q.value));
+  var cl=document.querySelector(".law-ask-clear");
+  if(cl) cl.hidden=!q.value;
 }
 
 var LAW_HIT_MAX=600;   /* 검색 결과 상한 — 닿으면 화면에 알린다 */
@@ -6139,23 +6164,19 @@ function hwpxMake(blocks,title){
 function renderLaws(){
   lawPickResume();
   var items=S.laws;
-  var totalPages=0; items.forEach(function(l){ totalPages+=(l.pages||0); });
-  var pills=[pill("법령 "+items.length+"건")];
-  if(totalPages) pills.push(pill("총 "+totalPages+"쪽"));
-
-  var list="";
+  var notices="";
   if(items.length){
     /* 같은 법령이 두 벌 이상이면 검색 결과가 두 번씩 나오고 AI도 헷갈린다.
      * 열 몇 개를 일일이 볼 수 없으므로 여기서 세어 알린다. */
     var olds=items.filter(lawIsOld);
-    if(olds.length) list+='<div class="notice"><span class="notice-ic">!</span>'
+    if(olds.length) notices+='<div class="notice"><span class="notice-ic">!</span>'
       + '<div>같은 법령이 <b>'+olds.length+'개 겹쳐</b> 있어요 (옛 판이거나 같은 판 두 벌). '
       +   '두면 검색 결과가 두 번씩 나오고 AI도 헷갈려요.</div>'
       + '<button class="btn sm" data-act="law-drop-old">겹치는 것 정리</button></div>';
     /* 법령·고시는 법제처에서 바로 받을 수 있다 — 개정판이 따라오고 별표의 표가 읽힌다.
      * 지침서는 법제처에 없으니 그대로 PDF 다. 한 번 바꾸면 이 알림은 사라진다. */
     var apiable=items.filter(function(l){ return lawIsApiable(l)&&l.src!=="api"; }).length;
-    if(apiable&&!lawBusy) list+='<div class="notice"><span class="notice-ic">!</span>'
+    if(apiable&&!lawBusy) notices+='<div class="notice"><span class="notice-ic">!</span>'
       + '<div>법제처에서 바로 받을 수 있는 법령이 <b>'+apiable+'개</b> 있어요. 받으면 <b>개정판이 저절로 따라오고</b>, '
       +   '별표의 표(행정처분 기준 등)를 칸 그대로 읽을 수 있어요.</div>'
       + '<button class="btn sm" data-act="law-api-all">법제처 판으로 바꾸기</button></div>';
@@ -6163,107 +6184,48 @@ function renderLaws(){
     /* 「조문 전부 다시 만들기」 버튼은 뺐다(이랑님: 「필요해?」). 개정은 앱이 스스로 확인해 새 판이 있을 때만 알린다. */
     lawApiCheckUpdates();
     var newer=items.filter(function(l){ return l.src==="api"&&l.newer; });
-    if(newer.length&&!lawBusy) list+='<div class="notice"><span class="notice-ic">!</span>'
+    if(newer.length&&!lawBusy) notices+='<div class="notice"><span class="notice-ic">!</span>'
       + '<div>법제처에 <b>새 판</b>이 나왔어요 — '+esc(newer.map(function(l){ return l.name+"("+lawDate(l.newer.eff)+" 시행)"; }).join(" · "))+'. 받으면 조문이 최신판으로 바뀌어요.</div>'
       + '<button class="btn sm" data-act="law-api-newer">최신판으로 바꾸기</button></div>';
     if(lawEmbStat&&!lawEmbStat.loading&&lawEmbStat.missing&&lawEmbStat.ready&&!lawBusy)
-      list+='<div class="notice"><span class="notice-ic">!</span>'
+      notices+='<div class="notice"><span class="notice-ic">!</span>'
         + '<div>뜻으로 찾을 준비가 안 된 조문이 <b>'+lawEmbStat.missing+'개</b> 있어요. 준비하면 <b>낱말이 달라도 뜻이 닿는 조문</b>을 AI 가 찾아요. 돈은 안 들어요.</div>'
         + '<button class="btn sm" data-act="law-embed-all">뜻 검색 준비하기</button></div>';
     var need=items.filter(function(l){ return !l.arts; }).length;
-    if(need) list+='<div class="notice"><span class="notice-ic">!</span>'
+    if(need) notices+='<div class="notice"><span class="notice-ic">!</span>'
       + '<div>조문으로 안 쪼개진 법령이 <b>'+need+'개</b> 있어요. 이걸 해야 검색이 조 단위로 나와요.</div>'
       + '<button class="btn sm" data-act="law-build-all"'+(lawBusy?" disabled":"")+'>'+(lawBusy?"만드는 중...":"전부 만들기")+'</button></div>';
-    /* 「전부 다시 만들기」는 목록 아래에 있으면 안 보인다. 목록을 펼치는
-     * 줄 오른쪽 — 목록을 다루는 것들이 모여 있는 자리에 둔다. */
-    list+='<div class="law-head-row">'
-      + '<button class="law-toggle" data-act="law-list">'
-      +   (lawListOpen?"▾":"▸")+' 올려둔 법령 '+items.length+'개'
-      +   (lawOnlyLabel()?'<span class="law-only-tag">'+esc(lawOnlyLabel())+'만</span>':'')
-      +   '<span class="law-toggle-hint">'+(lawListOpen?"":"찾을 범위 고르기 · 삭제")+'</span></button>'
-      + (lawListOpen
-          ? '<button class="link-btn" data-act="law-only-all">☑ 전체</button>'
-            + '<button class="link-btn quiet-link" data-act="law-only-none">☐ 해제</button>'
-            + '<span class="law-head-sep">·</span>'
-            + '<button class="link-btn" data-act="law-api-new"'+(lawBusy?" disabled":"")+'>＋ 법제처에서 받기</button>'
-            + '<button class="link-btn quiet-link" data-act="law-upload"'+(lawBusy?" disabled":"")+'>PDF 올리기</button>'
-            + (lawBusy?'<span class="law-head-sep">·</span><span class="law-toggle-hint">처리 중…</span>':'')
-            + '<button class="link-btn quiet-link" data-act="law-list">접기</button>'
-          : '')
-      + '</div>'
-      + lawGrpChipsHtml();
-    if(lawListOpen){
-      lawTidyNames();
-      /* 종류별로 묶고 위계 순으로 세운다 — 열 몇 개가 되면 이름만 죽 늘어놔서는
-       * 어느 게 법이고 어느 게 지침인지 알 수 없다. 칸 높이를 잡아 그 안에서
-       * 굴리게 하고, 아래 내용이 저 멀리 밀려나지 않게 한다. */
-      var cur=null;
-      var internals=lawSorted().filter(function(l){ return lawGrpOf(l)===LAW_GRP_INTERNAL; });
-      list+='<div class="law-list grouped">'+lawSorted().filter(function(l){ return lawGrpOf(l)!==LAW_GRP_INTERNAL; }).map(function(l){
-      var onlyOn=!!lawOnly[l.id], kd=lawKindOf(l), head="";
-      if(kd.t!==cur){ cur=kd.t;
-        var kn=lawSorted().filter(function(x){ return lawKindOf(x).n===kd.n; });
-        var kOn=kn.length&&kn.every(function(x){ return lawOnly[x.id]; });
-        /* 개수는 뺐다. 이름 옆에 붙이면 이름보다 튀고, 줄을 맞추려 칸을 넓히면
-         * 이름과 멀어진다. 세어야 할 일이 있으면 목록을 보면 된다. */
-        head='<button class="law-kind g'+kd.n+(kOn?" on":"")+'" data-act="law-only-kind" data-id="'+kd.n+'"'
-           + ' title="이 묶음만 고르기"><span>'+esc(kd.t)+'</span>'
-           + '<span class="law-kind-hint">'+(kOn?"이 묶음만 보는 중":"")+'</span></button>'; }
-      return head+'<div class="law-row'+(onlyOn?" only":"")+'">'
-        /* 하나도 안 고르면 전부 본다. 「고른 것만」은 좁힐 때만 쓰는 장치다. */
-        + '<label class="law-only"><input type="checkbox" data-act="law-only" data-id="'+l.id+'"'+(onlyOn?" checked":"")+' title="이 법령에서만 찾기" /></label>'
-        + '<span class="law-name" data-act="edit" data-table="laws" data-field="name" data-id="'+l.id+'" title="눌러서 이름 수정">'+esc(l.name)+'</span>'
-        + '<span class="law-grp-tag g'+LAW_GRPS.indexOf(lawGrpOf(l))+'">'+esc(LAW_GRP_SHORT[lawGrpOf(l)])+'</span>'
-        + (lawIsOld(l)?'<span class="law-old-tag">겹침</span>':'')
-        /* 종류 배지는 뺐다 — 바로 위 묶음 머리말과 같은 말이다.
-         * 시행일·쪽수는 폭을 고정해 세로로 줄을 맞춘다. */
-        + '<span class="law-eff">'+esc(lawEffOf(l)||'')+'</span>'
-        + '<span class="law-pages">'+(l.src==="api"?'<span class="law-src">법제처</span>':(l.pages||0)+'쪽')
-        +   (l.arts?' · 조문 '+l.arts+'개':'')+'</span>'
-        + (l.arts?'':'<button class="link-btn law-need" data-act="law-reindex" data-id="'+l.id+'">조문 만들기</button>')
-        + (l.src==="api"
-            ? '<button class="law-ic" data-act="law-site" data-id="'+l.id+'" title="법제처에서 보기">↗</button>'
-            : '<button class="law-ic" data-act="law-pdf" data-id="'+l.id+'" data-page="1" title="PDF 원문 열기">↗</button>')
-        + '<button class="law-ic del" data-act="law-del" data-id="'+l.id+'" title="삭제">✕</button></div>';
-      }).join("")
-      /* 소관 판단용(직제 시행규칙·민원처리 규정)은 맨 아래 한 줄로 접는다 — 소관 판단에만 쓰고 조문 후보엔 안 든다 */
-      + (internals.length?'<div class="law-internal">소관 판단용 '+internals.length+'개 — '
-          + internals.map(function(l){ return '<span class="law-internal-n">'+esc(l.name)+'</span>'; }).join(" · ")
-          + ' <span class="dim">조문 찾기엔 안 써요. 묶음 표를 바꾸면 보통 법령처럼 다룹니다.</span>'
-          + internals.map(function(l){ return '<span class="law-grp-tag g5">소관</span>'; }).join("")+'</div>':'')
-      + '</div>';
-    }
   }
-
+  /* 매일 쓰는 것만 화면에: 글자 칸 · ✦ 단추 · 범위 칩 · 결과. 법령 목록(받기·올리기·삭제)은 「법령 관리」 시트로(토스 결 시안 2, 2026-10-12).
+   * 「법령 N건 · 총 N쪽」 배지와 「검색하는 법」 띠는 뺐다 — 사용법은 글자 칸 아래 한 줄 링크. */
+  var manage=items.length?'<button class="link-btn law-manage" data-act="law-list">법령 관리 <i>'+items.length+'</i> ›</button>':'';
   view().innerHTML='<div class="page">'
-    + pageHead2("법령","법령·고시·지침 전체에서 낱말이나 뜻으로 찾고, 골라 모아 답변 초안을 만들어요.",items.length?pills:null)
-    + '<div class="search-box"><span class="search-ic">⌕</span>'
-    +   '<textarea class="input search law-input" id="law-q" rows="1" placeholder="낱말 두세 개는 그 낱말이 든 조문을, 문장은 뜻이 가까운 조문을 찾아요 (Enter)">'+esc(lawQuery)+'</textarea>'
-    +   '<button class="btn sm law-go" data-act="law-search">검색</button>'
+    + pageHead2("법령","민원 글을 붙여 넣으면 조문을 찾고 답변 초안까지 만들어요.",null)
+    + '<div class="law-ask">'
+    +   '<textarea class="input law-input" id="law-q" rows="2" placeholder="민원 글이나 궁금한 점을 적어 주세요. 낱말 두세 개는 그 낱말이 든 조문을, 문장은 뜻이 가까운 조문을 찾아요.">'+esc(lawQuery)+'</textarea>'
+    +   '<div class="law-ask-ft"><button class="link-btn law-ask-hint" data-act="law-help">Enter 는 낱말·뜻 검색 (0원) · '+(lawHelpOpen?"설명 접기":"검색하는 법")+'</button>'
+    +     '<button class="link-btn quiet-link law-ask-clear" data-act="law-clear"'+(lawQuery?'':' hidden')+'>지우기</button></div>'
     + '</div>'
-    /* 돈이 드는 동작이라 검색칸 안에 넣지 않는다. 눌러야만 나간다.
-     * 게다가 낱말 두어 개를 칠 때는 쓸 일이 없으므로, 문장을 적었을 때만
-     * 나타난다 — 평소 화면은 예전과 똑같이 조용하다. */
-    + '<button class="ask-bar'+(lawAskFits(lawQuery)?"":" gone")+(lawAsking?" busy":"")+'" data-act="law-ask"'+(lawAsking?" disabled":"")+'>'
+    /* 돈이 드는 동작이라 글자 칸 안에 넣지 않는다. 눌러야만 나간다. 글이 짧을 땐 흐리게만(사라지면 어디서 부르는지 모른다). */
+    + '<button class="ask-bar'+(lawAskFits(lawQuery)?"":" idle")+(lawAsking?" busy":"")+'" data-act="law-ask"'+(lawAsking?" disabled":"")+'>'
     +   '<span class="ask-ic">✦</span>'
-    /* 기다리는 동안 점 셋이 차례로 켜진다. 점멸이 없으면 눌렸는지조차 모른다 —
-     * 이 일은 5~15초가 걸리므로 「지금 일하는 중」이 보여야 한다. */
     +   '<span class="ask-bar-t">'+(lawAsking
           ?'조문을 고르는 중<span class="ask-dots"><i></i><i></i><i></i></span>'
-          :(lawOnlyLabel()?"<b>"+esc(lawOnlyLabel())+"</b>에서 관련 조문 찾아줘"
-                          :"위에 적은 말로 <b>관련 조문 찾아줘</b>"))+'</span>'
-    +   '<span class="ask-bar-n">'+(lawAskLast!=null?"지난번 "+lawAskLast+"원":"한 번에 50~150원")+'</span>'
+          :(lawOnlyLabel()?"<b>"+esc(lawOnlyLabel())+"</b>에서 AI 로 조문 찾기":"<b>AI 로 조문 찾기</b>"))+'</span>'
+    +   '<span class="ask-bar-n">'+(lawAskLast!=null?"지난번 "+lawAskLast+"원":"맥에서 0원 · 보통 1분")+'</span>'
     + '</button>'
-    + lawHelpHtml()
-    /* 올리기·받기는 목록 머리줄 안에 있다(가끔 쓰는 것은 접어 둔다). 법령이 하나도 없을 때만 크게. */
-    + (items.length?'':'<div class="empty-box"><div class="empty-ic">▤</div><p>아직 법령이 없어요.<br />'
+    + (lawHelpOpen?lawHelpHtml():'')
+    + (items.length?lawGrpChipsHtml(manage)
+        :'<div class="empty-box"><div class="empty-ic">▤</div><p>아직 법령이 없어요.<br />'
         + '<button class="link-btn" data-act="law-api-new">법제처에서 법령·고시 받기</button> · '
         + '<button class="link-btn" data-act="law-upload">지침서 PDF 올리기</button></p></div>')
-    + lawCandsHtml()
-    + list
+    + notices
+    + (lawListOpen?'':lawCandsHtml())
     /* 초안 창은 법령 탭에서 열리므로 여기에도 자리를 둔다 —
      * 없으면 renderAnsModal() 이 조용히 아무것도 안 해서 「눌러도 안 열린다」가 된다. */
-    + '<div id="law-results"></div><div id="law-modal"></div><div id="ans-modal"></div></div>';
+    + '<div id="law-results"></div><div id="law-modal"></div><div id="ans-modal"></div>'
+    + (lawListOpen?lawManageSheetHtml():'')
+    + '</div>';
 
   renderAnsModal();
   renderLawResults();
@@ -6281,6 +6243,50 @@ function renderLaws(){
   }
 }
 
+/* 「법령 관리」 — 아래에서 올라오는 시트. 받기·올리기·체크(이 법령에서만 찾기)·법제처/PDF 보기·삭제. 가끔 쓰는 것이라 평소 화면엔 없다. */
+function lawManageSheetHtml(){
+  var items=S.laws; lawTidyNames();
+  var nApi=items.filter(function(l){ return l.src==="api"; }).length, nArts=0; items.forEach(function(l){ nArts+=(l.arts||0); });
+  var cur=null;
+  var internals=lawSorted().filter(function(l){ return lawGrpOf(l)===LAW_GRP_INTERNAL; });
+  var rows=lawSorted().filter(function(l){ return lawGrpOf(l)!==LAW_GRP_INTERNAL; }).map(function(l){
+    var onlyOn=!!lawOnly[l.id], kd=lawKindOf(l), head="";
+    if(kd.t!==cur){ cur=kd.t;
+      var kn=lawSorted().filter(function(x){ return lawKindOf(x).n===kd.n; });
+      var kOn=kn.length&&kn.every(function(x){ return lawOnly[x.id]; });
+      head='<button class="law-kind g'+kd.n+(kOn?" on":"")+'" data-act="law-only-kind" data-id="'+kd.n+'"'
+         + ' title="이 묶음만 고르기"><span>'+esc(kd.t)+'</span>'
+         + '<span class="law-kind-hint">'+(kOn?"이 묶음만 보는 중":"")+'</span></button>'; }
+    return head+'<div class="law-row'+(onlyOn?" only":"")+'">'
+      /* 하나도 안 고르면 전부 본다. 「고른 것만」은 좁힐 때만 쓰는 장치다. */
+      + '<label class="law-only"><input type="checkbox" data-act="law-only" data-id="'+l.id+'"'+(onlyOn?" checked":"")+' title="이 법령에서만 찾기" /></label>'
+      + '<div class="law-name-w"><span class="law-name" data-act="edit" data-table="laws" data-field="name" data-id="'+l.id+'" title="눌러서 이름 수정">'+esc(l.name)+'</span>'
+      +   '<span class="law-sub"><span class="law-grp-tag g'+LAW_GRPS.indexOf(lawGrpOf(l))+'">'+esc(LAW_GRP_SHORT[lawGrpOf(l)])+'</span>'
+      +     (lawIsOld(l)?'<span class="law-old-tag">겹침</span>':'')
+      +     (l.src==="api"?'법제처':(l.pages||0)+'쪽')+(lawEffOf(l)?' · '+esc(lawEffOf(l))+' 시행':'')+(l.arts?' · 조문 '+l.arts:'')+'</span></div>'
+      + (l.arts?'':'<button class="link-btn law-need" data-act="law-reindex" data-id="'+l.id+'">조문 만들기</button>')
+      + (l.src==="api"
+          ? '<button class="law-ic" data-act="law-site" data-id="'+l.id+'" title="법제처에서 보기">↗</button>'
+          : '<button class="law-ic" data-act="law-pdf" data-id="'+l.id+'" data-page="1" title="PDF 원문 열기">↗</button>')
+      + '<button class="law-ic del" data-act="law-del" data-id="'+l.id+'" title="삭제">✕</button></div>';
+  }).join("")
+  /* 소관 판단용(직제 시행규칙·민원처리 규정)은 맨 아래 한 줄로 접는다 — 소관 판단에만 쓰고 조문 후보엔 안 든다 */
+  + (internals.length?'<div class="law-internal">소관 판단용 '+internals.length+'개 — '
+      + internals.map(function(l){ return '<span class="law-internal-n">'+esc(l.name)+'</span>'; }).join(" · ")
+      + ' <span class="dim">조문 찾기엔 안 써요.</span></div>':'');
+  return '<div class="sheet-back" data-act="law-list"></div>'
+    + '<div class="sheet law-sheet" role="dialog"><div class="sheet-grab"></div>'
+    + '<div class="sheet-h"><h2>법령 관리</h2><button class="lv-x" data-act="law-list" title="닫기">✕</button></div>'
+    + '<div class="sheet-cap">'+items.length+'건 · 법제처 '+nApi+' · PDF '+(items.length-nApi)+(nArts?' · 조문 '+nArts.toLocaleString("ko-KR"):'')+(lawBusy?' · <b>처리 중…</b>':'')+'</div>'
+    + '<div class="sheet-tools"><button class="btn" data-act="law-api-new"'+(lawBusy?" disabled":"")+'>＋ 법제처에서 받기</button>'
+    +   '<button class="btn ghost" data-act="law-upload"'+(lawBusy?" disabled":"")+'>PDF 올리기</button></div>'
+    + lawCandsHtml()
+    + '<div class="sheet-sub"><span>체크한 법령에서만 찾아요'+(lawOnlyLabel()?' — 지금 <b>'+esc(lawOnlyLabel())+'</b>':'')+'</span>'
+    +   '<button class="link-btn" data-act="law-only-all">☑ 전체</button><button class="link-btn quiet-link" data-act="law-only-none">☐ 해제</button></div>'
+    + '<div class="sheet-body"><div class="law-list grouped sheet-list">'+rows+'</div></div>'
+    + '</div>';
+}
+
 function renderLawResults(){
   var el=document.getElementById("law-results"); if(!el) return;
   if(lawAsking){ el.innerHTML=lawWaitHtml(); return; }
@@ -6290,7 +6296,7 @@ function renderLawResults(){
   if(!cards.length){
     if(lawHits===null&&!lawAsk){
       el.innerHTML=S.laws.length
-        ? '<div class="empty-box"><div class="empty-ic">⌕</div><p>찾을 단어를 넣고 Enter를 눌러요.<br />낱말을 띄어 쓰면 <b>모두 들어 있는 곳</b>만 찾아요. 붙은 말 그대로 찾으려면 "따옴표"로 묶어요.<br />문장을 그대로 넣으면 <b>뜻이 가까운 조문</b>을 찾아요.<br /><br />처음이시면 위의 <b>「검색하는 법 · 화면 보는 법」</b>을 펼쳐 보세요.</p></div>'
+        ? '<div class="empty-box sm"><p>낱말은 Enter 로 바로 찾고, 민원 글 전체는 <b>✦ AI 로 조문 찾기</b>를 눌러요.<br />낱말을 띄어 쓰면 <b>모두 들어 있는 곳</b>만, 문장을 넣으면 <b>뜻이 가까운 조문</b>을 찾아요.</p></div>'
         : '';
       return;
     }
@@ -6317,10 +6323,11 @@ function renderLawResults(){
     +   (cards.length>1
           ? (picked?'<button class="link-btn quiet-link" data-act="law-none">☐ 해제</button>'
                    :'<button class="link-btn" data-act="law-all">☑ 모두</button>'):'')
-    +   '<button class="btn quiet sm" data-act="law-copy">'+what+' 복사</button>'
     +   '<button class="btn quiet sm" data-act="law-save">텍스트로 저장</button>'
-    +   '<button class="btn sm" data-act="ans-start">✎ 답변 초안'+(picked?' ('+picked+')':'')+'</button>'
     + '</div></div>';
+  /* 복사·답변 초안은 결과 아래 바닥에 붙어 따라온다 — 체크하고 바로 누른다(토스 결 시안 2) */
+  var dock='<div class="dock"><button class="btn ghost" data-act="law-copy">'+what+' 복사</button>'
+    + '<button class="btn pri" data-act="ans-start">✎ 답변 초안 만들기'+(picked?' <span class="dock-n">'+picked+'곳</span>':'')+'</button></div>';
 
   var SHOW=3, cur=null, body="";
   cards.forEach(function(c){
@@ -6370,7 +6377,8 @@ function renderLawResults(){
   });
   var foldLine=cs.folded.length?'<button class="link-btn law-more-btn law-fold" data-act="ask-more">관련도 낮은 '+cs.folded.length+'개 더 보기</button>':"";
   el.innerHTML=note+head+'<div class="law-hits">'+body+'</div>'+foldLine
-    + '<p class="law-note">같은 조는 한 카드로 묶었어요. <b>카드를 누르면 그 조 전문이 열리고</b>, 체크한 것이 「답변 초안」에 들어가요.</p>';
+    + '<p class="law-note">같은 조는 한 카드로 묶었어요. <b>카드를 누르면 그 조 전문이 열리고</b>, 체크한 것이 「답변 초안」에 들어가요.</p>'
+    + dock;
 }
 
 /* 쪽 보기 창은 Esc로 닫는다 */
@@ -6501,6 +6509,8 @@ document.getElementById("app").addEventListener("click",function(e){
       render(); break; }
     /* "law-grp"(묶음 바꾸기)는 뺐다 — 터치로 바뀌면 안 되는 값(이랑님 10/12). 바꿀 일이 있으면 설정 law_grp 를 직접 고친다. */
     case "ask-more": lawAskMore=true; renderLawResults(); break;
+    case "ask-detail": lawAskDetail=!lawAskDetail; renderLawResults(); break;
+    case "law-clear": lawQuery=""; lawHits=null; lawSem=null; lawTermList=[]; lawCapped=false; render(); { var qq=document.getElementById("law-q"); if(qq) qq.focus(); } break;
     case "tri-part": { var i=lawFocusSel.indexOf(id); if(i>=0) lawFocusSel.splice(i,1); else lawFocusSel.push(id);
       lawFocusSel.sort(function(a,b){ return (parseInt(a,10)||0)-(parseInt(b,10)||0); }); renderLawResults(); break; }
     case "ask-refocus": if(lawAsk&&!lawAsking&&lawFocusSel.length){ var rq=lawAsk.q, rs=lawAsk.scope; lawPickRun(rq,rs); } break;

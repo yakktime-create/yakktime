@@ -50,6 +50,16 @@ setTimeout(function(){ var p=new URLSearchParams(location.search);
   if(p.get("insp")){ active="insp"; inspOpenId="insp-1"; inspPage=p.get("page")||"board"; if(p.get("open")) inspExpand["b:"+p.get("open")]=true; if(p.get("day")) inspFilter.day=p.get("day"); if(p.get("mine")) inspFilter.mine=true; }
   else active=p.get("tab")||"today";
   if(p.get("list")) lawListOpen=true; if(p.get("nohelp")) lawHelpOpen=false;
+  if(p.get("ask")){ lawHelpOpen=false; lawQuery="당사는 항체 기반 신약을 연구·개발하고 있는 바이오의약품 연구개발 기업으로서, 현재 연구개발 중인 후보물질의 임상시험 수행을 위해 기존 연구시설 내부에 임상시험용 의약품 제조시설을 설치하는 방안을 검토하고 있습니다.";
+    lawTriage={q:lawQuery,data:{mine:"협조",owner:"바이오의약품정책과",ownerBasis:"분장 4호 허가 제도",coop:[{div:"바이오의약품품질관리과",why:"GMP 기준·시설기준 관리"}],local:true,
+      parts:[{no:"1",mine:"아님",owner:"바이오의약품정책과"},{no:"2",mine:"아님",owner:"바이오의약품정책과"},{no:"3",mine:"아님",owner:"바이오의약품정책과"},{no:"4",mine:"협조"},{no:"5",mine:"협조"}]}};
+    lawFocusSel=["4","5"];
+    lawAsk={q:lawQuery,scope:"공통 3 · 의약품 1 · 바이오·첨단바이오 2",model:"claude-opus-5-5",krw:0,via:"cli",looked:34,semantic:12,boosted:9,words:["임상시험용","제조소"],focus:["4","5"],gist:"임상시험용의약품 제조시설의 GMP 적합성 평가 절차와 국내외 임상용 제조단위의 구분 관리에 관한 질의",
+      picks:[{id:1,lawId:"l2",label:"제24조(임상시험계획의 승인 등)",need:"인용 필수",grade:"매우 높음",why:"임상시험계획 승인을 신청할 때 별표 1·별표 3 기준에 따른 제조 및 품질관리 자료를 내도록 한 조문입니다.",head:"③ … 제조 및 품질관리기준에 적합함을 증명하는 자료를 첨부하여 식품의약품안전처장에게 제출하여야 한다.",quote:"제출하여야 한다",direct:"답 확인",sure:"근거 찾음"},
+             {id:2,lawId:"l2",label:"별표 4의2(임상시험용의약품 제조 및 품질관리기준) · 3. 기본원칙",need:"인용 필수",grade:"높음",why:"임상시험용의약품 GMP 의 기본원칙과 적용범위. 시판용 재포장·변형에도 적용됩니다.",head:"4. 적용범위 이 기준은 「약사법」 제34조에 따른 임상시험에 사용하는 임상시험용의약품에 적용하며 …",quote:"적용하며",direct:"조건 확인",sure:"근거 찾음"},
+             {id:3,lawId:"l4",label:"8쪽 · Ⅳ. GMP 평가 절차",need:"인용 필수",grade:"높음",why:"서류평가 뒤 제조소 실태조사로 가는 절차와 보완·시정 승인 흐름이 있습니다.",head:"ㅇ 서류평가(제출자료, 붙임1) 후, 제조소 실태조사가 진행된다.",quote:"실태조사가",direct:"답 확인",sure:"근거 찾음"},
+             {id:4,lawId:"l4",label:"11쪽 · Ⅳ. GMP 평가 절차",need:"있으면 좋음",grade:"중간",why:"해외 규제당국 승인 임상시험의 증빙과 생산국 GMP 증명서로 실태조사를 제외할 수 있는 요건.",head:"",quote:"",direct:"조건 확인",sure:"비슷한 대목만"}]};
+    lawSel={a1:true,a2:true,a3:true}; }
   render();
 },500);
 </script></body>''')

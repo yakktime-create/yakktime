@@ -1122,7 +1122,8 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .tri-again{margin-left:var(--sp-2);font-size:var(--fs-xs);font-weight:700;}
 .ans-coop{margin:0 0 var(--sp-2);font-size:var(--fs-xs);display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2);}
 .rules-divinfo{margin-top:-4px;}
-.law-grp-tag.g5{background:#EEE;color:var(--muted);}   /* 소관 판단용 — 번호는 LAW_GRPS 자리다. 묶음을 끼우면 여기도 민다 */
+.law-grp-tag.g5{background:#EEE;color:var(--muted);}
+.law-grp-tag.pend{background:var(--warn-bg);color:var(--warn-fg);border:1px dashed var(--warn-bd);}   /* 한 번 눌러 둔 상태 — 다시 누르면 바뀜 (v229) */   /* 소관 판단용 — 번호는 LAW_GRPS 자리다. 묶음을 끼우면 여기도 민다 */
 .law-internal{padding:8px 10px;font-size:var(--fs-xs);color:var(--muted);border-top:1px dashed var(--line);margin-top:var(--sp-2);display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-2);align-items:center;}
 .law-internal-n{color:var(--ink);}
 .law-internal .dim{opacity:.8;}

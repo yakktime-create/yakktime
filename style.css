@@ -1759,3 +1759,9 @@ body.has-sheet .main{overflow:hidden;}
 .row-acts{min-height:var(--tap);align-items:center;}
 /* 찾는 동안 글자 칸은 읽기만 (v245) — 「지우기」를 감춰도 백스페이스로 지워졌다(이랑님 10/13) */
 .law-ask textarea.input.law-input[readonly]{color:var(--t2);}
+/* 선택이 상자 밖으로 번지지 않게 (v246 · 이랑님 「이거 왜 이렇게 선택돼?」) —
+   민원 내용 상자가 14vh 로 잘려 있어 더 보려고 끌면 iOS 가 선택 늘리기로 받아 위 줄들까지 잡았다. 전부 펼치고, 틀(제목·날짜·단추·메뉴)은 선택 불가 */
+.ans-body.sm{max-height:none;}
+.ans-body{max-height:none;}
+.rail,.page-head,.ans-row-head,.ans-sec-k,.ans-meta-row,.ans-row-acts,.row-acts,.ev-tail,.card-head,.law-grps,.insp-tabs,.insp-filters,.week,.stat-row,button{-webkit-user-select:none;user-select:none;}
+.ans-body,.law-snip,.lv-text,.ask-head-txt,.ask-why{-webkit-user-select:text;user-select:text;}

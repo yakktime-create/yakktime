@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v224";
+var APP_VER="v225";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3604,7 +3604,7 @@ function lawAskRun(){
     var t=lawTriage&&lawTriage.q===q?lawTriage.data:null;
     if(t&&(t.parts||[]).length&&!lawFocusSel.length){
       /* 우리 몫이 하나도 없다 — AI 를 더 부르지 않고 멈춘다. 「그래도 전체로 찾기」는 쪽지에 */
-      lawAskStop(); lawAsking=false;
+      lawAskStop(); lawAsking=false; lawPendSet(null);
       lawAsk={q:q,scope:scopeLbl,picks:[],noMine:true,krw:t.krw||0,model:t.model||"",via:t.via||"",fellBack:!!t.fellBack};
       lawAskLast=t.krw||0; render(); return;
     }
@@ -3625,17 +3625,15 @@ function lawFocusText(q){
     + sel.map(function(p){ return p.no+". "+(p.verbatim?p.text:(p.gist||p.text)); }).join("\n");
 }
 function lawFocusLabel(nos){ return nos&&nos.length?"질문 "+nos.join("·"):""; }
-function lawPickRun(q,scopeLbl){
-  lawAsking=true; if(lawAskStep<1) lawAskStep=1;
-  if(!lawAskTimer) lawAskTimer=setInterval(function(){ if(!lawAsking){ lawAskStop(); return; } lawAskStep++; renderLawResults(); },4200);
-  renderLawResults();
-  function done(){ lawAskStop(); lawAsking=false; render(); }
-  var fq=lawFocusText(q), used=lawFocusSel.slice(), partial=fq!==q;
-  sb.functions.invoke("law-pick",{body:{q:fq,lawIds:lawAskScopeIds===undefined?lawScopeParam():lawAskScopeIds,rules:setGet("ai_rules")}}).then(function(r){
-    var d=r&&r.data;
-    if(!d){ showToast("물어보지 못했어요: "+((r&&r.error&&r.error.message)||"응답이 비었어요"),true); done(); return; }
-    if(d.error){ showToast(d.error,true); done(); return; }
-    d.q=q; d.scope=scopeLbl; d.focus=partial?used:null; lawAsk=d; lawAskMore=false; lawSel={};
+/* 조문 찾기는 **일감 방식**이다 (v225 · 2026-10-12). 소관 판단 → 1차 → 2차 가 한 요청에 60~70초라 아이패드 5G 에서 연결이
+ * 바뀌면 「Failed to send a request」만 남고 답을 잃었다(맥 일꾼 기록엔 세 번 다 「끝」). 이제 서버에 job(uuid)을 주면 바로
+ * 응답하고 뒤에서 마저 돌려 ai_jobs 줄에 적는다 — 앱은 그 줄을 2.5초마다 읽는다. 끊겨도, 앱을 닫았다 열어도(law_pending) 이어받는다. */
+var LAW_PEND_KEY="law_pending", lawPendTimer=null;
+function lawPendGet(){ try{ var p=JSON.parse(localStorage.getItem(LAW_PEND_KEY)||"null"); return p&&p.id&&Date.now()-(p.t||0)<15*60e3?p:null; }catch(e){ return null; } }
+function lawPendSet(p){ try{ if(p) localStorage.setItem(LAW_PEND_KEY,JSON.stringify(p)); else localStorage.removeItem(LAW_PEND_KEY); }catch(e){} }
+function lawPickDone(d,pend){
+  lawPendSet(null);
+  var q=pend.q; d.q=q; d.scope=pend.scope; d.focus=pend.focus||null; lawAsk=d; lawAskMore=false; lawSel={};
     if((d.picks||[]).length){ lawHelpOpen=false; lawListOpen=false; }
     if(d.krw!=null) lawAskLast=d.krw;
     /* 처음부터 체크되는 것은 **등급(중간 이상)으로만** 정한다. 전에 답변에 쓴 조문은
@@ -3648,8 +3646,46 @@ function lawPickRun(q,scopeLbl){
       p.used=usedOf[ansUsedKey(p.law,p.label)]||0;
       if(p.need==="인용 필수") lawSel["a"+p.id]=true;
     });
-    done();
-  }).catch(function(e){ showToast("물어보지 못했어요: "+e.message,true); done(); });
+  lawPickStop();
+}
+function lawPickStop(){ lawAskStop(); lawAsking=false; if(lawPendTimer){ clearTimeout(lawPendTimer); lawPendTimer=null; } render(); }
+function lawPickFail(msg,pend){ lawPendSet(null); showToast("물어보지 못했어요: "+msg,true); lawPickStop(); }
+/* ai_jobs 줄을 읽어 끝났으면 결과로, 아니면 2.5초 뒤 다시. 통신이 잠깐 끊겨도 포기하지 않는다 — 서버는 계속 돌고 있다. */
+function lawPickPoll(pend){
+  if(lawPendTimer){ clearTimeout(lawPendTimer); lawPendTimer=null; }
+  if(Date.now()-pend.t>4*60e3){ showToast("아직 끝나지 않았어요 — 잠시 뒤 법령 탭을 다시 열면 이어서 받아요"); lawAskStop(); lawAsking=false; render(); return; }
+  withAuthRetry(function(){ return sb.from("ai_jobs").select("status,res,err").eq("id",pend.id).maybeSingle(); }).then(function(r){
+    var row=r&&r.data;
+    if(row&&row.status==="done"&&row.res){ var d=row.res; if(d.error){ lawPickFail(d.error,pend); return; } lawPickDone(d,pend); return; }
+    if(row&&row.status==="error"){ lawPickFail(row.err||"서버에서 멈췄어요",pend); return; }
+    lawPendTimer=setTimeout(function(){ lawPickPoll(pend); },2500);
+  },function(){ lawPendTimer=setTimeout(function(){ lawPickPoll(pend); },4000); });
+}
+function lawPickRun(q,scopeLbl){
+  lawAsking=true; if(lawAskStep<1) lawAskStep=1;
+  if(!lawAskTimer) lawAskTimer=setInterval(function(){ if(!lawAsking){ lawAskStop(); return; } lawAskStep++; renderLawResults(); },4200);
+  renderLawResults();
+  var fq=lawFocusText(q), used=lawFocusSel.slice(), partial=fq!==q;
+  var pend={id:uuid(),q:q,scope:scopeLbl,focus:partial?used:null,t:Date.now()};
+  lawPendSet(pend);
+  sb.functions.invoke("law-pick",{body:{q:fq,lawIds:lawAskScopeIds===undefined?lawScopeParam():lawAskScopeIds,rules:setGet("ai_rules"),job:pend.id}}).then(function(r){
+    var d=r&&r.data;
+    /* 시작 요청 자체가 안 닿았어도 서버가 받았을 수 있다 — 바로 포기하지 않고 줄을 읽어 본다 */
+    if(!d){ lawPickPoll(pend); return; }
+    if(d.error){ lawPickFail(d.error,pend); return; }
+    if(d.job){ lawPickPoll(pend); return; }
+    lawPickDone(d,pend);   /* 옛 서버(job 모름)면 결과가 바로 온다 */
+  }).catch(function(){ lawPickPoll(pend); });
+}
+/* 앱을 닫았다 열었을 때 끝나지 않은 조문 찾기가 있으면 이어받는다 — 법령 탭을 그릴 때 한 번 */
+var lawPendResumed=false;
+function lawPickResume(){
+  if(lawPendResumed) return; lawPendResumed=true;
+  var pend=lawPendGet(); if(!pend||lawAsk||lawAsking) return;
+  lawQuery=pend.q; lawAsking=true; lawAskStep=2; lawAskStop();
+  lawAskTimer=setInterval(function(){ if(!lawAsking){ lawAskStop(); return; } lawAskStep++; renderLawResults(); },4200);
+  lawTriageAsk(pend.q).then(function(){ lawFocusInit(); if(pend.focus) lawFocusSel=pend.focus.slice(); if(lawAsk) renderLawResults(); });
+  lawPickPoll(pend);
 }
 
 /* 체크한 조문의 원문을 통째로 뽑아 온다.
@@ -6062,6 +6098,7 @@ function hwpxMake(blocks,title){
 
 /* ---------- 화면 ---------- */
 function renderLaws(){
+  lawPickResume();
   var items=S.laws;
   var totalPages=0; items.forEach(function(l){ totalPages+=(l.pages||0); });
   var pills=[pill("법령 "+items.length+"건")];
@@ -6492,7 +6529,7 @@ document.getElementById("app").addEventListener("click",function(e){
     /* ---- 민원 답변 초안 ---- */
     case "ans-start": ansCitesAll(function(cs,q){ ansStart(cs,q); }); break;
     case "ask-close": { if(lawAsk&&lawAsk.picks) lawAsk.picks.forEach(function(p){ if(!(lawHits||[]).some(function(g){ return g.key==="a"+p.id; })) delete lawSel["a"+p.id]; });
-      lawAsk=null; renderLawResults(); break; }
+      lawAsk=null; lawPendSet(null); renderLawResults(); break; }
     case "ans-close": ansDraft=null; render(); break;
     case "ans-make": ansMake(); break;
     case "ans-mode": if(ansDraft){ ansDraft.mode=id; ansRegen(); renderAnsModal(true); } break;

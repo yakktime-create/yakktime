@@ -221,6 +221,16 @@ const MAC_SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const MAC_SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const NL = String.fromCharCode(10);
 const macHeaders = { apikey: MAC_SB_KEY, Authorization: `Bearer ${MAC_SB_KEY}`, "Content-Type": "application/json" };
+// 조문 찾기 일감 줄(kind "pick") 쓰기 — 앱이 폴링해 읽는다. 하루 지난 pick 줄은 지운다(쌓이지 않게).
+async function jobPut(id: string, patch: Record<string, unknown>) {
+  const row = { id, ...patch, updated_at: new Date().toISOString() };
+  await fetch(`${MAC_SB_URL}/rest/v1/ai_jobs?on_conflict=id`, { method: "POST",
+    headers: { ...macHeaders, Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(row) }).catch(() => {});
+  if (patch.status === "running") {
+    const old = new Date(Date.now() - 86400e3).toISOString();
+    fetch(`${MAC_SB_URL}/rest/v1/ai_jobs?kind=eq.pick&created_at=lt.${encodeURIComponent(old)}`, { method: "DELETE", headers: macHeaders }).catch(() => {});
+  }
+}
 async function macAwake(): Promise<boolean> {
   if (!MAC_SB_URL || !MAC_SB_KEY) return false;
   try {
@@ -557,28 +567,34 @@ Deno.serve(async (req) => {
         divs: divs.length, krw: Math.round(a.usd * KRW), model: a.cfg.id, via: a.res?.via || "api", fellBack: a.fellBack });
     }
     // 담당자가 앱에 적어 둔 「우리 과 규칙」(평문). 1차·2차 프롬프트에 그대로 붙인다.
+    // ---- 일감 방식 (2026-10-12) — 소관 판단 → 1차 → 2차 가 한 요청에 60~70초라 아이패드 5G 에서 연결이 바뀌면 답을 못 받았다
+    // (맥 일꾼 기록엔 세 번 다 「끝」인데 화면엔 「Failed to send a request」). 앱이 job(uuid)을 주면 ai_jobs 에 running 줄을
+    // 만들고 **바로 응답**한 뒤 EdgeRuntime.waitUntil 로 마저 돌려 done/error 를 그 줄에 적는다. 앱은 그 줄을 폴링한다.
+    // 일꾼은 status=queued 만 집으므로 running 으로 넣는 이 줄은 건드리지 않는다. job 이 없으면 예전처럼 한 요청으로 답한다.
+    const jobId = (typeof bodyIn?.job === "string" && /^[0-9a-f-]{36}$/i.test(bodyIn.job)) ? bodyIn.job : "";
+    const main = async (): Promise<any> => {
     const rules = String(rulesIn || "").trim().slice(0, 4000);
     const rulesBlock = rules ? `\n\n<담당자 규칙>\n${rules}\n</담당자 규칙>` : "";
-    if (question.length < 5)    return json({ error: "질문을 조금 더 길게 적어주세요." });
-    if (question.length > 4000) return json({ error: "질문이 너무 길어요. 4000자 안으로 줄여주세요." });
+    if (question.length < 5)    return ({ error: "질문을 조금 더 길게 적어주세요." });
+    if (question.length > 4000) return ({ error: "질문이 너무 길어요. 4000자 안으로 줄여주세요." });
     // 화면에서 법령을 골랐으면 그 안에서만 고른다. 안 골랐으면(null) 전부 본다.
     const only: string[] | null = Array.isArray(lawIds) && lawIds.length ? lawIds.map(String) : null;
 
-    if (!SB_URL || !SB_KEY) return json({ error: "표를 읽을 열쇠가 없어요. 함수를 다시 배포해 주세요." });
+    if (!SB_URL || !SB_KEY) return ({ error: "표를 읽을 열쇠가 없어요. 함수를 다시 배포해 주세요." });
 
     // --- 조 목록 만들기 --------------------------------------------------
     const { data: laws, error: le } = await pg(
       "laws?select=id,name" + (only ? "&id=" + encodeURIComponent(inList(only)) : ""));
-    if (le) return json({ error: "법령 목록을 못 읽었어요: " + le.message });
+    if (le) return ({ error: "법령 목록을 못 읽었어요: " + le.message });
     const lawName = new Map<string, string>((laws || []).map((l: any) => [String(l.id), String(l.name)]));
     const lawKind = new Map<string, Kind>((laws || []).map((l: any) => [String(l.id), kindOf(l.name)]));
 
     const { data: arts, error: ae } = await pgAll(
       "law_articles?select=id,law_id,seq,label&order=law_id.asc,seq.asc"
       + (only ? "&law_id=" + encodeURIComponent(inList(only)) : ""), MAX_ARTS);
-    if (ae) return json({ error: "조문을 못 읽었어요: " + ae.message });
+    if (ae) return ({ error: "조문을 못 읽었어요: " + ae.message });
     if (!arts || !arts.length) {
-      return json({ error: only
+      return ({ error: only
         ? "고른 법령에 조문이 없어요. 「조문 만들기」를 먼저 하거나 범위를 넓혀주세요."
         : "아직 조문으로 쪼개진 법령이 없어요. 법령 탭에서 「조문 만들기」를 먼저 해주세요." });
     }
@@ -625,7 +641,7 @@ Deno.serve(async (req) => {
     const r1: any = a1.res, p1 = a1.p;
     // 실패는 오류(빨간 토스트 3초)가 아니라 **결과 자리**에 남긴다.
     // 거부는 다시 눌러도 소용없으므로 화면에 남아 있어야 읽힌다.
-    if (!p1) return json({ picks: [], ...whyNoJson(r1),
+    if (!p1) return ({ picks: [], ...whyNoJson(r1),
                            arts: live.length, krw: Math.round(a1.usd * KRW) });
 
     let cand = (p1.ns || [])
@@ -788,7 +804,7 @@ Deno.serve(async (req) => {
     }
 
     if (!cand.length) {
-      return json({ picks: [], note: String(p1.note || "관련 조문을 찾지 못했어요."),
+      return ({ picks: [], note: String(p1.note || "관련 조문을 찾지 못했어요."),
                     arts: live.length, skipped, truncated: arts.length >= MAX_ARTS,
                     krw: Math.round(a1.usd * KRW) });
     }
@@ -812,7 +828,7 @@ Deno.serve(async (req) => {
       used += body.length; readCount++;
     }
 
-    if (!sheet.trim()) return json({ error: "조문 본문을 못 읽었어요. 잠시 뒤 다시 눌러주세요." });
+    if (!sheet.trim()) return ({ error: "조문 본문을 못 읽었어요. 잠시 뒤 다시 눌러주세요." });
 
     // --- 2차: 본문을 읽고 최종으로 추리기 ---------------------------------
     const a2 = await askJson(apiKey, (cfg: Cfg) => ({
@@ -829,7 +845,7 @@ Deno.serve(async (req) => {
     const r2: any = a2.res, p2 = a2.p;
     if (!p2) {
       const w = whyNoJson(r2);
-      return json({ picks: [], ...w,
+      return ({ picks: [], ...w,
         // 1차는 통과했으므로 어디까지 갔는지 알려 준다 — 「아무것도 안 됐다」와 다르다.
         note: w.note + ` (제목만 보고 후보 ${cand.length}개까지는 골랐지만, 본문을 읽는 두 번째 단계에서 멈췄어요.)`,
         arts: live.length, skipped,
@@ -931,7 +947,7 @@ Deno.serve(async (req) => {
       .sort((a: any, b: any) => (kindN(a.p) - kindN(b.p)) || (b.p.score - a.p.score) || (a.i - b.i))
       .map((x: any) => x.p);
 
-    return json({
+    return ({
       picks,
       note: nameOf(p2.note || p1.note || ""),
       arts: live.length,
@@ -957,6 +973,14 @@ Deno.serve(async (req) => {
       // 어디서 돌았나 — 맥의 Claude Code(구독, 0원) / Anthropic API / 섞임. 화면이 「맥에서 · 구독」을 붙인다.
       via: (r1?.via === "cli" && r2?.via === "cli") ? "cli" : (r1?.via === "cli" || r2?.via === "cli") ? "mixed" : "api",
     });
+    };
+    if (!jobId) return json(await main());
+    await jobPut(jobId, { kind: "pick", status: "running", req: { q: question.slice(0, 300) } });
+    // deno-lint-ignore no-explicit-any
+    (globalThis as any).EdgeRuntime?.waitUntil(
+      main().then((out) => jobPut(jobId, { status: "done", res: out }),
+                  (e) => jobPut(jobId, { status: "error", err: String((e as Error)?.message || e).slice(0, 500) })));
+    return json({ job: jobId });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) });
   }

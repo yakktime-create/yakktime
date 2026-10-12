@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v225";
+var APP_VER="v226";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -421,7 +421,7 @@ function startEdit(el,table,id,field,type){
   var allowEmpty=(type==="date"||area||field==="time");   /* 기한·메모·시간은 비워서 지울 수 있어야 한다 */
   function commit(save){
     if(settled) return;
-    settled=true; editingId=null;
+    settled=true; var other=editingId&&editingId!==id; if(!other) editingId=null;
     var nv=inp.value.trim();
     if(field==="time"){ nv=normTime(nv.replace(/[^0-9:]/g,""));
       if(nv&&!/^\d{1,2}:\d{2}$/.test(nv)){ save=false; showToast("시간은 숫자로 적어 주세요 (예: 930 → 09:30)",true); } }
@@ -430,13 +430,17 @@ function startEdit(el,table,id,field,type){
       var patch={}; patch[field]=nv||null;
       dbUpdate(table,id,patch);
     }
+    /* 그 사이 다른 칸을 고치기 시작했으면 그리지 않는다 — 그리면 새 입력칸이 날아간다. 원래 글자 자리로 되돌려 두고 다음 그림에 맡긴다 */
+    if(other){ try{ inp.replaceWith(el); }catch(e){} return; }
     render();
   }
   inp.addEventListener("keydown",function(e){
     if(e.key==="Enter"&&(!area||e.metaKey||e.ctrlKey||(!multiLine&&!e.shiftKey))){ e.preventDefault(); commit(true); }
     else if(e.key==="Escape"){ e.preventDefault(); commit(false); }
   });
-  inp.addEventListener("blur",function(){ commit(true); });
+  /* blur 에서 바로 저장·그리면 그 탭이 노린 버튼이 그림과 함께 사라져 **두 번 눌러야** 됐다(이랑님 10/12 「취소 누를 때도 두 번」).
+   * 220ms 뒤에 저장한다 — 그 사이에 click 이 먼저 들어온다. 다른 칸을 바로 고칠 수 있게 editingId 는 즉시 푼다. */
+  inp.addEventListener("blur",function(){ if(editingId===id) editingId=null; setTimeout(function(){ commit(true); },220); });
 }
 
 /* ========== 칸반 드래그 (포인터 이벤트) ==========
@@ -1138,13 +1142,13 @@ var SOMEDAY="someday";   /* 「언젠가 할 일」의 날짜 표시 — 표에�
 function addSchedule(dueKey,inputId){
   var v=(val(inputId||"new-s")||"").trim(); if(!v) return;
   var item={text:v,done:false,star:false,due:dueKey===SOMEDAY?null:(dueKey||keyOf(new Date()))};
-  S.schedule.unshift(item); render(); dbInsert("schedule",item);
+  S.schedule.unshift(item); dbInsert("schedule",item); render();   /* dbInsert 가 id 를 먼저 박는다 — render 가 뒤여야 ★·✕ 가 첫 탭에 먹는다(v226) */
 }
-function addArticle(){ var t=(val("a-title")||"").trim(); if(!t) return; var item={title:t,status:segValue("a-status")||"기획",memo:(val("a-memo")||"").trim()}; S.articles.unshift(item); formOpen.articles=false; render(); dbInsert("articles",item); }
+function addArticle(){ var t=(val("a-title")||"").trim(); if(!t) return; var item={title:t,status:segValue("a-status")||"기획",memo:(val("a-memo")||"").trim()}; S.articles.unshift(item); formOpen.articles=false; dbInsert("articles",item); render(); }
 function addMfds(){ var t=(val("m-title")||"").trim(); if(!t) return;
   var item={title:t,status:segValue("m-status")||"대기",memo:(val("m-memo")||"").trim(),
             due:(val("m-due")||"")||null,time:(val("m-time")||"").trim()||null,place:(val("m-place")||"").trim()||null};
-  S.mfds.unshift(item); formOpen.mfds=false; render(); dbInsert("mfds",item); }
+  S.mfds.unshift(item); formOpen.mfds=false; dbInsert("mfds",item); render(); }
 /* 보관 — 지우는 게 아니라 목록에서 접어 둔다.
  * 민원 자료는 나중에 「그때 뭐라고 했지」를 찾는 기록이라 지우면 안 된다. */
 
@@ -1336,19 +1340,19 @@ function dayAdd(){
               until:rng?rng.until:until,memo:memo||null};
     S.events.push(trip);
     if(rng) calSel=rng.key;
-    tripUntil=null; clearDayDraft(); dayKind="일정"; render(); dbInsert("events",trip); return;
+    tripUntil=null; clearDayDraft(); dayKind="일정"; dbInsert("events",trip); render(); return;
   }
   if(kind==="식약처 업무"){
     /* 일정이 아니라 식약처 업무로 등록. 캘린더는 mfds를 직접 읽으므로 여기에도 그대로 뜬다. */
     var task={title:title,status:"대기",memo:(val("day-memo")||"").trim(),due:calSel,time:time||null,place:place||null};
-    clearDayDraft(); S.mfds.unshift(task); render(); dbInsert("mfds",task); return;
+    clearDayDraft(); S.mfds.unshift(task); dbInsert("mfds",task); render(); return;
   }
   var item={key:rng?rng.key:calSel,time:time||null,title:title,
             place:place||null,until:rng?rng.until:null,memo:(val("day-memo")||"").trim()||null};
   S.events.push(item);
   clearDayDraft();
   if(rng) calSel=rng.key;                             /* 시작일로 옮겨 바로 보이게 */
-  render(); dbInsert("events",item);
+  dbInsert("events",item); render();
 }
 function evDel(id){ del("events",id); }
 

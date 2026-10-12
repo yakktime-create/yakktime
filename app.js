@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v244";
+var APP_VER="v245";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -6329,7 +6329,7 @@ function renderLaws(){
   view().innerHTML='<div class="page">'
     + pageHead2("법령","민원 글을 붙여 넣으면 조문을 찾고 답변 초안까지 만들어요.",null)
     + '<div class="law-ask">'
-    +   '<textarea class="input law-input" id="law-q" rows="2" placeholder="민원 글이나 궁금한 점을 적어 주세요. 낱말 두세 개는 그 낱말이 든 조문을, 문장은 뜻이 가까운 조문을 찾아요.">'+esc(lawQuery)+'</textarea>'
+    +   '<textarea class="input law-input" id="law-q" rows="2"'+(lawAsking?' readonly':'')+' placeholder="민원 글이나 궁금한 점을 적어 주세요. 낱말 두세 개는 그 낱말이 든 조문을, 문장은 뜻이 가까운 조문을 찾아요.">'+esc(lawQuery)+'</textarea>'
     +   '<div class="law-ask-ft"><button class="link-btn law-ask-hint" data-act="law-help">Enter 는 낱말·뜻 검색 (0원) · '+(lawHelpOpen?"설명 접기":"검색하는 법")+'</button>'
     +     '<button class="link-btn quiet-link law-ask-clear" data-act="law-clear"'+(lawQuery&&!lawAsking?'':' hidden')+'>지우기</button></div>'
     + '</div>'

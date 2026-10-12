@@ -1757,3 +1757,5 @@ body.has-sheet .main{overflow:hidden;}
 /* 줄 높이는 단추와 상관없이 같다 (v241) — 체크한 줄엔 별표가 없어서 줄이 낮아졌다(이랑님 「체크하면 왜 위아래 박스 크기 달라지는」) */
 .row,.ev-row{min-height:56px;}
 .row-acts{min-height:var(--tap);align-items:center;}
+/* 찾는 동안 글자 칸은 읽기만 (v245) — 「지우기」를 감춰도 백스페이스로 지워졌다(이랑님 10/13) */
+.law-ask textarea.input.law-input[readonly]{color:var(--t2);}

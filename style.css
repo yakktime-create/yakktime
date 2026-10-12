@@ -245,7 +245,7 @@ h1,h2{text-wrap:balance;}
 /* 카드 안에서는 카드 폭에 딱 맞게, 가로 목록에서는 남는 공간만 차지하게 */
 .mini .input.inline-edit{display:block;width:100%;}
 .row .input.inline-edit,.ev-row .input.inline-edit{flex:1 1 auto;width:auto;}
-textarea.inline-area{min-height:52px;resize:vertical;}
+textarea.inline-area{min-height:52px;resize:none;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}   /* 높이는 글만큼 늘어난다(startEdit 의 grow) · 칸 안을 밀어도 화면이 따라 구르지 않게 */
 /* 제 줄을 통째로 쓰던 글자 자리 — 입력창도 그대로 한 줄을 다 쓴다.
    위 .row/.ev-row 규칙(0,3,0)보다 무거워야 이긴다. */
 .input.inline-edit.ie-row,.row .input.inline-edit.ie-row,

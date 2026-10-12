@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v232";
+var APP_VER="v233";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -413,6 +413,13 @@ function startEdit(el,table,id,field,type){
   /* 메모: Enter 는 저장하고 닫는다, 줄바꿈은 Shift+Enter(v217 — 이랑님 「엔터 치면 계속 밑으로 내려가서 화면 터치해야」).
    * 출장·여행 메모만은 비행·숙소를 여러 줄로 적는 자리라 Enter 가 줄바꿈이다. */
   var multiLine=area&&table==="events"&&isTripEv(item);
+  /* 메모 칸은 글 길이만큼 늘어난다(v233). 두 줄 높이로 고정돼 있으면 윗줄이 잘리고, 칸 안을 밀면 칸이 아니라
+   * 화면이 굴러간다(이랑님 10/12 「잘린 거 보려고 위아래 했는데 화면이 같이 움직임」). 화면의 6할까지만 늘고 그 뒤는 칸 안에서 굴린다. */
+  if(area){
+    var grow=function(){ inp.style.height="auto"; inp.style.height=Math.min(inp.scrollHeight+2,Math.round(window.innerHeight*0.6))+"px"; };
+    inp.addEventListener("input",grow);
+    setTimeout(grow,0);
+  }
   inp.focus();
   if(isPlace) wirePlaceAC("inline-place","inline-place-ac");
   if(!type) { try{ inp.setSelectionRange(cur.length,cur.length); }catch(e){} }

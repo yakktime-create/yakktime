@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v243";
+var APP_VER="v244";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3952,7 +3952,7 @@ function lawQBox(q){
   var bar=document.querySelector(".ask-bar");
   if(bar) bar.classList.toggle("idle",!lawAskFits(q.value));
   var cl=document.querySelector(".law-ask-clear");
-  if(cl) cl.hidden=!q.value;
+  if(cl) cl.hidden=!q.value||lawAsking;   /* 찾는 동안은 못 지운다 — 지워도 찾기는 계속 돌아 답만 와서 헷갈린다(이랑님 10/12) */
 }
 
 var LAW_HIT_MAX=600;   /* 검색 결과 상한 — 닿으면 화면에 알린다 */
@@ -6331,7 +6331,7 @@ function renderLaws(){
     + '<div class="law-ask">'
     +   '<textarea class="input law-input" id="law-q" rows="2" placeholder="민원 글이나 궁금한 점을 적어 주세요. 낱말 두세 개는 그 낱말이 든 조문을, 문장은 뜻이 가까운 조문을 찾아요.">'+esc(lawQuery)+'</textarea>'
     +   '<div class="law-ask-ft"><button class="link-btn law-ask-hint" data-act="law-help">Enter 는 낱말·뜻 검색 (0원) · '+(lawHelpOpen?"설명 접기":"검색하는 법")+'</button>'
-    +     '<button class="link-btn quiet-link law-ask-clear" data-act="law-clear"'+(lawQuery?'':' hidden')+'>지우기</button></div>'
+    +     '<button class="link-btn quiet-link law-ask-clear" data-act="law-clear"'+(lawQuery&&!lawAsking?'':' hidden')+'>지우기</button></div>'
     + '</div>'
     /* 돈이 드는 동작이라 글자 칸 안에 넣지 않는다. 눌러야만 나간다. 글이 짧을 땐 흐리게만(사라지면 어디서 부르는지 모른다). */
     + '<button class="ask-bar'+(lawAskFits(lawQuery)?"":" idle")+(lawAsking?" busy":"")+'" data-act="law-ask"'+(lawAsking?" disabled":"")+'>'
@@ -6398,7 +6398,8 @@ function lawManageSheetHtml(){
     return head+'<div class="law-row'+(onlyOn?" only":"")+'">'
       /* 하나도 안 고르면 전부 본다. 「고른 것만」은 좁힐 때만 쓰는 장치다. */
       + '<label class="law-only"><input type="checkbox" data-act="law-only" data-id="'+l.id+'"'+(onlyOn?" checked":"")+' title="이 법령에서만 찾기" /></label>'
-      + '<div class="law-name-w"><span class="law-name" data-act="edit" data-table="laws" data-field="name" data-id="'+l.id+'" title="눌러서 이름 수정">'+esc(l.name)+'</span>'
+      /* 이름은 눌러도 안 고쳐진다(v244, 이랑님 「법령도 맘대로 못 고치게」) — 법제처 이름 그대로 둔다. 바꿀 일이 있으면 설정에서 */
+      + '<div class="law-name-w"><span class="law-name">'+esc(l.name)+'</span>'
       +   '<span class="law-sub"><span class="law-grp-tag g'+LAW_GRPS.indexOf(lawGrpOf(l))+'">'+esc(LAW_GRP_SHORT[lawGrpOf(l)])+'</span>'
       +     (lawIsOld(l)?'<span class="law-old-tag">겹침</span>':'')
       +     (l.src==="api"?'법제처':(l.pages||0)+'쪽')+(lawEffOf(l)?' · '+esc(lawEffOf(l))+' 시행':'')+(l.arts?' · 조문 '+l.arts:'')+'</span></div>'
@@ -6657,7 +6658,10 @@ document.getElementById("app").addEventListener("click",function(e){
     /* "law-grp"(묶음 바꾸기)는 뺐다 — 터치로 바뀌면 안 되는 값(이랑님 10/12). 바꿀 일이 있으면 설정 law_grp 를 직접 고친다. */
     case "ask-more": lawAskMore=true; renderLawResults(); break;
     case "ask-detail": lawAskDetail=!lawAskDetail; renderLawResults(); break;
-    case "law-clear": lawQuery=""; lawHits=null; lawSem=null; lawTermList=[]; lawCapped=false; render(); { var qq=document.getElementById("law-q"); if(qq) qq.focus(); } break;
+    case "law-clear": { if(lawAsking){ showToast("조문을 찾는 동안은 지울 수 없어요 — 끝나면 지워져요"); break; }
+      /* 질문을 지우면 그 질문으로 받은 AI 결과도 닫는다 — 질문 없는 결과만 남으면 무엇에 대한 답인지 모른다 */
+      if(lawAsk&&lawAsk.picks) lawAsk.picks.forEach(function(p){ delete lawSel["a"+p.id]; });
+      lawAsk=null; lawPendSet(null); lawQuery=""; lawHits=null; lawSem=null; lawTermList=[]; lawCapped=false; lawAskDetail=false; render(); var qq=document.getElementById("law-q"); if(qq) qq.focus(); break; }
     case "tri-part": { var i=lawFocusSel.indexOf(id); if(i>=0) lawFocusSel.splice(i,1); else lawFocusSel.push(id);
       lawFocusSel.sort(function(a,b){ return (parseInt(a,10)||0)-(parseInt(b,10)||0); }); renderLawResults(); break; }
     case "ask-refocus": if(lawAsk&&!lawAsking&&lawFocusSel.length){ var rq=lawAsk.q, rs=lawAsk.scope; lawPickRun(rq,rs); } break;

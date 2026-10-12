@@ -1109,6 +1109,17 @@ textarea.day-memo{resize:vertical;height:64px;min-height:64px;max-height:200px;
 .triage-mine.m-coop{background:var(--blue-soft);color:var(--blue-deep);}
 .triage-mine.m-no{background:#FBECE4;color:var(--brick);}
 .triage-note{display:block;margin-top:4px;font-size:var(--fs-xs);color:var(--muted);}
+/* 소관 갈래 칩 — 질문 번호마다 어느 과 몫인지. 켜진 것만 조문 찾기에 들어간다 (v222) */
+.tri-list{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-top:var(--sp-2);}
+.tri-part{appearance:none;border:1px solid var(--line);background:var(--paper);color:var(--muted);border-radius:var(--r-full);
+  padding:3px 10px;font-size:var(--fs-xs);font-weight:600;line-height:1.5;min-height:var(--ic-lg);cursor:pointer;}
+.tri-part b{font-weight:800;margin-right:2px;}
+.tri-part.m-own.on{background:var(--accent-soft);border-color:var(--accent-soft);color:var(--accent);}
+.tri-part.m-coop.on{background:var(--blue-soft);border-color:var(--blue-soft);color:var(--blue-deep);}
+.tri-part.m-no.on{background:var(--ink);border-color:var(--ink);color:#fff;}
+.tri-again{margin-left:var(--sp-2);font-size:var(--fs-xs);font-weight:700;}
+.ans-coop{margin:0 0 var(--sp-2);font-size:var(--fs-xs);display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2);}
+.rules-divinfo{margin-top:-4px;}
 .law-grp-tag.g4{background:#EEE;color:var(--muted);}
 .law-internal{padding:8px 10px;font-size:var(--fs-xs);color:var(--muted);border-top:1px dashed var(--line);margin-top:var(--sp-2);display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-2);align-items:center;}
 .law-internal-n{color:var(--ink);}

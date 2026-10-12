@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v221";
+var APP_VER="v222";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3561,14 +3561,14 @@ function lawOnlyLabel(){
  * ① 막대가 흐르고 ② 점 셋이 켜지고 ③ 지금 무슨 일을 하는지 글자가 바뀐다.
  * 단계는 실제 진행이 아니라 **대략의 차례**다 — 서버가 알려주지 않기 때문에
  * 시간으로 넘긴다. 그래서 「몇 %」처럼 잰 척하는 표시는 쓰지 않는다. */
-var ASK_STEPS=["조 제목을 훑어 후보를 고르는 중","고른 조문의 본문을 읽는 중","근거를 원문과 대조하는 중"];
+var ASK_STEPS=["어느 과 몫인지 가르는 중","조 제목을 훑어 후보를 고르는 중","고른 조문의 본문을 읽는 중","근거를 원문과 대조하는 중"];
 var lawAskStep=0, lawAskTimer=null;
 function lawWaitHtml(){
   return '<div class="ask-wait">'
     + '<div class="ask-wait-bar"><i></i></div>'
     + '<div class="ask-wait-t">'+esc(ASK_STEPS[Math.min(lawAskStep,ASK_STEPS.length-1)])
     +   '<span class="ask-dots"><i></i><i></i><i></i></span></div>'
-    + '<div class="ask-wait-s">보통 5~15초 걸려요.</div></div>';
+    + '<div class="ask-wait-s">보통 20~60초 걸려요.</div></div>';
 }
 function lawAskStop(){ if(lawAskTimer){ clearInterval(lawAskTimer); lawAskTimer=null; } }
 
@@ -3589,17 +3589,51 @@ function lawAskRun(){
   lawAskStop();
   lawAskTimer=setInterval(function(){
     if(!lawAsking){ lawAskStop(); return; }
+    /* 소관 판단이 끝나기 전엔 0단계에 머문다 — 시간으로만 넘기면 「본문 읽는 중」인데 아직 과도 못 가른 꼴이 된다 */
+    if(lawTriage&&lawTriage.q===q&&!lawTriage.data&&!lawTriage.err) return;
     lawAskStep++; renderLawResults();
   },4200);
   render();
-  function done(){ lawAskStop(); lawAsking=false; render(); }
   var scopeLbl=lawScopeLabel();   /* 결과가 올 때 범위를 바꿨을 수 있으니 지금 적어 둔다 */
-  lawTriageAsk(q);                 /* 소관 판단은 따로, 같이 돈다 — 쪽지 한 줄 */
-  sb.functions.invoke("law-pick",{body:{q:q,lawIds:lawScopeParam(),rules:setGet("ai_rules")}}).then(function(r){
+  /* ① 소관 판단 → ② 우리 몫 갈래만으로 조문 찾기 (2026-10-12 — 이랑님 「협조 질의가 들어오면 우리가 답변할 조문만 찾도록」).
+   * 소관 판단이 실패하면 예전처럼 전체 질문으로 간다 — 막히지 않는다. */
+  lawTriageAsk(q).then(function(){
+    lawFocusInit();
+    var t=lawTriage&&lawTriage.q===q?lawTriage.data:null;
+    if(t&&(t.parts||[]).length&&!lawFocusSel.length){
+      /* 우리 몫이 하나도 없다 — AI 를 더 부르지 않고 멈춘다. 「그래도 전체로 찾기」는 쪽지에 */
+      lawAskStop(); lawAsking=false;
+      lawAsk={q:q,scope:scopeLbl,picks:[],noMine:true,krw:t.krw||0,model:t.model||"",via:t.via||"",fellBack:!!t.fellBack};
+      lawAskLast=t.krw||0; render(); return;
+    }
+    lawPickRun(q,scopeLbl);
+  });
+}
+/* 갈래 고르기 — 소관 판단의 parts 가운데 조문 찾기에 넣을 번호. 기본은 「아님」이 아닌 것 전부. */
+var lawFocusSel=[];
+function lawTriParts(){ var t=lawTriage; return (t&&t.data&&t.data.parts)||[]; }
+function lawFocusInit(){ lawFocusSel=lawTriParts().filter(function(p){ return p.mine!=="아님"; }).map(function(p){ return p.no; }); }
+/* AI 에게 보낼 글 — 전부 우리 몫이면 민원 그대로, 아니면 배경 + 고른 갈래만 */
+function lawFocusText(q){
+  var ps=lawTriParts(); if(!ps.length) return q;
+  var sel=ps.filter(function(p){ return lawFocusSel.indexOf(p.no)>=0; });
+  if(!sel.length||sel.length===ps.length) return q;
+  var d=lawTriage.data, bg=(d.background&&d.bgVerbatim)?d.background:"";
+  return (bg?"[민원 배경]\n"+bg+"\n\n":"")+"[우리 과가 답할 질문 — 이 갈래의 근거만 고른다. 다른 갈래는 다른 과 소관]\n"
+    + sel.map(function(p){ return p.no+". "+(p.verbatim?p.text:(p.gist||p.text)); }).join("\n");
+}
+function lawFocusLabel(nos){ return nos&&nos.length?"질문 "+nos.join("·"):""; }
+function lawPickRun(q,scopeLbl){
+  lawAsking=true; if(lawAskStep<1) lawAskStep=1;
+  if(!lawAskTimer) lawAskTimer=setInterval(function(){ if(!lawAsking){ lawAskStop(); return; } lawAskStep++; renderLawResults(); },4200);
+  renderLawResults();
+  function done(){ lawAskStop(); lawAsking=false; render(); }
+  var fq=lawFocusText(q), used=lawFocusSel.slice(), partial=fq!==q;
+  sb.functions.invoke("law-pick",{body:{q:fq,lawIds:lawScopeParam(),rules:setGet("ai_rules")}}).then(function(r){
     var d=r&&r.data;
     if(!d){ showToast("물어보지 못했어요: "+((r&&r.error&&r.error.message)||"응답이 비었어요"),true); done(); return; }
     if(d.error){ showToast(d.error,true); done(); return; }
-    d.q=q; d.scope=scopeLbl; lawAsk=d; lawAskMore=false; lawSel={};
+    d.q=q; d.scope=scopeLbl; d.focus=partial?used:null; lawAsk=d; lawAskMore=false; lawSel={};
     if((d.picks||[]).length){ lawHelpOpen=false; lawListOpen=false; }
     if(d.krw!=null) lawAskLast=d.krw;
     /* 처음부터 체크되는 것은 **등급(중간 이상)으로만** 정한다. 전에 답변에 쓴 조문은
@@ -3639,7 +3673,8 @@ function aiCostLabel(d){
 var lawTriage=null;   /* {q, data|null, err|null} */
 function lawTriageAsk(q){
   lawTriage={q:q,data:null,err:null};
-  sb.functions.invoke("law-pick",{body:{op:"triage",q:q,myDiv:setGet("my_div")||"바이오의약품품질관리과"}}).then(function(r){
+  /* 내 자리는 설정에서만 — 코드에 과 이름을 두지 않는다(과를 옮기면 설정만 고친다). 비어 있으면 서버가 「먼저 적어 주세요」 */
+  return sb.functions.invoke("law-pick",{body:{op:"triage",q:q,myDiv:setGet("my_div"),myRole:setGet("my_role"),rules:setGet("ai_rules")}}).then(function(r){
     if(!lawTriage||lawTriage.q!==q) return;
     var d=r&&r.data;
     if(!d||d.error) lawTriage.err=(d&&d.error)||((r&&r.error&&r.error.message)||"응답이 비었어요");
@@ -3656,8 +3691,24 @@ function lawTriageHtml(q){
   var parts=['<b>주관</b> '+esc(d.owner||"?")+(d.ownerBasis?' <span class="dim">('+esc(d.ownerBasis)+')</span>':'')];
   (d.coop||[]).forEach(function(c){ parts.push('<b>협조</b> '+esc(c.div)+(c.why?' <span class="dim">('+esc(c.why)+')</span>':'')); });
   if(d.local) parts.push('<b>지방청</b> '+esc(d.localWhy||"개별 허가·시설 적합 판단"));
+  /* 갈래 칩 — 누르면 켜고 끈다(AI 가 틀렸을 때). 켜진 것과 마지막으로 찾은 것이 다르면 「이 갈래로 다시 찾기」 */
+  var ps=d.parts||[], chips="";
+  if(ps.length){
+    chips='<span class="tri-list">'+ps.map(function(p){
+      var on=lawFocusSel.indexOf(p.no)>=0, k=p.mine==="아님"?"no":p.mine==="협조"?"coop":"own";
+      return '<button class="tri-part m-'+k+(on?" on":"")+'" data-act="tri-part" data-id="'+esc(p.no)+'" title="'+esc((p.gist?p.gist+" — ":"")+(p.basis||p.owner||""))+'">'
+        + '<b>'+esc(p.no)+'</b> '+esc(p.mine==="아님"?(p.owner||"다른 과"):"우리")+(on?' ✓':'')+'</button>';
+    }).join("")+'</span>';
+    /* 마지막으로 찾은 갈래: 일부면 focus, 전체면 null, 우리 몫 없음이면 [] */
+    var used=(lawAsk&&lawAsk.q===q)?(lawAsk.focus||(lawAsk.noMine?[]:null)):null;
+    var same=used===null?(lawFocusSel.length===ps.length):(used.join(",")===lawFocusSel.join(","));
+    if(lawAsk&&lawAsk.q===q&&!lawAsking&&!same)
+      chips+=' <button class="link-btn tri-again" data-act="ask-refocus">'+(lawFocusSel.length?'이 갈래로 다시 찾기':'갈래를 하나는 켜 주세요')+'</button>';
+    if(lawAsk&&lawAsk.q===q&&lawAsk.focus) chips+='<span class="triage-note">'+esc(lawFocusLabel(lawAsk.focus))+' 만으로 조문을 찾았어요 — 다른 갈래의 조문은 후보에 없어요.</span>';
+  }
   return '<p class="ask-triage">'+pill+' '+parts.join(' · ')
     + (d.note?'<span class="triage-note">'+esc(d.note)+'</span>':'')
+    + chips
     + (mine==="아님"?'<span class="triage-note">우리 과 몫이 아니면 민원처리 규정 제7조②에 따라 재분류 신청을 검토하세요.</span>':'')+'</p>';
 }
 function lawAskNoteHtml(){
@@ -3670,7 +3721,9 @@ function lawAskNoteHtml(){
     + lawTriageHtml(d.q);
   if(!d.picks||!d.picks.length)
     return '<div class="ask-box">'+head
-      + '<p class="ask-none">'+(d.stopped
+      + '<p class="ask-none">'+(d.noMine
+          ? '우리 과 몫인 갈래가 없어 조문은 찾지 않았어요. <button class="link-btn" data-act="ask-all">그래도 민원 전체로 찾기</button>'
+          : d.stopped
           ? (d.stopped==="refusal"?"AI 가 답하기를 거부했어요."
             :d.stopped==="max_tokens"?"AI 답이 중간에서 잘렸어요."
             :"AI 답을 읽지 못했어요.")
@@ -5177,6 +5230,12 @@ var ANS_FMT0={
   review:"귀하의 민원에 대한 검토 결과는 다음과 같습니다.",
   citeS:"「{법령명}」{종류} {조항}에서, ",
   close:"답변내용에 대한 추가 설명이 필요한 경우 식품의약품안전처 {담당과} {직위}({연락처})에게 연락주시면 안내해 드리도록 하겠습니다. 감사합니다.",
+  /* 협조 회신(주관 과가 따로 있고 우리 과 몫 갈래만 답할 때 — 2026-10-12). 기본 문구는 내가 적은 것이라 실제 공문 꼴과 다르면 여기서 고친다. */
+  coopIntro:"'{주제}' 관련 귀 과 협조 요청 사항에 대한 당과 검토 의견을 다음과 같이 회신합니다.",
+  coopAsk:"협조 요청 사항 중 당과 소관인 {질문}에 대하여 검토하였습니다.",
+  coopReview:"검토 결과는 다음과 같습니다.",
+  coopSkip:"{다른질문}은 {다른과} 소관 사항으로 당과 의견에서 제외하였습니다.",
+  coopClose:"기타 문의사항은 {담당과} {직위}({연락처})에게 연락 주시기 바랍니다.",
   dept:"", who:"주무관", phone:"",
   hangul:false,   /* (편람식) false = 1. 2. 3. · true = 가. 나. 다. */
   brief:true,     /* true = AI 가 짚고 원문과 대조해 통과한 핵심 문장(없는 조는 전체) · false = 늘 조문 전체 */
@@ -5278,8 +5337,25 @@ function ansCitesAll(then){
 function ansStart(cites,q){
   if(!cites||!cites.length){ showToast("근거 조문을 하나 이상 골라주세요."); return; }
   ansDraft={ q:q||"", cites:cites, summary:"", help:"", mode:"plain",
-             busy:false, err:"", krw:0, id:null, made:false };
+             busy:false, err:"", krw:0, id:null, made:false, tri:ansTriOf(q) };
   render();
+}
+/* 소관 판단 결과를 초안에 싣는다 — 같은 질문일 때만. mineNos = 켜 둔 갈래, others = 나머지와 그 과 */
+function ansTriOf(q){
+  var t=lawTriage; if(!t||!t.data||t.q!==q) return null;
+  var ps=t.data.parts||[]; if(!ps.length) return {mine:t.data.mine||"",owner:t.data.owner||"",mineNos:[],others:[]};
+  var mineNos=ps.filter(function(p){ return lawFocusSel.indexOf(p.no)>=0; }).map(function(p){ return p.no; });
+  var others=ps.filter(function(p){ return lawFocusSel.indexOf(p.no)<0; }).map(function(p){ return {no:p.no,owner:p.owner||"",gist:p.gist||""}; });
+  var mine=t.data.mine||""; if(mine!=="아님"&&others.length&&mineNos.length) mine="협조"; else if(mineNos.length===ps.length) mine=mine==="아님"?"아님":"주관";
+  return {mine:mine,owner:t.data.owner||"",mineNos:mineNos,others:others,
+    gists:ps.filter(function(p){ return mineNos.indexOf(p.no)>=0; }).map(function(p){ return p.no+"("+p.gist+")"; })};
+}
+/* law-draft 에 넘길 소관 한 줄 — 요지·주제·참고가 우리 몫 갈래만 말하게 */
+function ansScopeText(d){
+  var t=d&&d.tri; if(!t||!(t.mineNos||[]).length||!(t.others||[]).length) return "";
+  return "민원 주관 과는 "+(t.owner||"다른 과")+"이고 담당자 과는 "+(t.mine==="협조"?"협조":"주관")+"다. 담당자가 답할 갈래: 질문 "+(t.gists||t.mineNos).join(" · ")
+    + ". "+lawFocusLabel(t.others.map(function(o){ return o.no; }))+"은 "+t.others.map(function(o){ return o.owner; }).filter(function(v,i,a){ return v&&a.indexOf(v)===i; }).join("·")
+    + " 소관이라 summary·topic·title·help 모두 담당 갈래만 다룬다.";
 }
 
 /* ---------- 초안 만들기 (AI 는 요지·참고만) ---------- */
@@ -5296,7 +5372,7 @@ function ansMake(){
   }).filter(Boolean).slice(0,2);
   sb.functions.invoke("law-draft",{body:{
     q:d.q, mode:"help",     /* 늘 둘 다 만든다 — 나란히 보여주기로 했다 */
-    rules:setGet("ai_rules"), examples:examples,
+    rules:setGet("ai_rules"), examples:examples, scope:ansScopeText(d),
     cites:d.cites.map(function(c){ return {law:c.law,num:c.num,text:c.text}; })
   }}).then(function(r){
     d.busy=false;
@@ -5373,15 +5449,19 @@ function ansTopicOf(d){
   t=String(d.title||"").replace(/\s*·\s*/g," ").trim(); if(t) return t;
   return String(d.summary||"").replace(/\s*(?:에\s*관한\s*것|에\s*대한\s*것)\s*$/,"").trim()||"(주제)";
 }
+function ansCoop(d){ var t=d&&d.tri; return !!(t&&t.mine==="협조"&&(t.mineNos||[]).length); }
 function ansBlocksSinmungo(mode){
-  var d=ansDraft, out=[], n=1, sub=0;
+  var d=ansDraft, out=[], n=1, sub=0, coop=ansCoop(d), tri=d.tri||{};
+  var others=(tri.others||[]), oDivs=[]; others.forEach(function(o){ if(o.owner&&oDivs.indexOf(o.owner)<0) oDivs.push(o.owner); });
   var fill=function(t){
     return String(t||"").replace("{신청번호}",d.appno||"____________").replace("{주제}",ansTopicOf(d))
+      .replace("{질문}",lawFocusLabel(tri.mineNos||[])||"해당 질문").replace("{다른질문}",lawFocusLabel(others.map(function(o){ return o.no; }))||"그 밖의 질문")
+      .replace("{다른과}",oDivs.length?oDivs.join("·"):(tri.owner||"주관 과"))
       .replace("{담당과}",ansFmt.dept||"○○과").replace("{직위}",ansFmt.who||"주무관").replace("{연락처}",ansFmt.phone||"000-000-0000");
   };
-  out.push({t:(n++)+". "+fill(ansFmt.intro),lv:0}); out.push({t:"",lv:9});
-  out.push({t:(n++)+". "+fill(ansFmt.ask),lv:0}); out.push({t:"",lv:9});
-  out.push({t:(n++)+". "+fill(ansFmt.review),lv:0}); out.push({t:"",lv:9});
+  out.push({t:(n++)+". "+fill(coop?ansFmt.coopIntro:ansFmt.intro),lv:0}); out.push({t:"",lv:9});
+  out.push({t:(n++)+". "+fill(coop?ansFmt.coopAsk:ansFmt.ask),lv:0}); out.push({t:"",lv:9});
+  out.push({t:(n++)+". "+fill(coop?ansFmt.coopReview:ansFmt.review),lv:0}); out.push({t:"",lv:9});
   d.cites.forEach(function(c){
     var head=ansFmt.citeS.replace("{법령명}",c.law).replace("{종류}",ansKindTag(c.kind)).replace("{조항}",c.label||c.num);
     var mark=(ANS_HAN2[sub]||String(sub+1))+". "; sub++;
@@ -5402,7 +5482,8 @@ function ansBlocksSinmungo(mode){
     hs.forEach(function(h,i){ out.push({t:(i?"- ":"- 참고로, ")+h,lv:2}); });
     if(hs.length) out.push({t:"",lv:9});
   }
-  out.push({t:(n++)+". "+fill(ansFmt.close)+(ansFmt.end?"  끝.":""),lv:0});
+  if(coop&&others.length){ out.push({t:(n++)+". "+fill(ansFmt.coopSkip),lv:0}); out.push({t:"",lv:9}); }
+  out.push({t:(n++)+". "+fill(coop?ansFmt.coopClose:ansFmt.close)+(ansFmt.end?"  끝.":""),lv:0});
   return out;
 }
 function ansBlocks(mode){
@@ -5618,6 +5699,12 @@ function ansModalHtml(){
           + '<label class="ans-fmt-row"><span class="ans-fmt-k">검토</span><input class="input" id="ans-f-review" value="'+esc(ansFmt.review)+'" /></label>'
           + '<label class="ans-fmt-row"><span class="ans-fmt-k">조문</span><input class="input" id="ans-f-citeS" value="'+esc(ansFmt.citeS)+'" /></label>'
           + '<label class="ans-fmt-row"><span class="ans-fmt-k">맺음</span><input class="input" id="ans-f-close" value="'+esc(ansFmt.close)+'" /></label>'
+          + '<p class="ans-fmt-note">협조 회신(주관 과가 따로 있을 때) — {질문}·{다른질문}·{다른과} 자리에 소관 판단 결과가 들어갑니다.</p>'
+          + '<label class="ans-fmt-row"><span class="ans-fmt-k">협조 인사</span><input class="input" id="ans-f-coopIntro" value="'+esc(ansFmt.coopIntro)+'" /></label>'
+          + '<label class="ans-fmt-row"><span class="ans-fmt-k">협조 요지</span><input class="input" id="ans-f-coopAsk" value="'+esc(ansFmt.coopAsk)+'" /></label>'
+          + '<label class="ans-fmt-row"><span class="ans-fmt-k">협조 검토</span><input class="input" id="ans-f-coopReview" value="'+esc(ansFmt.coopReview)+'" /></label>'
+          + '<label class="ans-fmt-row"><span class="ans-fmt-k">제외</span><input class="input" id="ans-f-coopSkip" value="'+esc(ansFmt.coopSkip)+'" /></label>'
+          + '<label class="ans-fmt-row"><span class="ans-fmt-k">협조 맺음</span><input class="input" id="ans-f-coopClose" value="'+esc(ansFmt.coopClose)+'" /></label>'
           : "")
       + '<div class="ans-fmt-row"><span class="ans-fmt-k">조문 인용</span>'
       +   '<button class="chip '+(ansFmt.brief?"on":"")+'" data-act="ans-brief" data-id="on">핵심 문장<span class="ans-fmt-hint">AI 가 짚고 원문과 대조 · 못 짚은 조는 전체</span></button>'
@@ -5673,6 +5760,10 @@ function ansModalHtml(){
     +   '<textarea class="input ans-q" id="ans-q" rows="3" placeholder="민원 원문을 붙여넣거나 요약해서 적어주세요.">'+esc(d.q)+'</textarea>'
     +   (ansFmt.style!=="classic"?'<label class="ans-appno"><span class="ans-lab-n">국민신문고 신청번호</span><input class="input" id="ans-appno" value="'+esc(d.appno||"")+'" placeholder="1AA-0000-0000000" /></label>':"")
     +   '<label class="ans-lab">근거 조문 <span class="ans-lab-n">'+d.cites.length+'건</span></label>'
+    +   (d.tri&&(d.tri.others||[]).length&&(d.tri.mineNos||[]).length
+          ? '<p class="ans-coop"><button class="chip'+(ansCoop(d)?" on":"")+'" data-act="ans-coop" title="누르면 바꿔요">'+(ansCoop(d)?"협조 회신 · "+esc(lawFocusLabel(d.tri.mineNos))+" 만":"민원 전체 답변 꼴")+'</button>'
+            + '<span class="ask-dim"> '+(ansCoop(d)?esc(lawFocusLabel(d.tri.others.map(function(o){ return o.no; })))+"은 "+esc(d.tri.others.map(function(o){ return o.owner; }).filter(function(v,i,a){ return v&&a.indexOf(v)===i; }).join("·"))+" 소관으로 제외한다고 적어요.":"주관 과 꼴로 씁니다.")+'</span></p>'
+          : "")
     +   '<div class="ans-chips">'+chips+'</div>'
     +   '<div class="ans-go">'
     +     '<button class="law-toggle ans-fmt-btn" data-act="ans-fmt">'+(ansFmtOpen?"▾":"▸")+' 답변 형식</button>'
@@ -5713,7 +5804,7 @@ function renderAnsModal(force){
   if(q) q.addEventListener("input",function(){ if(ansDraft) ansDraft.q=q.value; });
   var f=document.getElementById("ans-final");
   if(f) f.addEventListener("input",function(){ if(ansDraft) ansDraft.final=f.value; });
-  ["head","cite","tail","intro","ask","review","citeS","close","dept","who","phone"].forEach(function(k){
+  ["head","cite","tail","intro","ask","review","citeS","close","dept","who","phone","coopIntro","coopAsk","coopReview","coopSkip","coopClose"].forEach(function(k){
     var i=document.getElementById("ans-f-"+k);
     if(i) i.addEventListener("input",function(){ ansFmt[k]=i.value; ansFmtSave(); ansRegen(true); var fa=document.getElementById("ans-final"); if(fa) fa.value=ansDraft.final; });
   });
@@ -6330,6 +6421,10 @@ document.getElementById("app").addEventListener("click",function(e){
       var ng=LAW_GRPS[(LAW_GRPS.indexOf(lawGrpOf(gw))+1)%LAW_GRPS.length];
       lawGrpSet(gw,ng).then(function(){ showToast("「"+gw.name.slice(0,18)+"」 → "+ng); }); render(); break; }
     case "ask-more": lawAskMore=true; renderLawResults(); break;
+    case "tri-part": { var i=lawFocusSel.indexOf(id); if(i>=0) lawFocusSel.splice(i,1); else lawFocusSel.push(id);
+      lawFocusSel.sort(function(a,b){ return (parseInt(a,10)||0)-(parseInt(b,10)||0); }); renderLawResults(); break; }
+    case "ask-refocus": if(lawAsk&&!lawAsking&&lawFocusSel.length){ var rq=lawAsk.q, rs=lawAsk.scope; lawPickRun(rq,rs); } break;
+    case "ask-all": if(lawAsk&&!lawAsking){ lawFocusSel=lawTriParts().map(function(p){ return p.no; }); var aq=lawAsk.q, as_=lawAsk.scope; lawPickRun(aq,as_); } break;
     case "law-list": lawListOpen=!lawListOpen; render(); break;
     case "law-view": openLawView(id,parseInt(el.getAttribute("data-page"),10)||1); break;
     case "law-reindex": lawReindex(id); break;
@@ -6398,6 +6493,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "ans-close": ansDraft=null; render(); break;
     case "ans-make": ansMake(); break;
     case "ans-mode": if(ansDraft){ ansDraft.mode=id; ansRegen(); renderAnsModal(true); } break;
+    case "ans-coop": if(ansDraft&&ansDraft.tri){ ansDraft.tri.mine=ansCoop(ansDraft)?"주관":"협조"; ansRegen(); renderAnsModal(true); } break;
     case "ans-regen": ansRegen(); renderAnsModal(true); break;
     case "ans-drop": if(ansDraft){ ansDraft.cites.splice(parseInt(id,10),1); renderAnsModal(); } break;
     case "ans-chip-open": { var cc=ansDraft&&ansDraft.cites[parseInt(id,10)]; if(cc&&cc.artId){ openLawArticle(cc.artId,cc.lawId); } break; }
@@ -6405,7 +6501,9 @@ document.getElementById("app").addEventListener("click",function(e){
     case "ans-mark": ansFmt.hangul=(id==="han"); ansFmtSave(); ansRegen(); renderAnsModal(true); break;
     case "ans-style": ansFmt.style=(id==="classic")?"classic":"sinmungo"; ansFmtSave(); ansRegen(); renderAnsModal(true); break;
     case "rules": rulesOpen=!rulesOpen; renderRulesModal(); break;
-    case "rules-save": { var ta=document.getElementById("rules-ta"); if(ta){ setPut("ai_rules",ta.value.trim()).then(function(){ showToast("✓ 규칙을 저장했어요 — 다음 조문 찾기·초안부터 AI 가 읽어요"); }); } rulesOpen=false; renderRulesModal(); break; }
+    case "rules-save": { var ta=document.getElementById("rules-ta"), dv=document.getElementById("my-div"), rl=document.getElementById("my-role");
+      var ps_=[]; if(ta) ps_.push(setPut("ai_rules",ta.value.trim())); if(dv) ps_.push(setPut("my_div",nfc(dv.value).trim())); if(rl) ps_.push(setPut("my_role",nfc(rl.value).trim()));
+      Promise.all(ps_).then(function(){ showToast("✓ 저장했어요 — 다음 조문 찾기·초안부터 AI 가 읽어요"); }); rulesOpen=false; renderRulesModal(); break; }
     case "ans-brief": ansFmt.brief=(id==="on"); ansFmtSave(); ansRegen(); renderAnsModal(true); break;
     case "ans-end": ansFmt.end=!ansFmt.end; ansFmtSave(); ansRegen(); renderAnsModal(true); break;
     case "ans-fmt-reset": { var fk; for(fk in ANS_FMT0) ansFmt[fk]=ANS_FMT0[fk];
@@ -6481,16 +6579,37 @@ document.getElementById("app").addEventListener("click",function(e){
 /* 「AI에게 알려둔 우리 과 규칙」 — 조문 찾기(law-pick)와 초안(law-draft)이 매번 읽는 평문 메모.
  * 소관 구분·「이 말이 나오면 이 문서를 본다」 같은 것을 코드에 박으면 다음 사안에서 또 틀린다(2026-09-10 사례 정리 문서).
  * 이랑님이 평문으로 적어 두면 AI 가 프롬프트에서 읽는다. 자리는 왼쪽 아래 — 가끔 손대는 것이라 화면에 안 둔다. */
-var rulesOpen=false;
+var rulesOpen=false, rulesDivInfo="";
+/* 과 이름을 직제 시행규칙과 맞춰 본다 — 「분장 N호」가 뜨면 맞게 적은 것. 옮긴 과 이름을 잘못 적으면 소관 판단이 통째로 틀리니 바로 알린다. */
+function rulesDivCheck(name){
+  name=nfc(name||"").trim(); var info=document.getElementById("my-div-info");
+  var put=function(t){ rulesDivInfo=t; if(info) info.textContent=t; };
+  if(!name){ put(""); return; }
+  var jj=S.laws.find(function(l){ return /직제 시행규칙/.test(l.name||""); });
+  if(!jj){ put("법령 탭에 「식품의약품안전처와 그 소속기관 직제 시행규칙」이 없어요 — 법제처에서 받아 두세요."); return; }
+  put("직제에서 찾는 중…");
+  withAuthRetry(function(){ return sb.from("law_articles").select("content").eq("law_id",jj.id).like("content","%"+name+"장은 다음 사항을 분장%").limit(1); }).then(function(res){
+    var c=res&&res.data&&res.data[0]&&res.data[0].content; if(!c){ put("직제 시행규칙에 「"+name+"」이 없어요. 이름을 직제 그대로 적어 주세요."); return; }
+    var i=c.indexOf(name+"장은 다음 사항을 분장"); var seg=c.slice(i); var j=seg.search(/[①-⑳]\s*[가-힣·ㆍ]+(?:과|관|팀|센터)장은 다음 사항/); if(j>0) seg=seg.slice(0,j);
+    var mx=0; seg.replace(/\s(\d{1,2})\.\s/g,function(_,n){ mx=Math.max(mx,parseInt(n,10)); });
+    var rev=/<개정\s*([^>]+)>/.exec(seg); put("직제에서 찾았어요 · 분장 "+mx+"호"+(rev?" · 개정 "+rev[1].split(",").pop().trim():""));
+  },function(e){ put("직제를 못 읽었어요: "+String(e&&e.message||e)); });
+}
 function renderRulesModal(){
   var el=document.getElementById("rules-modal"); if(!el) return;
-  if(!rulesOpen){ el.innerHTML=""; return; }
+  if(!rulesOpen){ el.innerHTML=""; rulesDivInfo=""; return; }
   el.innerHTML='<div class="ans-back" data-act="rules"></div>'
     + '<div class="ans-win rules-modal" role="dialog"><div class="ans-top"><b>AI에게 알려둔 우리 과 규칙</b><button class="ans-x" data-act="rules" title="닫기">✕</button></div>'
     + '<div class="ans-scroll">'
-    + '<p class="ans-fmt-note">조문을 찾을 때와 초안을 쓸 때 AI 가 먼저 읽습니다. 평소 말로 적으세요. 한 줄에 하나.</p>'
-    + '<textarea class="input" id="rules-ta" rows="12" placeholder="예)\n- 「시험생산용 적합판정서」가 나오면 바이오의약품 전문수탁 제조업체 GMP 평가 절차 9쪽 적용범위를 반드시 본다.\n- 실태조사 생략·서류평가는 바이오의약품 사전 GMP 평가 지침 3-1·3-2 가 기준이다. 규칙 제48조의2·제48조의3 은 지방청 제조소 단위 적합판정 조문이라 품목별 사전 GMP 평가 민원에는 인용하지 않는다.\n- 「…할 수 있다」 조문만으로 「필수가 아니다」라고 쓰지 않는다.">'+esc(setGet("ai_rules"))+'</textarea>'
+    + '<p class="ans-fmt-note"><b>내 자리</b> — 소관 판단이 「우리 과 몫인가」를 가를 때 씁니다. 과를 옮기면 여기만 고치세요. 과별 분장은 법령 탭의 직제 시행규칙에서 읽습니다.</p>'
+    + '<label class="ans-fmt-row"><span class="ans-fmt-k">과</span><input class="input" id="my-div" value="'+esc(setGet("my_div"))+'" placeholder="직제 그대로 (예: 바이오의약품품질관리과)" /></label>'
+    + '<p class="ans-fmt-note rules-divinfo" id="my-div-info">'+esc(rulesDivInfo||"")+'</p>'
+    + '<label class="ans-fmt-row"><span class="ans-fmt-k">범위</span><textarea class="input" id="my-role" rows="3" placeholder="과 안에서 내가 맡는 것·안 맡는 것. 예)\n바이오의약품품질인증TF. 바이오의약품·첨단바이오의약품 관련 질의회신 담당.\n인체조직·원료혈장·국가출하승인은 내 몫이 아님.">'+esc(setGet("my_role"))+'</textarea></label>'
+    + '<p class="ans-fmt-note"><b>우리 과 규칙</b> — 조문을 찾을 때와 초안을 쓸 때 AI 가 먼저 읽습니다. 평소 말로 적으세요. 한 줄에 하나.</p>'
+    + '<textarea class="input" id="rules-ta" rows="10" placeholder="예)\n- 「시험생산용 적합판정서」가 나오면 바이오의약품 전문수탁 제조업체 GMP 평가 절차 9쪽 적용범위를 반드시 본다.\n- 실태조사 생략·서류평가는 바이오의약품 사전 GMP 평가 지침 3-1·3-2 가 기준이다. 규칙 제48조의2·제48조의3 은 지방청 제조소 단위 적합판정 조문이라 품목별 사전 GMP 평가 민원에는 인용하지 않는다.\n- 「…할 수 있다」 조문만으로 「필수가 아니다」라고 쓰지 않는다.">'+esc(setGet("ai_rules"))+'</textarea>'
     + '</div><div class="ans-pane-foot rules-foot"><button class="btn quiet sm" data-act="rules">닫기</button><button class="btn sm ans-save-btn" data-act="rules-save">저장</button></div></div>';
+  var dv=document.getElementById("my-div");
+  if(dv){ dv.addEventListener("change",function(){ rulesDivCheck(dv.value); }); if(dv.value&&!rulesDivInfo) rulesDivCheck(dv.value); }
 }
 function render(){
   renderTabs();

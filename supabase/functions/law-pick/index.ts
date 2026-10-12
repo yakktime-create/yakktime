@@ -494,28 +494,67 @@ Deno.serve(async (req) => {
       if (sheet.length > 90000) sheet = sheet.slice(0, 90000);
       let art7 = "";
       if (mw) { const { data: m } = await pg("law_articles?select=content&law_id=eq." + mw.id + "&label=like.*%EC%A0%9C7%EC%A1%B0*&limit=1"); art7 = m?.[0]?.content || ""; }
-      const myDiv = String(bodyIn.myDiv || "바이오의약품품질관리과");
+      // 내 자리는 **설정에서만** 온다 — 코드에 과 이름을 박지 않는다(이랑님 「과를 옮겨 다니면서 분장이 바뀔 것도 고려」 2026-10-12).
+      const myDiv = String(bodyIn.myDiv || "").trim().slice(0, 40);
+      if (!myDiv) return json({ error: "내 자리(과 이름)를 먼저 적어 주세요 — 왼쪽 아래 「AI에게 알려둔 우리 과 규칙」." });
+      if (!new RegExp(myDiv.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "장은 다음 사항을 분장한다").test(sheet))
+        return json({ error: "직제 시행규칙에 「" + myDiv + "」이 없어요. 과 이름을 직제 그대로 적어 주세요." });
+      // 과 안에서 내가 맡는 범위(평문). 과 분장이어도 이 밖이면 「아님」 — 인체조직·원료혈장처럼.
+      const myRole = String(bodyIn.myRole || "").trim().slice(0, 1200);
+      const tRules = String(bodyIn.rules || "").trim().slice(0, 4000);
+      const PART = { type: "object", properties: {
+        no: { type: "string" }, text: { type: "string" }, gist: { type: "string" },
+        owner: { type: "string" }, basis: { type: "string" }, mine: { type: "string", enum: ["주관", "협조", "아님"] } },
+        required: ["no", "text", "gist", "owner", "basis", "mine"], additionalProperties: false };
       const TRIAGE_SCHEMA = { type: "object", properties: {
         owner: { type: "string" }, ownerBasis: { type: "string" },
         coop: { type: "array", items: { type: "object", properties: { div: { type: "string" }, why: { type: "string" } }, required: ["div", "why"], additionalProperties: false } },
         local: { type: "boolean" }, localWhy: { type: "string" },
-        mine: { type: "string", enum: ["주관", "협조", "아님"] }, note: { type: "string" } },
-        required: ["owner", "ownerBasis", "coop", "local", "localWhy", "mine", "note"], additionalProperties: false };
+        mine: { type: "string", enum: ["주관", "협조", "아님"] }, note: { type: "string" },
+        background: { type: "string" }, parts: { type: "array", items: PART } },
+        required: ["owner", "ownerBasis", "coop", "local", "localWhy", "mine", "note", "background", "parts"], additionalProperties: false };
       const sys = `너는 식품의약품안전처 민원을 어느 부서가 맡을지 가르는 도구다. 답은 JSON 하나만 낸다.
 기준은 「식품의약품안전처 민원 처리에 관한 규정」 제7조다: 2개 이상 부서에 걸치면 가장 관계가 많은 부서 하나가 주관.
 재분류 순서: ① 직제상 업무분장 ② 검토 항목 수·난이도 ③ 종전 처리부서 ④ 직제상 상위 서열 ⑤ 부서 간 협의.
+
+먼저 민원을 **갈래(parts)** 로 나눈다. 민원인이 1. 2. 3. 처럼 번호를 매겼으면 그 번호 그대로 한 갈래씩, 번호가 없으면
+물음 단위로 1~6개로 나누고 no 는 "1" "2" … 로 매긴다. 갈래마다:
+- no: 번호. text: **민원 원문에서 그 갈래의 글을 글자 그대로 옮긴다**(요약·바꿔쓰기 금지, 앞뒤 문장 포함 가능).
+- gist: 그 갈래가 묻는 것 한 줄(12자 안팎). owner: 그 갈래를 맡을 과 이름 하나(직제 그대로). basis: 「과 이름 분장 N호 '…'」.
+- mine: 담당자가 그 갈래를 답해야 하면 "주관"(담당자 과가 민원 전체의 주관이고 그 갈래도 담당자 과 몫) / "협조"(민원 주관은
+  다른 과이지만 그 갈래는 담당자 과 몫) / "아님".
+  **갈래가 담당자 과 분장에 들어도, 아래 <담당자 범위>가 적혀 있고 그 밖이면 "아님"이다**(예: 과 분장에 인체조직이 있어도
+  담당자 범위가 바이오의약품·첨단바이오의약품이면 인체조직 갈래는 "아님").
+- 「허가 없이 되는지」「제외 대상인지」 같은 **법령 해석·허가 요건 갈래**와 「기준·절차·시설·GMP 적합성」 갈래는 다른 과일 수 있다.
+  민원인이 서두에서 둘을 한 문장에 묶어 써도 갈래별로 가른다.
+- background: 민원인이 누구이고 무엇을 하려는지 적힌 **배경 문장을 원문 그대로** 2~4문장(질문 갈래는 넣지 않는다). 없으면 "".
+
+그다음 민원 전체에 대해:
 - owner: 주관 과 이름 하나(직제 시행규칙에 있는 이름 그대로). ownerBasis: 「과 이름 분장 N호 '…'」 꼴로 근거 호를 짚는다.
-- coop: 질문의 다른 갈래를 맡는 과(있을 때만). 각각 분장 호를 why 에 적는다.
+- coop: 다른 갈래를 맡는 과(있을 때만). 각각 분장 호를 why 에 적는다.
 - local: 개별 업 허가·시설 적합 판단처럼 **관할 지방식품의약품안전청**이 하는 일이 섞여 있으면 true, localWhy 에 한 줄.
-- mine: 담당자의 과(${myDiv})가 주관이면 "주관", 협조면 "협조", 둘 다 아니면 "아님".
-- note: 한두 문장. 질문이 여러 갈래면 갈래마다 어느 과인지. 분장에 없는 말은 지어내지 않는다.
+- mine: 담당자의 과(${myDiv})가 주관이면 "주관", 주관은 아니지만 "협조"인 갈래가 하나라도 있으면 "협조", 그 밖엔 "아님".
+  parts 의 mine 과 어긋나지 않게 — "주관"인 갈래가 하나도 없으면 전체도 "주관"이 아니다.
+- note: 한두 문장. 갈래마다 어느 과인지. 분장에 없는 말은 지어내지 않는다.
 모두 한국어.`;
-      const prompt = `민원 질문:\n${question}\n\n<민원처리 규정 제7조>\n${art7}\n</민원처리 규정 제7조>\n\n<직제 시행규칙 과별 분장>\n${sheet}\n</직제 시행규칙 과별 분장>`;
+      const prompt = `민원 질문:\n${question}\n\n<담당자>\n과: ${myDiv}${myRole ? "\n범위: " + myRole : ""}\n</담당자>`
+        + (tRules ? `\n\n<담당자 규칙>\n${tRules}\n</담당자 규칙>` : "")
+        + `\n\n<민원처리 규정 제7조>\n${art7}\n</민원처리 규정 제7조>\n\n<직제 시행규칙 과별 분장>\n${sheet}\n</직제 시행규칙 과별 분장>`;
       const a = await askJson(apiKey, (cfg: Cfg) => ({
-        model: cfg.id, max_tokens: 1200 * cfg.room, system: sys,
+        model: cfg.id, max_tokens: 3000 * cfg.room, system: sys,
         messages: [{ role: "user", content: prompt }], output_config: outCfg(cfg, TRIAGE_SCHEMA) }));
       if (!a.p) return json({ error: "소관을 가르지 못했어요.", ...whyNoJson(a.res), krw: Math.round(a.usd * KRW) });
-      return json({ ...a.p, divs: divs.length, krw: Math.round(a.usd * KRW), model: a.cfg.id, via: a.res?.via || "api", fellBack: a.fellBack });
+      // 갈래 글은 원문 발췌여야 한다 — 빈칸을 빼고 원문에 있는지 본다. 없으면 그대로 두되 verbatim:false 로 표시(화면이 흐리게).
+      const flat = (t: string) => String(t || "").replace(/\s+/g, "");
+      const qf = flat(question);
+      const parts = (Array.isArray(a.p.parts) ? a.p.parts : []).slice(0, 8).map((x: any, i: number) => ({
+        no: String(x?.no || (i + 1)).slice(0, 4), text: String(x?.text || "").slice(0, 1500), gist: String(x?.gist || "").slice(0, 60),
+        owner: String(x?.owner || "").slice(0, 40), basis: String(x?.basis || "").slice(0, 160),
+        mine: ["주관", "협조", "아님"].includes(x?.mine) ? x.mine : "아님",
+        verbatim: !!x?.text && qf.includes(flat(x.text)) }));
+      const background = String(a.p.background || "").slice(0, 1500);
+      return json({ ...a.p, parts, background, bgVerbatim: !!background && qf.includes(flat(background)), myDiv,
+        divs: divs.length, krw: Math.round(a.usd * KRW), model: a.cfg.id, via: a.res?.via || "api", fellBack: a.fellBack });
     }
     // 담당자가 앱에 적어 둔 「우리 과 규칙」(평문). 1차·2차 프롬프트에 그대로 붙인다.
     const rules = String(rulesIn || "").trim().slice(0, 4000);

@@ -243,6 +243,8 @@ Deno.serve(async (req) => {
     const examples: { title: string; text: string }[] = (Array.isArray(body?.examples) ? body.examples : []).slice(0, 2)
       .map((e: any) => ({ title: nfc(String(e?.title || "")).slice(0, 60), text: nfc(String(e?.text || "")).slice(0, 1800) }))
       .filter((e: any) => e.text.trim().length >= 40);
+    // 소관 한 줄(앱이 만든다) — 협조 질의면 「담당자가 답할 갈래는 4·5, 1~3은 다른 과」. 요지·주제·참고가 우리 몫만 말하게 (2026-10-12).
+    const scope = nfc(String(body?.scope || "")).trim().slice(0, 800);
     const exBlock = examples.length
       ? "\n\n[담당자가 전에 보낸 비슷한 답변 — 말투·구성·참고의 본보기]\n" + examples.map((e, i) => `(${i + 1}) 「${e.title}」\n${e.text}`).join("\n\n")
       : "";
@@ -275,6 +277,7 @@ Deno.serve(async (req) => {
           `mode: ${mode}\n\n` +
           `[민원 내용]\n${q}\n\n` +
           `[담당자가 고른 근거 조문]\n${shown}` +
+          (scope ? `\n\n[소관 — 이 민원에서 담당자가 답할 범위]\n${scope}` : "") +
           (rules ? `\n\n[담당자가 적어 둔 우리 과 규칙]\n${rules}` : "") + exBlock,
       }],
     });

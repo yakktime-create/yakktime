@@ -228,7 +228,7 @@ async function jobPut(id: string, patch: Record<string, unknown>) {
     headers: { ...macHeaders, Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(row) }).catch(() => {});
   if (patch.status === "running") {
     const old = new Date(Date.now() - 86400e3).toISOString();
-    fetch(`${MAC_SB_URL}/rest/v1/ai_jobs?kind=eq.pick&created_at=lt.${encodeURIComponent(old)}`, { method: "DELETE", headers: macHeaders }).catch(() => {});
+    fetch(`${MAC_SB_URL}/rest/v1/ai_jobs?kind=in.(pick,triage)&created_at=lt.${encodeURIComponent(old)}`, { method: "DELETE", headers: macHeaders }).catch(() => {});
   }
 }
 async function macAwake(): Promise<boolean> {
@@ -492,10 +492,12 @@ Deno.serve(async (req) => {
     // 주관 과·협조 과·지방청 몫인지를 짧게 낸다. 조문 후보가 아니라 **쪽지 한 줄**이다 — 답변 근거로 인용하지 않는다.
     if (bodyIn?.op === "triage") {
       if (question.length < 5) return json({ error: "질문을 조금 더 길게 적어주세요." });
+      const tJob = (typeof bodyIn?.job === "string" && /^[0-9a-f-]{36}$/i.test(bodyIn.job)) ? bodyIn.job : "";
+      const triage = async (): Promise<any> => {
       const { data: laws } = await pg("laws?select=id,name");
       const jj = (laws || []).find((l: any) => /직제 시행규칙/.test(l.name));
       const mw = (laws || []).find((l: any) => /민원 처리에 관한 규정/.test(l.name));
-      if (!jj) return json({ error: "직제 시행규칙이 아직 법령 탭에 없어요." });
+      if (!jj) return ({ error: "직제 시행규칙이 아직 법령 탭에 없어요." });
       const { data: jjArts } = await pgAll("law_articles?select=label,content&order=seq&law_id=eq." + jj.id, 3000);
       // 과장 분장 문단이 있는 조만, 그중 의약품·바이오·의료기기·허가·심사 쪽 국(局)만 — 식품 쪽은 뺀다
       const divs = (jjArts || []).filter((a: any) => /과장은 다음 사항을 분장한다/.test(a.content) &&
@@ -506,9 +508,9 @@ Deno.serve(async (req) => {
       if (mw) { const { data: m } = await pg("law_articles?select=content&law_id=eq." + mw.id + "&label=like.*%EC%A0%9C7%EC%A1%B0*&limit=1"); art7 = m?.[0]?.content || ""; }
       // 내 자리는 **설정에서만** 온다 — 코드에 과 이름을 박지 않는다(이랑님 「과를 옮겨 다니면서 분장이 바뀔 것도 고려」 2026-10-12).
       const myDiv = String(bodyIn.myDiv || "").trim().slice(0, 40);
-      if (!myDiv) return json({ error: "내 자리(과 이름)를 먼저 적어 주세요 — 왼쪽 아래 「AI에게 알려둔 우리 과 규칙」." });
+      if (!myDiv) return ({ error: "내 자리(과 이름)를 먼저 적어 주세요 — 왼쪽 아래 「AI에게 알려둔 우리 과 규칙」." });
       if (!new RegExp(myDiv.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "장은 다음 사항을 분장한다").test(sheet))
-        return json({ error: "직제 시행규칙에 「" + myDiv + "」이 없어요. 과 이름을 직제 그대로 적어 주세요." });
+        return ({ error: "직제 시행규칙에 「" + myDiv + "」이 없어요. 과 이름을 직제 그대로 적어 주세요." });
       // 과 안에서 내가 맡는 범위(평문). 과 분장이어도 이 밖이면 「아님」 — 인체조직·원료혈장처럼.
       const myRole = String(bodyIn.myRole || "").trim().slice(0, 1200);
       const tRules = String(bodyIn.rules || "").trim().slice(0, 4000);
@@ -553,7 +555,7 @@ Deno.serve(async (req) => {
       const a = await askJson(apiKey, (cfg: Cfg) => ({
         model: cfg.id, max_tokens: 3000 * cfg.room, system: sys,
         messages: [{ role: "user", content: prompt }], output_config: outCfg(cfg, TRIAGE_SCHEMA) }));
-      if (!a.p) return json({ error: "소관을 가르지 못했어요.", ...whyNoJson(a.res), krw: Math.round(a.usd * KRW) });
+      if (!a.p) return ({ error: "소관을 가르지 못했어요.", ...whyNoJson(a.res), krw: Math.round(a.usd * KRW) });
       // 갈래 글은 원문 발췌여야 한다 — 빈칸을 빼고 원문에 있는지 본다. 없으면 그대로 두되 verbatim:false 로 표시(화면이 흐리게).
       const flat = (t: string) => String(t || "").replace(/\s+/g, "");
       const qf = flat(question);
@@ -563,8 +565,16 @@ Deno.serve(async (req) => {
         mine: ["주관", "협조", "아님"].includes(x?.mine) ? x.mine : "아님",
         verbatim: !!x?.text && qf.includes(flat(x.text)) }));
       const background = String(a.p.background || "").slice(0, 1500);
-      return json({ ...a.p, parts, background, bgVerbatim: !!background && qf.includes(flat(background)), myDiv,
+      return ({ ...a.p, parts, background, bgVerbatim: !!background && qf.includes(flat(background)), myDiv,
         divs: divs.length, krw: Math.round(a.usd * KRW), model: a.cfg.id, via: a.res?.via || "api", fellBack: a.fellBack });
+      };
+      if (!tJob) return json(await triage());
+      await jobPut(tJob, { kind: "triage", status: "running", req: { q: question.slice(0, 300) } });
+      // deno-lint-ignore no-explicit-any
+      (globalThis as any).EdgeRuntime?.waitUntil(
+        triage().then((out) => jobPut(tJob, { status: "done", res: out }),
+                      (e) => jobPut(tJob, { status: "error", err: String((e as Error)?.message || e).slice(0, 500) })));
+      return json({ job: tJob });
     }
     // 담당자가 앱에 적어 둔 「우리 과 규칙」(평문). 1차·2차 프롬프트에 그대로 붙인다.
     // ---- 일감 방식 (2026-10-12) — 소관 판단 → 1차 → 2차 가 한 요청에 60~70초라 아이패드 5G 에서 연결이 바뀌면 답을 못 받았다

@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v226";
+var APP_VER="v227";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3715,14 +3715,29 @@ function aiCostLabel(d){
 var lawTriage=null;   /* {q, data|null, err|null} */
 function lawTriageAsk(q){
   lawTriage={q:q,data:null,err:null};
+  /* 소관 판단도 일감 방식(v227). 10/12 16시 — 맥은 13초 만에 끝냈는데 아이패드는 8초 만에 「Failed to send a request」였다.
+   * 시작 요청이 끊겨도 줄을 읽어 보고, 줄이 20초 넘게 안 생기면 요청이 안 닿은 것으로 보고 넘어간다(조문 찾기는 전체 질문으로). */
+  var job=uuid(), t0=Date.now(), sawRow=false;
+  function fin(d,err){ if(!lawTriage||lawTriage.q!==q) return; if(err) lawTriage.err=err; else lawTriage.data=d; if(lawAsk&&lawAsk.q===q) renderLawResults(); }
+  function poll(){ return new Promise(function(res){ (function w(){
+    if(!lawTriage||lawTriage.q!==q){ res(); return; }
+    var el=Date.now()-t0;
+    if(el>120e3){ fin(null,"시간이 지났어요"); res(); return; }
+    if(!sawRow&&el>20e3){ fin(null,"요청이 서버에 닿지 않았어요"); res(); return; }
+    withAuthRetry(function(){ return sb.from("ai_jobs").select("status,res,err").eq("id",job).maybeSingle(); }).then(function(r){
+      var row=r&&r.data; if(row) sawRow=true;
+      if(row&&row.status==="done"&&row.res){ if(row.res.error) fin(null,row.res.error); else fin(row.res); res(); return; }
+      if(row&&row.status==="error"){ fin(null,row.err||"서버에서 멈췄어요"); res(); return; }
+      setTimeout(w,2000);
+    },function(){ setTimeout(w,3000); }); })(); }); }
   /* 내 자리는 설정에서만 — 코드에 과 이름을 두지 않는다(과를 옮기면 설정만 고친다). 비어 있으면 서버가 「먼저 적어 주세요」 */
-  return sb.functions.invoke("law-pick",{body:{op:"triage",q:q,myDiv:setGet("my_div"),myRole:setGet("my_role"),rules:setGet("ai_rules")}}).then(function(r){
-    if(!lawTriage||lawTriage.q!==q) return;
+  return sb.functions.invoke("law-pick",{body:{op:"triage",q:q,job:job,myDiv:setGet("my_div"),myRole:setGet("my_role"),rules:setGet("ai_rules")}}).then(function(r){
     var d=r&&r.data;
-    if(!d||d.error) lawTriage.err=(d&&d.error)||((r&&r.error&&r.error.message)||"응답이 비었어요");
-    else lawTriage.data=d;
-    if(lawAsk&&lawAsk.q===q) renderLawResults();
-  },function(e){ if(lawTriage&&lawTriage.q===q){ lawTriage.err=String(e&&e.message||e); if(lawAsk&&lawAsk.q===q) renderLawResults(); } });
+    if(!d) return poll();                 /* 시작 응답을 못 받아도 서버가 받았을 수 있다 */
+    if(d.error){ fin(null,d.error); return; }
+    if(d.job) return poll();
+    fin(d);                               /* 옛 서버면 결과가 바로 온다 */
+  },function(){ return poll(); });
 }
 function lawTriageHtml(q){
   var t=lawTriage; if(!t||t.q!==q) return "";

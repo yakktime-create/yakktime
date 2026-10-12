@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v229";
+var APP_VER="v230";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3525,7 +3525,6 @@ function lawGrpGuess(name){ name=nfc(name||"");
 function lawGrpMap(){ try{ return JSON.parse(setGet("law_grp")||"{}")||{}; }catch(e){ return {}; } }
 function lawGrpOf(l){ var g=lawGrpMap()[l.id]; if(g==="내부 규정") g=LAW_GRP_INTERNAL; return LAW_GRPS.indexOf(g)>=0?g:lawGrpGuess(l.name); }
 function lawGrpSet(l,g){ var m=lawGrpMap(); m[l.id]=g; return setPut("law_grp",JSON.stringify(m)); }
-var lawGrpPend=null;   /* 묶음 표를 한 번 누른 상태 {id, until} — 두 번째 누름에 바뀐다 */
 function lawGrpLaws(g){ return S.laws.filter(function(l){ return lawGrpOf(l)===g; }); }
 /* 찾을 범위의 법령 id — 고른 게 없으면 내부 규정만 뺀 전부. 고른 게 있으면 그것(내부 규정도 고르면 들어간다). */
 function lawScopeIds(){
@@ -6214,9 +6213,7 @@ function renderLaws(){
         /* 하나도 안 고르면 전부 본다. 「고른 것만」은 좁힐 때만 쓰는 장치다. */
         + '<label class="law-only"><input type="checkbox" data-act="law-only" data-id="'+l.id+'"'+(onlyOn?" checked":"")+' title="이 법령에서만 찾기" /></label>'
         + '<span class="law-name" data-act="edit" data-table="laws" data-field="name" data-id="'+l.id+'" title="눌러서 이름 수정">'+esc(l.name)+'</span>'
-        + (lawGrpPend&&lawGrpPend.id===l.id
-            ? '<button class="law-grp-tag pend" data-act="law-grp" data-id="'+l.id+'" title="다시 누르면 바뀌어요">→ '+esc(LAW_GRP_SHORT[LAW_GRPS[(LAW_GRPS.indexOf(lawGrpOf(l))+1)%LAW_GRPS.length]])+'?</button>'
-            : '<button class="law-grp-tag g'+LAW_GRPS.indexOf(lawGrpOf(l))+'" data-act="law-grp" data-id="'+l.id+'" title="두 번 누르면 묶음이 바뀌어요">'+esc(LAW_GRP_SHORT[lawGrpOf(l)])+'</button>')
+        + '<button class="law-grp-tag g'+LAW_GRPS.indexOf(lawGrpOf(l))+'" data-act="law-grp" data-id="'+l.id+'" title="누르면 묶음을 바꿀지 물어봐요">'+esc(LAW_GRP_SHORT[lawGrpOf(l)])+'</button>'
         + (lawIsOld(l)?'<span class="law-old-tag">겹침</span>':'')
         /* 종류 배지는 뺐다 — 바로 위 묶음 머리말과 같은 말이다.
          * 시행일·쪽수는 폭을 고정해 세로로 줄을 맞춘다. */
@@ -6504,9 +6501,9 @@ document.getElementById("app").addEventListener("click",function(e){
       render(); break; }
     case "law-grp": { var gw=S.laws.find(function(x){ return x.id===id; }); if(!gw) break;
       var ng=LAW_GRPS[(LAW_GRPS.indexOf(lawGrpOf(gw))+1)%LAW_GRPS.length];
-      /* 한 번 누르면 「→ 다음 묶음?」만 보여 주고, 3초 안에 다시 누르면 바꾼다. 스크롤하다 스쳐서 직제·민원처리 규정이 「공통」이 됐던 일(10/12). */
-      if(!(lawGrpPend&&lawGrpPend.id===id&&Date.now()<lawGrpPend.until)){ lawGrpPend={id:id,until:Date.now()+3000}; render(); setTimeout(function(){ if(lawGrpPend&&lawGrpPend.id===id&&Date.now()>=lawGrpPend.until){ lawGrpPend=null; render(); } },3100); break; }
-      lawGrpPend=null; lawGrpSet(gw,ng).then(function(){ showToast("「"+gw.name.slice(0,18)+"」 → "+ng); }); render(); break; }
+      /* 터치로는 안 바뀐다 — 확인창을 거친다. 스크롤하다 스쳐서 직제·민원처리 규정이 「공통」이 됐고, 두 번 누르기(v229)도 「막 바뀐다」(이랑님 10/12). */
+      if(!confirm("「"+gw.name.slice(0,24)+"」의 묶음을\n"+lawGrpOf(gw)+" → "+ng+" 으로 바꿀까요?\n\n(다른 묶음으로 가려면 취소하고 다시 눌러 차례로 넘깁니다)")) break;
+      lawGrpSet(gw,ng).then(function(){ showToast("「"+gw.name.slice(0,18)+"」 → "+ng); }); render(); break; }
     case "ask-more": lawAskMore=true; renderLawResults(); break;
     case "tri-part": { var i=lawFocusSel.indexOf(id); if(i>=0) lawFocusSel.splice(i,1); else lawFocusSel.push(id);
       lawFocusSel.sort(function(a,b){ return (parseInt(a,10)||0)-(parseInt(b,10)||0); }); renderLawResults(); break; }

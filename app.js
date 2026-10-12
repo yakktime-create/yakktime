@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v233";
+var APP_VER="v234";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -389,7 +389,7 @@ function startEdit(el,table,id,field,type){
   inp.value=cur;
   /* 장소 칸은 기존 항목을 고칠 때도 자동완성이 떠야 한다.
    * 목록을 띄우려면 자리를 잡아줄 감싸개가 필요해서 한 겹 두른다. */
-  var isPlace=(field==="place"), acBox=null;
+  var isPlace=(field==="place"), acBox=null, memoHost=null;
   if(isPlace){
     var wrap=document.createElement("span");
     wrap.className="ac-wrap inline-ac";
@@ -399,6 +399,10 @@ function startEdit(el,table,id,field,type){
     acBox=document.createElement("div");
     acBox.className="ac-list"; acBox.id="inline-place-ac"; acBox.style.display="none";
     wrap.appendChild(acBox);
+  } else if(el.classList&&el.classList.contains("memo-add")&&el.closest&&el.closest(".ev-row, li")&&el.closest(".ev-row, li").querySelector(".ev-body")){
+    /* 「메모」 단추는 줄 오른쪽 끝에 있지만 메모 글은 제목 아래 .ev-body 에 산다 — 입력칸도 거기에 편다 */
+    inp.classList.add("ie-row"); memoHost=el; el.hidden=true;
+    el.closest(".ev-row, li").querySelector(".ev-body").appendChild(inp);
   } else {
     el.replaceWith(inp);
   }
@@ -438,7 +442,7 @@ function startEdit(el,table,id,field,type){
       dbUpdate(table,id,patch);
     }
     /* 그 사이 다른 칸을 고치기 시작했으면 그리지 않는다 — 그리면 새 입력칸이 날아간다. 원래 글자 자리로 되돌려 두고 다음 그림에 맡긴다 */
-    if(other){ try{ inp.replaceWith(el); }catch(e){} return; }
+    if(other){ try{ if(memoHost){ inp.remove(); memoHost.hidden=false; } else inp.replaceWith(el); }catch(e){} return; }
     render();
   }
   inp.addEventListener("keydown",function(e){
@@ -649,11 +653,11 @@ function renderToday(){
             + '<span class="row-text" data-act="edit" data-table="schedule" data-field="text" data-id="'+i.id+'" title="눌러서 수정">'+esc(i.text)+'</span>'+when+late
             + '<span class="row-acts">'
             +   '<button class="star '+(i.star?"on":"")+'" data-act="s-star" data-id="'+i.id+'" title="별표">'+(i.star?"★":"☆")+'</button>'
-            +   '<button class="del" data-act="s-del" data-id="'+i.id+'" title="삭제">✕</button></span></li>'; }).join("")
+            +   '<button class="del" data-act="s-del" data-id="'+i.id+'" title="삭제">'+TRASH+'</button></span></li>'; }).join("")
       + d.map(function(i){
           return '<li class="row done"><button class="check on" data-act="s-toggle" data-id="'+i.id+'">✓</button>'
             + '<span class="row-text" data-act="edit" data-table="schedule" data-field="text" data-id="'+i.id+'" title="눌러서 수정">'+esc(i.text)+'</span>'
-            + '<span class="row-acts"><button class="del" data-act="s-del" data-id="'+i.id+'" title="삭제">✕</button></span></li>'; }).join("")
+            + '<span class="row-acts"><button class="del" data-act="s-del" data-id="'+i.id+'" title="삭제">'+TRASH+'</button></span></li>'; }).join("")
       + '</ul>';
   }
   var rows    = schedRows(todayItems,"아직 할 일이 없어요. 첫 항목을 추가해 하루를 시작해 보세요.");
@@ -748,7 +752,7 @@ function calTaskRow(t){
        * 같은 업무끼리 높이·자리가 달라졌다(v216, 이랑님 사진). */
       + '<span class="ev-tail"><span class="mfds-badge">식약처</span>'
       +   '<span class="mfds-status">'+esc(t.status)+'</span></span>'
-      + '<span class="row-acts">'+(t.memo?'':'<button class="memo-add" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+t.id+'" title="메모 적기">메모</button>')+'<button class="del" data-act="mfds-del" data-id="'+t.id+'" title="삭제">✕</button></span></li>'; }
+      + '<span class="row-acts">'+(t.memo?'':'<button class="memo-add" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+t.id+'" title="메모 적기">메모</button>')+'<button class="del" data-act="mfds-del" data-id="'+t.id+'" title="삭제">'+TRASH+'</button></span></li>'; }
 function calEvRow(e){ return '<li class="ev-row'+(isTripEv(e)?" trip":"")+'">'
       + '<span class="check-gap"></span>'
       /* 여러 날짜리는 「종일」이 아니라 「출장」이라고 적는다. 하루짜리 일정과
@@ -775,7 +779,7 @@ function calEvRow(e){ return '<li class="ev-row'+(isTripEv(e)?" trip":"")+'">'
       + '<span class="row-acts">'
       /* 메모가 없을 땐 오른쪽 끝에 작은 「메모」만 — 한 줄이 두 줄이 되지 않게 */
       +   (!e.memo&&!isTripEv(e)?'<button class="memo-add" data-act="edit" data-table="events" data-field="memo" data-type="textarea" data-id="'+e.id+'" title="메모 적기">메모</button>':'')
-      +   '<button class="del" data-act="ev-del" data-id="'+e.id+'" title="삭제">✕</button></span></li>';}
+      +   '<button class="del" data-act="ev-del" data-id="'+e.id+'" title="삭제">'+TRASH+'</button></span></li>';}
 function dayListHtml(key,noTrip){
   var evs=S.events.filter(function(e){ return e.key<=key && key<=(e.until||e.key)&&!(noTrip&&isTripEv(e)); }).sort(evSort);
   var tasks=S.mfds.filter(function(m){ return m.due===key; });
@@ -887,7 +891,7 @@ function renderCalendar(){
 
 function articleCard(it){
   return '<div class="mini" data-card="'+it.id+'">'
-    + '<button class="mini-del" data-act="a-del" data-id="'+it.id+'" title="삭제">✕</button>'
+    + '<button class="mini-del" data-act="a-del" data-id="'+it.id+'" title="삭제">'+TRASH+'</button>'
     + '<div class="mini-title" data-act="edit" data-table="articles" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</div>'
     + (it.memo
         ? '<div class="mini-memo" data-act="edit" data-table="articles" data-field="memo" data-type="textarea" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.memo)+'</div>'
@@ -1036,7 +1040,7 @@ function boardRefresh(table){
 
 function mfdsCard(it,todayKey){
   return '<div class="mini" data-card="'+it.id+'">'
-    + '<button class="mini-del" data-act="m-del" data-id="'+it.id+'" title="삭제">✕</button>'
+    + '<button class="mini-del" data-act="m-del" data-id="'+it.id+'" title="삭제">'+TRASH+'</button>'
     + '<div class="mini-title" data-act="edit" data-table="mfds" data-field="title" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.title)+'</div>'
     + (it.memo
         ? '<div class="mini-memo" data-act="edit" data-table="mfds" data-field="memo" data-type="textarea" data-id="'+it.id+'" title="눌러서 수정">'+esc(it.memo)+'</div>'
@@ -1417,6 +1421,8 @@ document.getElementById("file").addEventListener("change",function(e){
  * 검색은 law_articles를 본다 — 한 줄이 곧 조 하나라 결과 묶기·조 전체 보기가
  * 추측 없이 정확해진다. law_pages는 "쪽 그대로 보기"와 PDF 쪽 이동에 쓴다. */
 
+/* 지우기 단추 표시 — ✕ 는 창을 닫는 뜻이라 헷갈린다(이랑님 10/12). 선 하나짜리 휴지통 */
+var TRASH='<svg class="ic-trash" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
 var lawQuery="", lawTermList=[], lawHits=null, lawSel={}, lawOpen={}, lawBusy=false, lawSearching=false, lawListOpen=false;
 /* 처음 쓰는 사람에겐 펼쳐서 보여주고, 한 번 접으면 그 뒤로는 접힌 채로 둔다 */
 var lawHelpOpen=(function(){
@@ -5962,7 +5968,7 @@ function renderAnswers(){
       +       (a.mode==="help"?' · 참고 붙임':'')+(!sameTxt?' · <b>고친 글 있음</b>':'')+'</div>'
       +   '</div>'
       +   '<span class="ans-row-go">'+(open?"▾":"›")+'</span>'
-      +   '<button class="del doc-del" data-act="ans-del" data-id="'+esc(a.id)+'" title="삭제">✕</button>'
+
       + '</div>'
       + (open?'<div class="ans-row-open">'
       +   (a.question?'<div class="ans-sec"><span class="ans-sec-k">민원 내용</span><pre class="ans-body sm">'+esc(a.question)+'</pre></div>':'')
@@ -5976,6 +5982,7 @@ function renderAnswers(){
       +     '<button class="btn quiet sm" data-act="ans-rtxt" data-id="'+esc(a.id)+'">텍스트</button>'
       +     '<button class="btn quiet sm" data-act="ans-rhwpx" data-id="'+esc(a.id)+'">한글</button>'
       +     '<button class="btn sm" data-act="ans-edit" data-id="'+esc(a.id)+'">다시 열어 고치기</button>'
+      +     '<button class="btn quiet sm ans-del-btn" data-act="ans-del" data-id="'+esc(a.id)+'" title="삭제">'+TRASH+' 삭제</button>'
       +   '</div></div>':'')
       + '</div>';
   }).join("");
@@ -6275,7 +6282,7 @@ function lawManageSheetHtml(){
       + (l.src==="api"
           ? '<button class="law-ic" data-act="law-site" data-id="'+l.id+'" title="법제처에서 보기">↗</button>'
           : '<button class="law-ic" data-act="law-pdf" data-id="'+l.id+'" data-page="1" title="PDF 원문 열기">↗</button>')
-      + '<button class="law-ic del" data-act="law-del" data-id="'+l.id+'" title="삭제">✕</button></div>';
+      + '<button class="law-ic del" data-act="law-del" data-id="'+l.id+'" title="삭제">'+TRASH+'</button></div>';
   }).join("")
   /* 소관 판단용(직제 시행규칙·민원처리 규정)은 맨 아래 한 줄로 접는다 — 소관 판단에만 쓰고 조문 후보엔 안 든다 */
   + (internals.length?'<div class="law-internal">소관 판단용 '+internals.length+'개 — '
@@ -6953,7 +6960,7 @@ function inspRowHtml(x,insp){
       +   '<div class="insp-free-h"><input class="insp-title-in" data-id="'+esc(x.id)+'" value="'+esc(x.text)+'" placeholder="'+(x.kind==="room"?"방 이름":"무엇이 이상한가")+'" />'
       +     '<span class="insp-grades">'+(x.kind==="find"?["보완 예상","참고"].map(function(g){ return '<button class="chip'+(x.grade===g?" on":"")+'" data-act="insp-grade" data-id="'+esc(x.id)+'" data-g="'+g+'">'+g+'</button>'; }).join(""):"")
       +       (insp.buildings||[]).map(function(b){ return '<button class="chip'+(x.building===b.name?" on":"")+'" data-act="insp-bld" data-id="'+esc(x.id)+'" data-g="'+esc(b.name)+'">B'+esc(b.name)+'</button>'; }).join("")+'</span>'
-      +     '<button class="del" data-act="insp-del" data-id="'+esc(x.id)+'" title="지우기">✕</button></div>'
+      +     '<button class="del" data-act="insp-del" data-id="'+esc(x.id)+'" title="지우기">'+TRASH+'</button></div>'
       +   '<input class="insp-ref-in" data-id="'+esc(x.id)+'" value="'+esc(x.ref||"")+'" placeholder="'+(x.kind==="room"?"룸 번호 (예: R-201)":"근거 (예: PIC/S Annex 1 · ICH Q9 · 규칙 별표 1 3.5)")+'" />'
       +   (x.kind==="find"?'<select class="input insp-area-sel" data-id="'+esc(x.id)+'"><option value="">항목 (관리표 줄)</option>'+((inspTpl&&inspTpl.board)||[]).map(function(b){ return '<option value="'+esc(b.area)+'"'+(x.area===b.area?" selected":"")+'>'+esc(b.no+" "+b.title)+'</option>'; }).join("")+'</select>':'')
       +   '<textarea class="insp-memo" data-id="'+esc(x.id)+'" rows="2" placeholder="'+(x.kind==="room"?"이 방의 특징 — 등급, 설비, 눈에 띈 것":"본 것 · 들은 것 · 서류 번호")+'">'+esc(x.memo||"")+'</textarea>'

@@ -1662,3 +1662,9 @@ input[type=checkbox].law-check:checked::after,.ask-check input[type=checkbox]:ch
 .sheet-list .law-ic{width:36px;height:36px;border-radius:10px;}
 .law-sheet .law-cands{margin-bottom:var(--sp-3);flex:none;}
 @media (max-width:640px){ .sheet-sub .link-btn{padding:6px 4px;} }
+/* 지우기 단추 — 휴지통 선 그림 (v234). ✕ 는 닫기에만 */
+.ic-trash{display:block;}
+.del,.mini-del,.law-ic.del{display:inline-grid;place-items:center;color:var(--t3);}
+.mini-del{width:28px;height:28px;top:8px;right:8px;opacity:.45;}
+.ans-del-btn{margin-left:auto;color:var(--brick);}
+.ans-del-btn .ic-trash{width:15px;height:15px;}

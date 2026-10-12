@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v235";
+var APP_VER="v236";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -670,8 +670,6 @@ function renderToday(){
     + '<section class="stat-row">'
     +   statTile("articles","brass",inProg,"작성 중 기고글")
     +   statTile("mfds","blue",mfdsOpen,"진행 중 식약처 업무")
-    +   statTile("laws","slate",S.laws.length,"올려둔 법령")
-    +   statTile("answers","accent",(S.answers||[]).length,"담아둔 민원 답변")
     + '</section>'+evHtml
     + '<section class="card"><div class="card-head"><h2>오늘 할 일</h2><span class="muted">별표는 위로 · 항목을 누르면 수정</span></div>'
     +   '<div class="add-row quick"><input class="input" id="new-s" placeholder="할 일을 적고 Enter" /><button class="btn" data-act="s-add" data-id="'+todayKey+'" data-input="new-s">+ 추가</button></div>'+rows
@@ -832,7 +830,7 @@ function renderCalendar(){
     else if(dayKind===KIND_TRIP&&tripUntil){ rs=calSel; re=tripUntil; }
     if(rs&&k>=rs&&k<=(re||rs))
       rng=" rng"+(k===rs?" rng-s":"")+(re&&k===re?" rng-e":"");
-    cells+='<div class="cal-cell'+(k===todayKey?" today":"")+(k===calSel?" sel":"")+inTrip+rng+'" data-act="cal-day" data-id="'+k+'"><span class="cal-num">'+d+'</span>'+chips+'</div>'; }
+    cells+='<div class="cal-cell'+(chipItems.length?" has":"")+(k===todayKey?" today":"")+(k===calSel?" sel":"")+inTrip+rng+'" data-act="cal-day" data-id="'+k+'"><span class="cal-num">'+d+'</span>'+chips+'</div>'; }
   var wdHtml=WD.map(function(w,i){ return '<div class="cal-wd'+(i===0?" sun":"")+'">'+w+'</div>'; }).join("");
   var selD=new Date(calSel+"T00:00:00");
   var formOn=dayFormOpen||!!dayDraft.title||!!tripUntil;
@@ -864,7 +862,7 @@ function renderCalendar(){
   var mEv=S.events.filter(function(e){ return e.key.indexOf(mk)===0; }).length;
   var mTask=S.mfds.filter(function(m){ return m.due&&m.due.indexOf(mk)===0; }).length;
   var calPills=[]; if(mEv) calPills.push(pill("이번 달 일정 "+mEv+"건")); if(mTask) calPills.push(pill("기한 있는 업무 "+mTask+"건"));
-  view().innerHTML='<div class="page">'+pageHead2("캘린더","",calPills)
+  view().innerHTML='<div class="page">'+pageHead2("캘린더","",null)
     + (te?'<div class="trip-bar"><span class="tb-t">「'+esc(te.title)+'」 기간 고치기</span>'
           + '<span class="tb-h">날짜를 누르면 가까운 쪽 끝이 그리로 옮겨가요</span>'
           + '<button class="link-btn" data-act="trip-edit-off">완료</button></div>':'')
@@ -916,7 +914,7 @@ function renderArticles(){
   if(counts[0]) pills.push(pill("기획 "+counts[0]+"건"));
 
   view().innerHTML='<div class="page">'
-    + pageHead2("서울시약사회 동물약품 기고글","카드를 지그시 눌렀다 끌면 다른 칸으로 옮겨져요.",items.length?pills:null)
+    + pageHead2("서울시약사회 동물약품 기고글",items.length?"":"카드를 지그시 눌렀다 끌면 다른 칸으로 옮겨져요.",null)
     + boardSearchHtml("articles","제목·메모에서 찾기 (지난 기고글까지)")
     + composer
     + boardHtml("articles",ARTICLE_STATUS,items,articleCard,{status:"기고완료",label:"지난 기고글"})
@@ -1010,7 +1008,7 @@ function boardHtml(table,statuses,items,cardFn,fold){
           + '<div class="col-head"><span class="col-dot"></span>'+esc(st)+'<span class="col-count">'+total+'</span></div>'
           + (list.length
               ? list.map(cardFn).join("")
-              : '<div class="col-empty">'+(q?'찾는 카드가 없어요':'여기로 카드를 끌어다<br />놓을 수 있어요')+'</div>')
+              : (q?'<div class="col-empty">찾는 카드가 없어요</div>':''))
           + foot
           + '</div>';
       }).join("")
@@ -1075,7 +1073,7 @@ function renderMfds(){
   if(late) pills.push(pill("기한 지남 "+late+"건","warn"));
 
   view().innerHTML='<div class="page">'
-    + pageHead2("식약처 업무","카드를 지그시 눌렀다 끌면 다른 칸으로 옮겨져요.",items.length?pills:null)
+    + pageHead2("식약처 업무",items.length?"":"카드를 지그시 눌렀다 끌면 다른 칸으로 옮겨져요.",late?[pill("기한 지남 "+late+"건","warn")]:null)
     + boardSearchHtml("mfds","제목·메모에서 찾기 (지난 업무까지)")
     + mfdsComposer()
     + boardHtml("mfds",MFDS_STATUS,items,function(it){ return mfdsCard(it,todayKey); },{status:"완료",label:"지난 업무"})
@@ -5989,7 +5987,7 @@ function renderAnswers(){
   }).join("");
 
   view().innerHTML='<div class="page">'
-    + pageHead2("민원 답변","법령 탭에서 조문을 고르고 「답변 초안」을 누르면 여기에 쌓여요.",pills)
+    + pageHead2("민원 답변",items.length?"":"법령 탭에서 조문을 고르고 「답변 초안」을 누르면 여기에 쌓여요.",null)
     + (items.length?('<div class="ans-list">'+list+'</div>')
         :'<div class="empty-box"><div class="empty-ic">✎</div><p>아직 담아둔 답변이 없어요.<br /><b>법령</b> 탭에서 조문을 찾아 고른 뒤<br />「<b>답변 초안</b>」을 누르면 여기로 옵니다.</p></div>')
     + '<div id="ans-modal"></div></div>';
@@ -6607,6 +6605,10 @@ document.getElementById("app").addEventListener("click",function(e){
     case "ans-mark": ansFmt.hangul=(id==="han"); ansFmtSave(); ansRegen(); renderAnsModal(true); break;
     case "ans-style": ansFmt.style=(id==="classic")?"classic":"sinmungo"; ansFmtSave(); ansRegen(); renderAnsModal(true); break;
     case "rules": rulesOpen=!rulesOpen; renderRulesModal(); break;
+    case "settings": settingsOpen=!settingsOpen; renderSettingsModal(); break;
+    case "settings-go": settingsOpen=false; renderSettingsModal();
+      if(id==="rules"){ rulesOpen=true; renderRulesModal(); } else if(id==="export") exportData(); else if(id==="import") importData(); else if(id==="logout") doLogout();
+      break;
     case "rules-save": { var ta=document.getElementById("rules-ta"), dv=document.getElementById("my-div"), rl=document.getElementById("my-role");
       var ps_=[]; if(ta) ps_.push(setPut("ai_rules",ta.value.trim())); if(dv) ps_.push(setPut("my_div",nfc(dv.value).trim())); if(rl) ps_.push(setPut("my_role",nfc(rl.value).trim()));
       Promise.all(ps_).then(function(){ showToast("✓ 저장했어요 — 다음 조문 찾기·초안부터 AI 가 읽어요"); }); rulesOpen=false; renderRulesModal(); break; }
@@ -6701,6 +6703,23 @@ function rulesDivCheck(name){
     var rev=/<개정\s*([^>]+)>/.exec(seg); put("직제에서 찾았어요 · 분장 "+mx+"호"+(rev?" · 개정 "+rev[1].split(",").pop().trim():""));
   },function(e){ put("직제를 못 읽었어요: "+String(e&&e.message||e)); });
 }
+/* 「설정」 시트 (v236) — 백업 내보내기·불러오기·AI 규칙·로그아웃은 한 달에 한 번 누르는 것들이라 레일에 늘어놓지 않는다 */
+var settingsOpen=false;
+function renderSettingsModal(){
+  var el=document.getElementById("settings-modal"); if(!el) return;
+  if(!settingsOpen){ el.innerHTML=""; return; }
+  el.innerHTML='<div class="sheet-back" data-act="settings"></div>'
+    + '<div class="sheet set-sheet" role="dialog"><div class="sheet-grab"></div>'
+    + '<div class="sheet-h"><h2>설정</h2><button class="lv-x" data-act="settings" title="닫기">✕</button></div>'
+    + '<div class="sheet-cap">'+esc(APP_VER)+' · yakktime.com</div>'
+    + '<div class="set-list">'
+    +   '<button class="set-row" data-act="settings-go" data-id="rules"><b>AI에게 알려둔 우리 과 규칙</b><span>내 자리 · 소관 판단 · 조문 찾기·초안이 읽는 메모</span><i>›</i></button>'
+    +   '<button class="set-row" data-act="settings-go" data-id="export"><b>데이터 백업 (내보내기)</b><span>일정·업무·답변을 파일 하나로</span><i>›</i></button>'
+    +   '<button class="set-row" data-act="settings-go" data-id="import"><b>백업 불러오기</b><span>내보낸 파일을 다시 넣기</span><i>›</i></button>'
+    + '</div>'
+    + '<button class="btn ghost set-out" data-act="settings-go" data-id="logout">로그아웃</button>'
+    + '</div>';
+}
 function renderRulesModal(){
   var el=document.getElementById("rules-modal"); if(!el) return;
   if(!rulesOpen){ el.innerHTML=""; rulesDivInfo=""; return; }
@@ -6720,6 +6739,7 @@ function renderRulesModal(){
 function render(){
   renderTabs();
   renderRulesModal();
+  renderSettingsModal();
   if(active==="today") renderToday();
   else if(active==="calendar") renderCalendar();
   else if(active==="articles") renderArticles();
@@ -7160,7 +7180,7 @@ function renderInsp(){
   if(!inspTpl) inspLoadTpl().then(function(){ if(active==="insp") render(); },function(){});
   if(!cur){
     inspOpenId=null;
-    view().innerHTML='<div class="page">'+pageHead2("실태조사","실사 한 건이 노트 한 권이에요. 현장에서 통신이 끊겨도 체크와 메모는 되고, 돌아오면 저장돼요.",list.length>1?[pill("실사 "+list.length+"건")]:null)
+    view().innerHTML='<div class="page">'+pageHead2("실태조사",list.length?"":"실사 한 건이 노트 한 권이에요. 현장에서 통신이 끊겨도 체크와 메모는 되고, 돌아오면 저장돼요.",null)
       + inspNewHtml()+inspListHtml(list)+'</div>';
     var t=document.getElementById("insp-title"); if(t&&inspNewOpen&&!t.value) t.focus();
     return;

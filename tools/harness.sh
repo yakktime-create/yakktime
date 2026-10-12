@@ -49,7 +49,7 @@ window.T=function(s){ document.title=s; };
 setTimeout(function(){ var p=new URLSearchParams(location.search);
   if(p.get("insp")){ active="insp"; inspOpenId="insp-1"; inspPage=p.get("page")||"board"; if(p.get("open")) inspExpand["b:"+p.get("open")]=true; if(p.get("day")) inspFilter.day=p.get("day"); if(p.get("mine")) inspFilter.mine=true; }
   else active=p.get("tab")||"today";
-  if(p.get("list")) lawListOpen=true; if(p.get("nohelp")) lawHelpOpen=false;
+  if(p.get("settings")) settingsOpen=true; if(p.get("list")) lawListOpen=true; if(p.get("nohelp")) lawHelpOpen=false;
   if(p.get("ask")){ lawHelpOpen=false; lawQuery="당사는 항체 기반 신약을 연구·개발하고 있는 바이오의약품 연구개발 기업으로서, 현재 연구개발 중인 후보물질의 임상시험 수행을 위해 기존 연구시설 내부에 임상시험용 의약품 제조시설을 설치하는 방안을 검토하고 있습니다.";
     lawTriage={q:lawQuery,data:{mine:"협조",owner:"바이오의약품정책과",ownerBasis:"분장 4호 허가 제도",coop:[{div:"바이오의약품품질관리과",why:"GMP 기준·시설기준 관리"}],local:true,
       parts:[{no:"1",mine:"아님",owner:"바이오의약품정책과"},{no:"2",mine:"아님",owner:"바이오의약품정책과"},{no:"3",mine:"아님",owner:"바이오의약품정책과"},{no:"4",mine:"협조"},{no:"5",mine:"협조"}]}};

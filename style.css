@@ -88,7 +88,7 @@ body{background:var(--bg);color:var(--ink);
 .today-greet{font-size:var(--fs-3xl);font-weight:800;letter-spacing:var(--ls-head);margin:0 0 8px;line-height:var(--lh-tight);}
 .today-line{font-size:var(--fs-base);color:var(--t3);margin:0;}
 
-.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--sp-2);margin-bottom:20px;}
+.stat-row{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--sp-2);margin-bottom:20px;}   /* 타일 둘(v236) — 매일 바뀌고 눌러서 할 일이 생기는 것만 */
 .stat{background:var(--paper);border:none;border-radius:var(--r-lg);padding:15px 14px;
   display:flex;flex-direction:column;gap:var(--sp-1);cursor:pointer;text-align:left;font-family:inherit;transition:border-color .15s,transform .1s;} .stat:active{transform:translateY(1px);}
 .stat-num{font-size:var(--fs-2xl);font-weight:800;color:var(--ink);letter-spacing:var(--ls-head);}
@@ -1668,3 +1668,26 @@ input[type=checkbox].law-check:checked::after,.ask-check input[type=checkbox]:ch
 .mini-del{width:28px;height:28px;top:8px;right:8px;opacity:.45;}
 .ans-del-btn{margin-left:auto;color:var(--brick);}
 .ans-del-btn .ic-trash{width:15px;height:15px;}
+/* ===== 지우기 넷 · 설정 시트 · 가벼운 달력 (v236 · 2026-10-12) ===== */
+/* 달력 — 아무것도 없는 날은 숫자만, 일정·업무가 있는 날만 면 */
+.cal-cell{background:transparent;}
+.cal-cell.has{background:var(--paper);}
+.cal-cell.today{background:var(--accent-soft);}
+.cal-cell.trip{background:var(--brass-band);}
+.cal-cell.trip.today{background:var(--accent-soft);}
+.cal-cell.sel{background:var(--surface);}
+.cal-cell.sel.today{background:var(--accent-soft);}
+.cal-cell.rng{background:var(--brass-soft);}
+.cal-cell.rng-s,.cal-cell.rng-e{background:var(--brass);}
+.col-empty{display:none;}
+.board.drag-on .col-empty{display:grid;}
+/* 설정 시트 */
+.set-list{display:flex;flex-direction:column;margin-bottom:var(--sp-4);}
+.set-row{display:grid;grid-template-columns:1fr auto;grid-template-areas:"t i" "s i";align-items:center;gap:0 var(--sp-3);width:100%;text-align:left;
+  background:none;border:none;border-bottom:1px solid var(--line);padding:16px 4px;font-family:inherit;cursor:pointer;color:var(--ink);min-height:64px;}
+.set-row:last-child{border-bottom:none;}
+.set-row b{grid-area:t;font-size:var(--fs-base);font-weight:600;}
+.set-row span{grid-area:s;font-size:var(--fs-sm);color:var(--t3);margin-top:2px;}
+.set-row i{grid-area:i;font-style:normal;font-size:var(--fs-2xl);font-weight:300;color:var(--t4);}
+.set-out{width:100%;min-height:48px;color:var(--brick);font-size:var(--fs-base);}
+.rail-foot .foot-btn{min-height:40px;}

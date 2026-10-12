@@ -1739,3 +1739,14 @@ input[type=checkbox].law-check:checked::after,.ask-check input[type=checkbox]:ch
 .wk-dots i.ans{background:var(--brass);}
 .mfds-badge.ans{color:var(--brass);background:var(--brass-soft);}
 .ev-row.ans .ev-time{color:var(--brass);}
+/* ===== 오늘 — 출장 띠 · 날짜 칩 (v240) ===== */
+.week{grid-auto-rows:auto;row-gap:4px;}
+.wk-trip{display:flex;align-items:center;gap:4px;min-width:0;height:26px;padding:0 10px;border:none;font-family:inherit;cursor:pointer;
+  background:var(--brass-soft);color:var(--brass);box-shadow:inset 0 0 0 1px var(--brass-bd);border-radius:var(--r-full);font-size:var(--fs-xs);font-weight:700;}
+.wk-trip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.wk-trip i{font-style:normal;opacity:.7;}
+.quick-when{display:none;align-items:center;gap:var(--sp-2);flex-wrap:wrap;margin:-8px 0 var(--sp-4);}
+.quick-when.show{display:flex;}
+.quick-when .chip{min-height:34px;padding:0 13px;}
+.quick-date{flex:0 0 auto;width:160px;min-width:0;padding:6px 10px;font-size:var(--fs-sm);}
+.quick-date[hidden]{display:none;}

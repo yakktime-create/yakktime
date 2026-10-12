@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v239";
+var APP_VER="v240";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -627,9 +627,41 @@ function quickDue(text){
   if(m) t=t.slice(m[0].length).trim();
   return {due:d||at(0),text:t};
 }
+var quickWhen="today", quickDate="";   /* 입력칸 아래 칩으로 고른 날짜(v240). 글머리 말이 있으면 그쪽이 이긴다 */
+function quickWhenKey(){
+  var now=new Date(), at=function(n){ var x=new Date(now); x.setDate(x.getDate()+n); return keyOf(x); };
+  if(quickWhen==="tomorrow") return at(1);
+  if(quickWhen==="nextweek") return at(((8-now.getDay())%7)||7);
+  if(quickWhen==="someday") return SOMEDAY;
+  if(quickWhen==="pick") return quickDate||at(0);
+  return at(0);
+}
+function quickWhenHtml(){
+  var opts=[["today","오늘"],["tomorrow","내일"],["nextweek","다음 주"],["pick","날짜"],["someday","언젠가"]];
+  return '<div class="quick-when" id="quick-when">'+opts.map(function(o){ return '<button type="button" class="chip'+(quickWhen===o[0]?" on":"")+'" data-when="'+o[0]+'">'+o[1]+'</button>'; }).join("")
+    + '<input type="date" class="input quick-date" id="quick-date" value="'+esc(quickDate)+'"'+(quickWhen==="pick"?'':' hidden')+' /></div>';
+}
+function wireQuickWhen(){
+  var inp=document.getElementById("new-s"), row=document.getElementById("quick-when"); if(!inp||!row) return;
+  var show=function(){ row.classList.add("show"); };
+  var hide=function(){ setTimeout(function(){ if(document.activeElement===inp||row.contains(document.activeElement)||inp.value.trim()||quickWhen!=="today") return; row.classList.remove("show"); },250); };
+  inp.addEventListener("focus",show); inp.addEventListener("input",show); inp.addEventListener("blur",hide);
+  row.addEventListener("click",function(e){
+    var b=e.target.closest("[data-when]"); if(!b) return;
+    quickWhen=b.getAttribute("data-when");
+    Array.prototype.forEach.call(row.querySelectorAll("[data-when]"),function(x){ x.classList.toggle("on",x.getAttribute("data-when")===quickWhen); });
+    var d=document.getElementById("quick-date"); if(d){ d.hidden=quickWhen!=="pick"; if(quickWhen==="pick"){ d.focus(); return; } }
+    inp.focus();
+  });
+  var d=document.getElementById("quick-date"); if(d) d.addEventListener("change",function(){ quickDate=d.value; inp.focus(); });
+  if(inp.value.trim()||quickWhen!=="today") show();
+}
 function addScheduleQuick(){
   var el=document.getElementById("new-s"), v=(el&&el.value||"").trim(); if(!v) return;
   var q=quickDue(v); if(!q.text) return;
+  /* 글머리 말이 없으면 칩으로 고른 날짜 */
+  if(q.due===keyOf(new Date())&&!/^(오늘)\s/.test(v)) q.due=quickWhenKey();
+  quickWhen="today"; quickDate="";
   var item={text:q.text,done:false,star:false,due:q.due===SOMEDAY?null:q.due};
   S.schedule.unshift(item); dbInsert("schedule",item); render();   /* dbInsert 가 id 를 먼저 박는다(v226) */
   var tk=keyOf(new Date()); if(q.due===SOMEDAY) showToast("「언젠가 할 일」에 넣었어요"); else if(q.due!==tk) showToast(shortDate(q.due)+" 할 일에 넣었어요");
@@ -637,21 +669,34 @@ function addScheduleQuick(){
 }
 /* 이번 주 한 줄(v238) — 오늘부터 7일. 달력 칩과 같은 색. 누르면 그 날 달력으로. 「다가오는 일정」 카드를 대신한다 */
 function weekStripHtml(todayKey){
-  var cells="", now=new Date();
-  for(var i=0;i<7;i++){ var dt=new Date(now); dt.setDate(dt.getDate()+i); var k=keyOf(dt);
-    var evs=S.events.filter(function(e){ return e.key<=k&&k<=(e.until||e.key); }).sort(evSort);
+  var cells="", now=new Date(), keys=[];
+  for(var i=0;i<7;i++){ var dt=new Date(now); dt.setDate(dt.getDate()+i); keys.push(keyOf(dt)); }
+  var first=keys[0], last=keys[6];
+  /* 여러 날짜리(출장·여행)는 칸마다 칩을 두지 않고 날짜 칸 아래 **띠 하나**로 잇는다 — 겹치면 줄을 하나 더 쓴다 */
+  var trips=S.events.filter(function(e){ var end=e.until||e.key; return end!==e.key&&e.key<=last&&end>=first; }).sort(evSort);
+  var rows=[], bands="";
+  trips.forEach(function(e){
+    var end=e.until||e.key, si=Math.max(0,keys.indexOf(e.key)<0?0:keys.indexOf(e.key)), ei=keys.indexOf(end)<0?6:keys.indexOf(end);
+    if(e.key<first) si=0; if(end>last) ei=6;
+    var r=0; while(rows[r]&&rows[r].some(function(x){ return !(ei<x[0]||si>x[1]); })) r++;
+    (rows[r]=rows[r]||[]).push([si,ei]);
+    bands+='<button class="wk-trip" style="grid-row:'+(r+2)+';grid-column:'+(si+1)+' / '+(ei+2)+'" data-act="week-day" data-id="'+(e.key<first?first:e.key)+'">'
+      + (e.key<first?'<i>‹</i>':'')+'<span>'+esc(e.title)+'</span>'+(end>last?'<i>›</i>':'')+'</button>';
+  });
+  keys.forEach(function(k,i){ var dt=new Date(k+"T00:00:00");
+    var evs=S.events.filter(function(e){ return e.key===k&&(e.until||e.key)===k; }).sort(evSort);
     var tasks=S.mfds.filter(function(m){ return m.due===k&&m.status!=="완료"; });
     var chips=[];
-    evs.forEach(function(e){ var trip=(e.until||e.key)!==e.key; chips.push({cls:trip?"trip":(e.done?"done":""),label:trip?e.title:((e.time?e.time+" ":"")+e.title)}); });
+    evs.forEach(function(e){ chips.push({cls:e.done?"done":"",label:(e.time?e.time+" ":"")+e.title}); });
     (S.answers||[]).forEach(function(a){ if(a.due===k&&!a.sent_at) chips.push({cls:"mfds ans",label:"회신 "+(a.title||"")}); });
     tasks.forEach(function(m){ chips.push({cls:"mfds",label:m.title}); });
     var inner=chips.slice(0,2).map(function(c){ return '<div class="cal-ev '+c.cls+'">'+esc(c.label)+'</div>'; }).join("")+(chips.length>2?'<div class="cal-more">+'+(chips.length-2)+'</div>':'');
-    cells+='<button class="wk'+(i===0?" today":"")+(dt.getDay()===0?" sun":"")+(chips.length?" has":"")+'" data-act="week-day" data-id="'+k+'">'
+    cells+='<button class="wk'+(i===0?" today":"")+(dt.getDay()===0?" sun":"")+(chips.length?" has":"")+'" style="grid-row:1;grid-column:'+(i+1)+'" data-act="week-day" data-id="'+k+'">'
       + '<span class="wk-d">'+(i===0?"오늘":WD[dt.getDay()])+'</span><span class="wk-n">'+dt.getDate()+'</span>'
       + '<span class="wk-dots">'+chips.slice(0,3).map(function(c){ return '<i class="'+c.cls+'"></i>'; }).join("")+'</span>'
       + '<div class="wk-chips">'+inner+'</div></button>';
-  }
-  return '<section class="week">'+cells+'</section>';
+  });
+  return '<section class="week">'+cells+bands+'</section>';
 }
 function renderToday(){
   var now=new Date(), h=now.getHours();
@@ -701,7 +746,8 @@ function renderToday(){
   view().innerHTML='<div class="page">'
     + '<header class="today-hero"><div class="today-date">'+esc(dateStr)+'</div><h1 class="today-greet">'+greet+', 이랑님.</h1><p class="today-line">'+(open.length?("오늘 할 일 "+open.length+"건 남았어요."):"오늘 할 일이 없어요.")+(todayCnt?" · 오늘 일정 "+todayCnt+"건.":"")+'</p></header>'
     /* 입력칸은 하나(v238) — 「내일 」「다음 주 」「언젠가 」「10/20 」로 시작하면 그 날로. 셋이던 칸을 합쳤다 */
-    + '<div class="add-row quick quick-top"><input class="input" id="new-s" placeholder="할 일 — 「내일」「다음 주」「언젠가」「10/20」으로 시작하면 그 날로 가요" /><button class="btn" data-act="s-quick">+ 추가</button></div>'
+    + '<div class="add-row quick quick-top"><input class="input" id="new-s" placeholder="할 일을 적고 Enter — 날짜는 아래 칩이나 「내일 …」처럼 앞에 적어요" /><button class="btn" data-act="s-quick">+ 추가</button></div>'
+    + quickWhenHtml()
     + '<section class="stat-row">'
     +   statTile("articles","brass",inProg,"작성 중 기고글")
     +   statTile("mfds","blue",mfdsOpen,"진행 중 식약처 업무")
@@ -713,6 +759,7 @@ function renderToday(){
     + (someItems.length?'<section class="card"><div class="card-head"><h2>언젠가 할 일</h2><span class="muted">날짜 없이</span></div>'+someRows+'</section>':'')
     + '</div>';
   var qs=document.getElementById("new-s"); if(qs) qs.addEventListener("keydown",function(e){ if(e.key==="Enter") addScheduleQuick(); });
+  wireQuickWhen();
 }
 
 

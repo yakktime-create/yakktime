@@ -16,7 +16,7 @@ var MOCK={inspections:[],insp_items:[],schedule:[],events:[],articles:[],mfds:[]
 function K(off){ var d=new Date(); d.setDate(d.getDate()+off); return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2); }
 MOCK.events=[{id:"t1",event_date:K(-2),event_time:null,title:"아스트라제네카 실태조사",place:null,until:K(3),memo:"가는 편 09:20 인천"},
              {id:"t2",event_date:K(0),event_time:"11:30",title:"채주영 선생님 점심",place:"오송",memo:null,done:true},
-             {id:"t3",event_date:K(5),event_time:"10:00",title:"GMP 교육",place:null,memo:null}];
+             {id:"t3",event_date:K(5),event_time:"10:00",title:"GMP 교육",place:null,memo:null},{id:"t4",event_date:K(5),event_time:null,title:"스웨덴 출장",place:null,until:K(13),memo:null}];
 MOCK.mfds=[{id:"m2",title:"이진호 선생님에게 문서 전달",status:"대기",memo:"",due_date:K(0),due_time:"09:00",place:"식약처"},
            {id:"m3",title:"국외여비명세서 물어보기",status:"완료",memo:"",due_date:K(0),due_time:"09:00",place:"식약처"}];
 MOCK.schedule=[{id:"s1",text:"보완 회신 검토",due_date:K(0),done:false,star:true}];
@@ -52,7 +52,7 @@ window.T=function(s){ document.title=s; };
 setTimeout(function(){ var p=new URLSearchParams(location.search);
   if(p.get("insp")){ active="insp"; inspOpenId="insp-1"; inspPage=p.get("page")||"board"; if(p.get("open")) inspExpand["b:"+p.get("open")]=true; if(p.get("day")) inspFilter.day=p.get("day"); if(p.get("mine")) inspFilter.mine=true; }
   else active=p.get("tab")||"today";
-  if(p.get("ansopen")) ansOpenId=p.get("ansopen"); if(p.get("settings")) settingsOpen=true; if(p.get("list")) lawListOpen=true; if(p.get("nohelp")) lawHelpOpen=false;
+  if(p.get("when")){ quickWhen=p.get("when"); } if(p.get("ansopen")) ansOpenId=p.get("ansopen"); if(p.get("settings")) settingsOpen=true; if(p.get("list")) lawListOpen=true; if(p.get("nohelp")) lawHelpOpen=false;
   if(p.get("ask")){ lawHelpOpen=false; lawQuery="당사는 항체 기반 신약을 연구·개발하고 있는 바이오의약품 연구개발 기업으로서, 현재 연구개발 중인 후보물질의 임상시험 수행을 위해 기존 연구시설 내부에 임상시험용 의약품 제조시설을 설치하는 방안을 검토하고 있습니다.";
     lawTriage={q:lawQuery,data:{mine:"협조",owner:"바이오의약품정책과",ownerBasis:"분장 4호 허가 제도",coop:[{div:"바이오의약품품질관리과",why:"GMP 기준·시설기준 관리"}],local:true,
       parts:[{no:"1",mine:"아님",owner:"바이오의약품정책과"},{no:"2",mine:"아님",owner:"바이오의약품정책과"},{no:"3",mine:"아님",owner:"바이오의약품정책과"},{no:"4",mine:"협조"},{no:"5",mine:"협조"}]}};

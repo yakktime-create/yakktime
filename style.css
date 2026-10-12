@@ -1725,3 +1725,17 @@ input[type=checkbox].law-check:checked::after,.ask-check input[type=checkbox]:ch
   .wk{min-height:64px;padding:8px 6px;}
   .wk-chips{display:none;} .wk-dots{display:flex;}
 }
+/* ===== 민원 답변 — 회신 기한 · 보냈음 · 찾기 (v239 · 2026-10-12) ===== */
+.ans-row-head .day-check{margin-top:2px;}
+.ans-row.sent .ans-row-t,.ans-row.sent .ans-row-g{color:var(--t3);}
+.ans-due{display:inline-block;font-size:var(--fs-xs);font-weight:700;border-radius:var(--r-xs);padding:1px 7px;margin-right:var(--sp-2);background:var(--brass-soft);color:var(--brass);vertical-align:1px;}
+.ans-due.today{background:var(--accent-soft);color:var(--accent);}
+.ans-due.over{background:var(--brick-soft);color:var(--brick);}
+.ans-due.sent{background:var(--paper);color:var(--t3);}
+.ans-meta-row{display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap;margin:var(--sp-3) 0 var(--sp-2);}
+.ans-meta-row .due-field span{font-size:var(--fs-sm);color:var(--t3);white-space:nowrap;}
+.ans-list .search-box{margin-bottom:var(--sp-4);}
+.cal-ev.ans{background:var(--brass-soft);color:var(--brass);box-shadow:inset 3px 0 0 var(--brass);}
+.wk-dots i.ans{background:var(--brass);}
+.mfds-badge.ans{color:var(--brass);background:var(--brass-soft);}
+.ev-row.ans .ev-time{color:var(--brass);}

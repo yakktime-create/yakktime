@@ -23,6 +23,9 @@ MOCK.schedule=[{id:"s1",text:"보완 회신 검토",due_date:K(0),done:false,sta
 MOCK.laws=[{id:"l1",name:"약사법",kind:"법률",src:"api",arts:216},{id:"l2",name:"의약품 등의 안전에 관한 규칙",kind:"총리령",src:"api",arts:456},
   {id:"l3",name:"의약품 제조 및 품질관리에 관한 규정",kind:"고시",src:"api",arts:261},{id:"l4",name:"바이오의약품 사전 GMP 평가 지침",kind:"지침",pages:52,arts:120},
   {id:"l5",name:"첨단바이오의약품 안전 및 지원에 관한 규칙",kind:"총리령",src:"api",arts:82},{id:"l6",name:"의약품등 품목별 사전 GMP 평가 운영지침[공무원 지침서]",kind:"지침",pages:27,arts:90},{id:"l7",name:"의약외품 품목허가·신고·심사 규정",kind:"고시",src:"api",arts:52},{id:"l8",name:"식품의약품안전처 민원 처리에 관한 규정",kind:"훈령",src:"api",arts:27}];
+MOCK.answers=[{id:"an1",title:"임상시험용 제조시설 · GMP 적합성 평가 · 협조",question:"당사는 항체 기반 신약을 연구·개발하고 있는 바이오의약품 연구개발 기업으로서…",cites:[{law:"의약품 등의 안전에 관한 규칙",label:"제24조"}],mode:"plain",draft:"1. 안녕하십니까.\n2. 임상시험용의약품 제조시설의 GMP 적합성 평가 절차에 대한 질의로 이해됩니다.",final:null,created_at:"2026-10-12T09:00:00Z",due:K(0),sent_at:null},
+ {id:"an2",title:"백신 제조소 증축 · 변경적합판정",question:"백신 자사 적합판정과 유전자재조합 CMO 적합판정을 받은 제조소의 증축…",cites:[{law:"약사법",label:"제38조의2"}],mode:"plain",draft:"1. 안녕하십니까.\n2. 제조소 증축에 따른 변경적합판정에 대한 질의로 이해됩니다.",final:null,created_at:"2026-10-10T09:00:00Z",due:K(3),sent_at:null},
+ {id:"an3",title:"보툴리눔 · 다른 의약품 · 2차 포장 공용",question:"보툴리눔 독소 제제와 다른 의약품의 2차 포장 작업소 공용…",cites:[],mode:"plain",draft:"1. 안녕하십니까.\n2. 보툴리눔 독소 제제의 포장작업소 공용에 대한 질의로 이해됩니다.",final:"1. 안녕하십니까.\n2. (고친 글)",created_at:"2026-09-10T09:00:00Z",due:K(-20),sent_at:"2026-09-12T02:00:00Z"}];
 MOCK.articles=[{id:"a1",title:"반려동물 항생제 오남용",status:"기획",memo:"10월호"},{id:"a2",title:"동물용 백신 콜드체인",status:"작성중",memo:""},{id:"a3",title:"수의사 처방전 제도",status:"기고완료",memo:"9월호"}];
 (function(){ var TPL=window.__TPL; if(!TPL) return; var id="insp-1";
   MOCK.inspections=[{id:id,title:"AstraZeneca Pharmaceuticals LP",site:null,start_date:"2026-09-14",end_date:"2026-09-18",buildings:[{name:"633",mode:"변경만"},{name:"636",mode:"전체"}],areas:TPL.mine.slice(),partner:"김해인 선생님",status:"진행",notes:null,tpl:TPL.version}];
@@ -49,7 +52,7 @@ window.T=function(s){ document.title=s; };
 setTimeout(function(){ var p=new URLSearchParams(location.search);
   if(p.get("insp")){ active="insp"; inspOpenId="insp-1"; inspPage=p.get("page")||"board"; if(p.get("open")) inspExpand["b:"+p.get("open")]=true; if(p.get("day")) inspFilter.day=p.get("day"); if(p.get("mine")) inspFilter.mine=true; }
   else active=p.get("tab")||"today";
-  if(p.get("settings")) settingsOpen=true; if(p.get("list")) lawListOpen=true; if(p.get("nohelp")) lawHelpOpen=false;
+  if(p.get("ansopen")) ansOpenId=p.get("ansopen"); if(p.get("settings")) settingsOpen=true; if(p.get("list")) lawListOpen=true; if(p.get("nohelp")) lawHelpOpen=false;
   if(p.get("ask")){ lawHelpOpen=false; lawQuery="당사는 항체 기반 신약을 연구·개발하고 있는 바이오의약품 연구개발 기업으로서, 현재 연구개발 중인 후보물질의 임상시험 수행을 위해 기존 연구시설 내부에 임상시험용 의약품 제조시설을 설치하는 방안을 검토하고 있습니다.";
     lawTriage={q:lawQuery,data:{mine:"협조",owner:"바이오의약품정책과",ownerBasis:"분장 4호 허가 제도",coop:[{div:"바이오의약품품질관리과",why:"GMP 기준·시설기준 관리"}],local:true,
       parts:[{no:"1",mine:"아님",owner:"바이오의약품정책과"},{no:"2",mine:"아님",owner:"바이오의약품정책과"},{no:"3",mine:"아님",owner:"바이오의약품정책과"},{no:"4",mine:"협조"},{no:"5",mine:"협조"}]}};

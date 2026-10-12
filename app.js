@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v238";
+var APP_VER="v239";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -643,6 +643,7 @@ function weekStripHtml(todayKey){
     var tasks=S.mfds.filter(function(m){ return m.due===k&&m.status!=="완료"; });
     var chips=[];
     evs.forEach(function(e){ var trip=(e.until||e.key)!==e.key; chips.push({cls:trip?"trip":(e.done?"done":""),label:trip?e.title:((e.time?e.time+" ":"")+e.title)}); });
+    (S.answers||[]).forEach(function(a){ if(a.due===k&&!a.sent_at) chips.push({cls:"mfds ans",label:"회신 "+(a.title||"")}); });
     tasks.forEach(function(m){ chips.push({cls:"mfds",label:m.title}); });
     var inner=chips.slice(0,2).map(function(c){ return '<div class="cal-ev '+c.cls+'">'+esc(c.label)+'</div>'; }).join("")+(chips.length>2?'<div class="cal-more">+'+(chips.length-2)+'</div>':'');
     cells+='<button class="wk'+(i===0?" today":"")+(dt.getDay()===0?" sun":"")+(chips.length?" has":"")+'" data-act="week-day" data-id="'+k+'">'
@@ -669,7 +670,7 @@ function renderToday(){
   var inProg=S.articles.filter(function(a){return a.status==="작성중";}).length;
   var mfdsOpen=S.mfds.filter(function(m){return m.status!=="완료";}).length;
   /* 출장은 오늘 화면에서 뺀다(이랑님 「출장만 빼자」) — 며칠씩 맨 위에 눌러앉아 그날 할 일이 안 보인다. 캘린더에는 그대로 */
-  var todayCnt=S.events.filter(function(e){ return e.key===todayKey&&!isTripEv(e)&&!e.done; }).length+S.mfds.filter(function(m){ return m.due===todayKey&&m.status!=="완료"; }).length;
+  var todayCnt=S.events.filter(function(e){ return e.key===todayKey&&!isTripEv(e)&&!e.done; }).length+S.mfds.filter(function(m){ return m.due===todayKey&&m.status!=="완료"; }).length+(S.answers||[]).filter(function(a){ return a.due===todayKey&&!a.sent_at; }).length;
   var evHtml="", todayList=dayListHtml(todayKey,true);
   if(todayList){ evHtml+='<div class="card"><div class="card-head"><h2>오늘 일정</h2><span class="muted" data-act="tab" data-id="calendar" style="cursor:pointer">캘린더 열기 →</span></div>'+todayList+'</div>'; }
   /* 할 일 목록 HTML (오늘/내일 두 곳에서 재사용) */
@@ -766,6 +767,13 @@ var CAL_CHIPS=3;   /* 한 칸에 보여줄 일정 수. 아이패드 가로에선
  * 예전 「오늘」은 그날 시작하는 일정만 보여서, 출장 중이거나 기한이 오늘인 식약처 업무는 빠졌다
  * (이랑님 「캘린더에서 오늘 해당하는 것들도 오늘 화면에 업데이트」). */
 function isTripEv(e){ return !!(e.until&&e.until!==e.key); }
+/* 회신 기한인 민원 한 줄 — 체크하면 보냈음. 제목을 누르면 민원 답변 탭으로 */
+function calAnsRow(a){ var sent=!!a.sent_at;
+  return '<li class="ev-row task ans'+(sent?" done":"")+'">'
+    + '<input class="day-check" type="checkbox" data-act="ans-sent" data-id="'+esc(a.id)+'"'+(sent?' checked':'')+' />'
+    + '<span class="ev-time">회신</span>'
+    + '<div class="ev-body"><span class="ev-title" data-act="ans-jump" data-id="'+esc(a.id)+'" title="민원 답변으로">'+esc(a.title||"(제목 없음)")+'</span></div>'
+    + '<span class="ev-tail"><span class="mfds-badge ans">민원</span>'+(sent?'<span class="mfds-status">보냄</span>':'')+'</span></li>'; }
 function calTaskRow(t){
     var done=(t.status==="완료");
     return '<li class="ev-row task'+(done?" done":"")+'">'
@@ -812,9 +820,10 @@ function calEvRow(e){ return '<li class="ev-row'+(isTripEv(e)?" trip":"")+(e.don
 function dayListHtml(key,noTrip){
   var evs=S.events.filter(function(e){ return e.key<=key && key<=(e.until||e.key)&&!(noTrip&&isTripEv(e)); }).sort(evSort);
   var tasks=S.mfds.filter(function(m){ return m.due===key; });
-  if(!evs.length&&!tasks.length) return "";
+  var anss=(S.answers||[]).filter(function(a){ return a.due===key; });   /* 회신 기한이 그날인 민원(v239) */
+  if(!evs.length&&!tasks.length&&!anss.length) return "";
   /* 출장·여행이 맨 위 — 그 날의 큰 틀이라 먼저 눈에 들어와야 한다 (달력 칸과 같은 순서) */
-  return '<ul class="list">'+evs.filter(isTripEv).map(calEvRow).join("")+tasks.map(calTaskRow).join("")
+  return '<ul class="list">'+evs.filter(isTripEv).map(calEvRow).join("")+anss.map(calAnsRow).join("")+tasks.map(calTaskRow).join("")
     + evs.filter(function(e){ return !isTripEv(e); }).map(calEvRow).join("")+'</ul>';
 }
 function renderCalendar(){
@@ -841,6 +850,7 @@ function renderCalendar(){
     });
     /* 출장·여행이 맨 위 — 그 날의 큰 틀이라 먼저 눈에 들어와야 한다 */
     var chipItems=tripChips
+      .concat((S.answers||[]).filter(function(a){ return a.due===k; }).map(function(a){ return {task:true,ans:true,done:!!a.sent_at,label:"회신 "+(a.title||"")}; }))
       .concat(tasks.map(function(m){ return {task:true,done:m.status==="완료",label:m.title}; }))
       .concat(evChips);
     var chips=chipItems.slice(0,CAL_CHIPS).map(function(c){
@@ -848,7 +858,7 @@ function renderCalendar(){
         + (c.trip==="r"?'<span class="tp">‹</span>':'')
         + '<span class="tt">'+esc(c.label)+'</span>'
         + (c.trip==="l"?'<span class="tp">›</span>':'')+'</div>';
-      return '<div class="cal-ev'+(c.task?" mfds":"")+(c.done?" done":"")
+      return '<div class="cal-ev'+(c.task?" mfds":"")+(c.ans?" ans":"")+(c.done?" done":"")
         +'">'+esc(c.label)+'</div>'; }).join("");
     if(chipItems.length>CAL_CHIPS) chips+='<div class="cal-more">+'+(chipItems.length-CAL_CHIPS)+'</div>';
     /* 이미 등록된 여러 날짜리 일정 안에 든 날은 옅게 깔아 이어져 보이게 한다 */
@@ -5975,33 +5985,34 @@ function ansDateOf(a){
   var t=a&&(a.created_at||a.createdAt); if(!t) return "";
   var d=new Date(t); return isNaN(d)?"":keyOf(d);
 }
-function renderAnswers(){
-  var items=(S.answers||[]).slice().sort(function(a,b){
-    return String(b.created_at||"").localeCompare(String(a.created_at||""));
-  });
-  var pills=items.length?[pill("답변 "+items.length+"건")]:null;
-
-  var list=items.map(function(a){
-    var open=(ansOpenId===a.id);
+/* 기한 표시 — 지났으면 붉게. 보냈으면 보낸 날 */
+function ansDueTag(a){
+  if(a.sent_at){ var d=new Date(a.sent_at); return '<span class="ans-due sent">보냄 '+esc(isNaN(d)?"":shortDate(keyOf(d)))+'</span>'; }
+  if(!a.due) return '';
+  var tk=keyOf(new Date()), over=a.due<tk, today=a.due===tk;
+  return '<span class="ans-due'+(over?" over":today?" today":"")+'">'+(over?"기한 지남 ":today?"오늘 ":"기한 ")+esc(shortDate(a.due))+'</span>';
+}
+function ansListHtml(items){
+  return items.map(function(a){
+    var open=(ansOpenId===a.id), sent=!!a.sent_at;
     var nc=(a.cites||[]).length, gist=ansSummaryOf(a).replace(/\s+/g," ").trim();
     var sameTxt=!a.final||String(a.final).trim()===String(a.draft||"").trim();
-    return '<div class="ans-row'+(open?" on":"")+'">'
+    return '<div class="ans-row'+(open?" on":"")+(sent?" sent":"")+'">'
       + '<div class="ans-row-head" data-act="ans-open" data-id="'+esc(a.id)+'">'
-      +   '<span class="doc-ic file">▤</span>'
+      /* 보냈음 체크 — 다른 목록의 동그라미와 같은 꼴(v239). 아직 안 보낸 민원이 무엇인지 앱이 안다 */
+      +   '<input class="day-check" type="checkbox" data-act="ans-sent" data-id="'+esc(a.id)+'"'+(sent?' checked':'')+' title="'+(sent?"보냈음":"보냈으면 체크")+'" />'
       +   '<div class="ans-row-body">'
       +     '<div class="ans-row-t">'+esc(a.title||"(제목 없음)")+'</div>'
-      /* 안 펼치고도 요지를 읽는다(이랑님 2026-09-09) — 제목이 핵심 낱말이 된 뒤로 요지 문장은 본문 첫 줄에서 되찾아
-         둘째 줄에 둔다. 옛 답변처럼 제목이 곧 요지면 되풀이하지 않는다. 근거는 이름을 늘어놓지 않고 개수만. */
       +     (gist&&gist.slice(0,24)!==String(a.title||"").trim().slice(0,24)?'<div class="ans-row-g">'+esc(gist)+'</div>':'')
-      +     '<div class="ans-row-s">'+esc(ansDateOf(a))+(nc?' · 근거 '+nc+'건':'')
+      +     '<div class="ans-row-s">'+ansDueTag(a)+esc(ansDateOf(a))+(nc?' · 근거 '+nc+'건':'')
       +       (a.mode==="help"?' · 참고 붙임':'')+(!sameTxt?' · <b>고친 글 있음</b>':'')+'</div>'
       +   '</div>'
       +   '<span class="ans-row-go">'+(open?"▾":"›")+'</span>'
-
       + '</div>'
       + (open?'<div class="ans-row-open">'
+      +   '<div class="ans-meta-row"><label class="due-field"><span>회신 기한</span><input type="date" class="input ans-due-in" data-id="'+esc(a.id)+'" value="'+esc(a.due||"")+'" /></label>'
+      +     '<button class="chip'+(sent?" on":"")+'" data-act="ans-sent" data-id="'+esc(a.id)+'">'+(sent?"보냈음 ✓":"보냈음으로 표시")+'</button></div>'
       +   (a.question?'<div class="ans-sec"><span class="ans-sec-k">민원 내용</span><pre class="ans-body sm">'+esc(a.question)+'</pre></div>':'')
-      /* 처음 초안과 고친 글이 같으면 하나만 — 같은 글이 두 번 보이면 「어느 게 진짜냐」가 된다 */
       +   (sameTxt
             ? '<div class="ans-sec"><span class="ans-sec-k">답변</span><pre class="ans-body">'+esc(a.final||a.draft||"")+'</pre></div>'
             : '<div class="ans-sec"><span class="ans-sec-k">처음 초안 <i class="ans-sec-n">다시 열어 고치기 전</i></span><pre class="ans-body">'+esc(a.draft||"")+'</pre></div>'
@@ -6015,13 +6026,39 @@ function renderAnswers(){
       +   '</div></div>':'')
       + '</div>';
   }).join("");
-
+}
+/* 안 보낸 것 먼저(기한 가까운 순, 기한 없으면 뒤) → 보낸 것은 아래로 */
+function ansSorted(){
+  return (S.answers||[]).slice().sort(function(a,b){
+    var sa=a.sent_at?1:0, sb=b.sent_at?1:0; if(sa!==sb) return sa-sb;
+    if(!sa){ var da=a.due||"9999", db=b.due||"9999"; if(da!==db) return da<db?-1:1; }
+    return String(b.created_at||"").localeCompare(String(a.created_at||""));
+  });
+}
+function ansFiltered(items){
+  var q=(boardSearch.answers||"").trim().toLowerCase(); if(!q) return items;
+  return items.filter(function(a){ return [a.title,a.question,a.final,a.draft].join("\n").toLowerCase().indexOf(q)>=0; });
+}
+function renderAnswers(){
+  var all=ansSorted(), items=ansFiltered(all);
   view().innerHTML='<div class="page">'
-    + pageHead2("민원 답변",items.length?"":"법령 탭에서 조문을 고르고 「답변 초안」을 누르면 여기에 쌓여요.",null)
-    + (items.length?('<div class="ans-list">'+list+'</div>')
+    + pageHead2("민원 답변",all.length?"":"법령 탭에서 조문을 고르고 「답변 초안」을 누르면 여기에 쌓여요.",null)
+    + (all.length?boardSearchHtml("answers","제목·민원 글·답변에서 찾기"):'')
+    + (all.length?('<div class="ans-list">'+(items.length?ansListHtml(items):'<div class="empty-box sm"><p>찾는 답변이 없어요.</p></div>')+'</div>')
         :'<div class="empty-box"><div class="empty-ic">✎</div><p>아직 담아둔 답변이 없어요.<br /><b>법령</b> 탭에서 조문을 찾아 고른 뒤<br />「<b>답변 초안</b>」을 누르면 여기로 옵니다.</p></div>')
     + '<div id="ans-modal"></div></div>';
-  renderAnsModal();
+  /* 찾기 — 글자마다 목록만 바꿔 끼운다(입력칸을 다시 그리면 한글 조합이 끊긴다, v210) */
+  var qel=document.getElementById("bq-answers");
+  if(qel) qel.addEventListener("input",function(e){ boardSearch.answers=e.target.value; var L=document.querySelector(".ans-list"); var it=ansFiltered(ansSorted());
+    if(L) L.innerHTML=it.length?ansListHtml(it):'<div class="empty-box sm"><p>찾는 답변이 없어요.</p></div>';
+    var clr=document.querySelector('.board-clear[data-table="answers"]'); if(clr) clr.hidden=!(boardSearch.answers||"").trim(); wireAnsDue(); });
+  wireAnsDue();
+}
+function wireAnsDue(){
+  Array.prototype.forEach.call(document.querySelectorAll(".ans-due-in"),function(el){
+    el.addEventListener("change",function(){ var a=S.answers.find(function(x){ return x.id===el.getAttribute("data-id"); }); if(!a) return;
+      a.due=el.value||null; dbUpdate("answers",a.id,{due:a.due}); render(); });
+  });
 }
 /* 저장된 기록에서 바로 꺼내 쓰기 — 최종본이 있으면 그것이 먼저다 */
 function ansRowText(id){
@@ -6695,6 +6732,7 @@ document.getElementById("app").addEventListener("click",function(e){
     case "insp-status": { var ins2=S.inspections.find(function(x){ return x.id===id; }); if(ins2){ ins2.status=ins2.status==="끝남"?"진행":"끝남"; inspWrite("upsert","inspections",ins2); render(); } break; }
     case "insp-copyfind": inspCopyFinds(); break;
     case "ans-del": ansDel(id); break;
+    case "ans-sent": { var sa=S.answers.find(function(x){ return x.id===id; }); if(sa){ sa.sent_at=sa.sent_at?null:new Date().toISOString(); render(); dbUpdate("answers",id,{sent_at:sa.sent_at}); } break; }
     case "ans-edit": ansReopen(id); break;
     case "ans-rcopy": { var rt=ansRowText(id);
       if(navigator.clipboard&&navigator.clipboard.writeText)

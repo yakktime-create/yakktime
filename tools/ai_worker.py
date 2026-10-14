@@ -9,9 +9,12 @@ Supabase 의 ai_jobs 표를 몇 초마다 들여다보고, 새 줄(status=queued
 - 심장박동: ai_jobs 의 고정 줄(HB_ID)을 몇 초마다 갱신 — 서버 함수가 이 시각을 보고 「맥이 깨어 있나」를 안다.
 - claude -p 는 --system-prompt + --tools "" 로 부른다: 기본 설정(코드 도우미 시스템 프롬프트)이면 한 번에 $0.28어치,
   이렇게 부르면 $0.002어치 (2026-09-28 실측, 140배). 구독이라 돈은 안 나가지만 주간 한도를 먹는다.
+- 로그인 확인(2026-10-14): 맥의 Claude Code 로그인(OAuth)이 풀리면 일감이 전부 실패하고 서버가 조용히 Haiku API 로 간다
+  (10/9~10 실제로 그랬다). 실패 글에 로그인 말이 있거나 `claude auth status` 가 loggedIn:false 면 심장박동 줄을
+  status="noauth" 로 적고, 법령 탭이 그걸 읽어 한 줄 알린다. 일감이 한 번 성공하면 "alive" 로 돌아간다.
 - 돌리기: launchd (tools/com.yakktime.aiworker.plist) 가 로그인하면 띄우고 죽으면 다시 띄운다.
 """
-import json, os, subprocess, time, urllib.request, urllib.error, datetime, sys
+import json, os, re, subprocess, time, urllib.request, urllib.error, datetime, sys
 
 URL = "https://mkwcqnqfidlvsrlximbw.supabase.co/rest/v1"
 KEY_FILE = os.path.expanduser("~/.yakktime-service-key")
@@ -45,9 +48,31 @@ def req(method, path, data=None, prefer=None):
         b = f.read()
         return json.loads(b) if b else None
 
+AUTH = {"bad": None, "checked": 0}   # bad = 로그인 문제 설명(없으면 None)
+AUTH_RE = re.compile(r"oauth|log ?in|logged out|authenticat|401|expired|credential", re.I)
+AUTH_EVERY = 300   # 초 — claude auth status 는 0.1초라 부담 없다
+
+def check_auth():
+    if time.time() - AUTH["checked"] < AUTH_EVERY: return
+    AUTH["checked"] = time.time()
+    try:
+        p = subprocess.run([CLAUDE, "auth", "status", "--json"], capture_output=True, text=True, timeout=20)
+        st = json.loads(p.stdout or "{}")
+        if st.get("loggedIn") is False:
+            set_auth("claude auth status: 로그인 안 됨")
+    except Exception as e:
+        log("로그인 확인 실패: " + str(e)[:120])
+
+def set_auth(why):
+    if why and not AUTH["bad"]: log("로그인 문제: " + why[:200])
+    if not why and AUTH["bad"]: log("로그인 다시 됨")
+    AUTH["bad"] = why
+
 def heartbeat():
+    check_auth()
     req("POST", "/ai_jobs?on_conflict=id",
-        {"id": HB_ID, "kind": "heartbeat", "status": "alive", "updated_at": now()},
+        {"id": HB_ID, "kind": "heartbeat", "status": "noauth" if AUTH["bad"] else "alive",
+         "err": (AUTH["bad"] or None) and AUTH["bad"][:300], "updated_at": now()},
         prefer="resolution=merge-duplicates,return=minimal")
 
 def claim_one():
@@ -95,9 +120,11 @@ def main():
                     res = run_claude(j.get("req") or {})
                     req("PATCH", "/ai_jobs?id=eq." + j["id"], {"status": "done", "res": res, "updated_at": now()}, prefer="return=minimal")
                     log("%s 끝 %.1fs $%.3f" % (j.get("kind"), time.time() - t0, res.get("cost_usd") or 0))
+                    set_auth(None)
                 except Exception as e:
                     req("PATCH", "/ai_jobs?id=eq." + j["id"], {"status": "error", "err": str(e)[:1000], "updated_at": now()}, prefer="return=minimal")
                     log("%s 실패: %s" % (j.get("kind"), str(e)[:200]))
+                    if AUTH_RE.search(str(e)): set_auth(str(e))
                 continue   # 일이 있었으면 바로 다음 것
         except urllib.error.HTTPError as e:
             log("HTTP %d %s" % (e.code, e.read()[:200].decode(errors="ignore"))); time.sleep(10)

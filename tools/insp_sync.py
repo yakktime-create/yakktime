@@ -6,7 +6,7 @@
   python3 tools/insp_sync.py          # 맞춘다 (먼저 스냅샷을 떠 둔다)
   python3 tools/insp_sync.py --count  # 서버 줄 수만 센다 (「화면이 이상하다」면 이것부터)
 
-- 열쇠: ~/.yakktime-supabase-token (Management API 개인 토큰 sbp_…) 으로 service_role 열쇠를 받는다. 채팅에 안 적는다.
+- 열쇠: ~/.yakktime-service-key (맥 일꾼 설치 때 저장한 service_role) 를 읽는다. 없을 때만 sbp_ 토큰으로 받는다. 채팅에 안 적는다.
 - 본에서 온 줄(src='본')만 지우고 새로 넣는다. 체크·메모는 같은 글(빈칸·형광펜 표시 무시)에 옮긴다.
   직접 적은 줄·방·발견·관리표(track)는 안 건드린다.
 """
@@ -24,6 +24,8 @@ def pat():
     return open(p).read().strip()
 
 def service_key():
+    kp = os.path.expanduser("~/.yakktime-service-key")
+    if os.path.exists(kp): return open(kp).read().strip()
     r = urllib.request.Request("https://api.supabase.com/v1/projects/%s/api-keys?reveal=true" % REF)
     r.add_header("Authorization", "Bearer " + pat()); r.add_header("User-Agent", "curl/8.4")
     try:

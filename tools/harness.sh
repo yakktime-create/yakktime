@@ -4,6 +4,7 @@
 #   sh tools/harness.sh                  # 만들고 8777 서버 띄움 (이미 떠 있으면 그대로)
 #   sh tools/harness.sh shot today 620   # 스크린샷 → ~/.yakktime-uitest/shot_today_620.png
 # 주소:  http://localhost:8777/index.html?tab=today|calendar|articles|mfds|laws|answers
+#        ?tab=laws&mac=noauth (맥 로그인 풀림 알림)
 #        ?insp=1&page=board|prep|plan|tour|review|rooms|findings&open=<영역>&day=d1&mine=1
 # 시험 걸이: index.html 의 setTimeout 안에서 window.T(이름) 으로 결과를 document.title 에 적는다.
 set -e
@@ -34,8 +35,9 @@ MOCK.articles=[{id:"a1",title:"반려동물 항생제 오남용",status:"기획"
   MOCK.insp_items.push({id:"f1",insp_id:id,page:"findings",section:null,seq:9002,kind:"find",text:"636 사용점 필터 완결성 시험 기록 없음",hint:null,building:"636",area:"압축공기·가스",day:null,done:false,memo:null,grade:"보완 예상",ref:"규칙 별표 1 3.5",src:null});
   MOCK.insp_items.push({id:"r1",insp_id:id,page:"rooms",section:null,seq:9003,kind:"room",text:"배양실",hint:null,building:"633",area:null,done:false,memo:"Grade C · 2000L SUB 2대",grade:null,ref:"R-201",src:null});
 })();
+if(/[?&]mac=noauth/.test(location.search)) MOCK.ai_jobs=[{status:"noauth",err:"OAuth session expired",updated_at:new Date().toISOString()}];   /* 맥 로그인 풀림 알림 보기 */
 function q(table){ var res={data:(MOCK[table]||[]).slice(),error:null};
-  var api={select:function(){return api;},insert:function(){return api;},upsert:function(){return api;},update:function(){return api;},delete:function(){return api;},eq:function(){return api;},in:function(){return api;},order:function(){return api;},limit:function(){return api;},range:function(){return api;},then:function(f,g){return Promise.resolve(res).then(f,g);}}; return api; }
+  var api={maybeSingle:function(){ res={data:(MOCK[table]||[])[0]||null,error:null}; return api; },select:function(){return api;},insert:function(){return api;},upsert:function(){return api;},update:function(){return api;},delete:function(){return api;},eq:function(){return api;},in:function(){return api;},order:function(){return api;},limit:function(){return api;},range:function(){return api;},then:function(f,g){return Promise.resolve(res).then(f,g);}}; return api; }
 window.supabase={createClient:function(){ return { from:q,
   auth:{ getSession:function(){ return Promise.resolve({data:{session:{expires_at:(Date.now()/1000|0)+9999}}}); }, refreshSession:function(){ return Promise.resolve({data:{session:{}}}); }, onAuthStateChange:function(){ return {data:{subscription:{unsubscribe:function(){}}}}; }, signInWithPassword:function(){ return Promise.resolve({error:null}); }, signOut:function(){ return Promise.resolve({}); }, startAutoRefresh:function(){}, stopAutoRefresh:function(){} },
   storage:{ from:function(){ return {createSignedUrl:function(){ return Promise.resolve({data:null,error:{message:"mock"}}); }, upload:function(){ return Promise.resolve({error:{message:"mock"}}); }, remove:function(){ return Promise.resolve({}); }}; } },

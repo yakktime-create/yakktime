@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v246";
+var APP_VER="v247";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2471,6 +2471,26 @@ function lawEmbedRun(lawId){
 }
 /* 목록을 열 때 한 번 — 지문이 없는 조문이 있으면 알림으로 채우게 한다 */
 var lawEmbStat=null;
+/* 맥 일꾼의 로그인 상태 (2026-10-14). 맥의 Claude Code 로그인이 풀리면 일꾼이 심장박동 줄을 status="noauth" 로 적는다.
+ * 그동안 서버는 조용히 Haiku API(돈 듦)로 간다 — 10/9~10 그래서 원인을 몰랐다. 1분에 한 번 읽어 한 줄 알린다.
+ * render() 를 부르지 않고 알림 자리만 바꾼다 — 글자 칸에 쓰는 중이어도 안 끊긴다. */
+var LAW_MAC_HB="00000000-0000-0000-0000-000000000001", lawMac=null, lawMacAt=0;
+function lawMacHtml(){
+  if(!lawMac||lawMac.status!=="noauth") return "";
+  if(Date.now()-Date.parse(lawMac.updated_at||0)>10*60e3) return "";   // 맥이 자는 중이면 로그인과 무관하다
+  return '<div class="notice"><span class="notice-ic">!</span>'
+    + '<div><b>맥의 Claude 로그인이 풀렸어요.</b> 지금은 AI 가 맥(0원) 대신 Haiku(API, 한 번 100원쯤)로 돌아요. '
+    +   '맥에서 Claude Code 를 한 번 열면(필요하면 <b>claude auth login</b>) 다시 0원으로 돌아요.</div></div>';
+}
+function lawMacCheck(){
+  if(Date.now()-lawMacAt<60e3) return;
+  lawMacAt=Date.now();
+  withAuthRetry(function(){ return sb.from("ai_jobs").select("status,err,updated_at").eq("id",LAW_MAC_HB).maybeSingle(); }).then(function(r){
+    var before=lawMacHtml(); lawMac=(r&&r.data)||null;
+    var box=document.getElementById("law-mac");
+    if(box&&lawMacHtml()!==before) box.innerHTML=lawMacHtml();
+  },function(){});
+}
 function lawEmbedCheck(){
   if(lawEmbStat!==null) return;
   lawEmbStat={missing:0,total:0,ready:true,loading:true};
@@ -6290,6 +6310,7 @@ function hwpxMake(blocks,title){
 /* ---------- 화면 ---------- */
 function renderLaws(){
   lawPickResume();
+  lawMacCheck();
   var items=S.laws;
   var notices="";
   if(items.length){
@@ -6328,6 +6349,7 @@ function renderLaws(){
   var manage=items.length?'<button class="link-btn law-manage" data-act="law-list">법령 관리 <i>'+items.length+'</i> ›</button>':'';
   view().innerHTML='<div class="page">'
     + pageHead2("법령","민원 글을 붙여 넣으면 조문을 찾고 답변 초안까지 만들어요.",null)
+    + '<div id="law-mac">'+lawMacHtml()+'</div>'
     + '<div class="law-ask">'
     +   '<textarea class="input law-input" id="law-q" rows="2"'+(lawAsking?' readonly':'')+' placeholder="민원 글이나 궁금한 점을 적어 주세요. 낱말 두세 개는 그 낱말이 든 조문을, 문장은 뜻이 가까운 조문을 찾아요.">'+esc(lawQuery)+'</textarea>'
     +   '<div class="law-ask-ft"><button class="link-btn law-ask-hint" data-act="law-help">Enter 는 낱말·뜻 검색 (0원) · '+(lawHelpOpen?"설명 접기":"검색하는 법")+'</button>'
@@ -6339,7 +6361,7 @@ function renderLaws(){
     +   '<span class="ask-bar-t">'+(lawAsking
           ?'조문을 고르는 중<span class="ask-dots"><i></i><i></i><i></i></span>'
           :(lawOnlyLabel()?"<b>"+esc(lawOnlyLabel())+"</b>에서 AI 로 조문 찾기":"<b>AI 로 조문 찾기</b>"))+'</span>'
-    +   '<span class="ask-bar-n">'+(lawAskLast!=null?"지난번 "+lawAskLast+"원":"맥에서 0원 · 보통 1분")+'</span>'
+    +   '<span class="ask-bar-n">'+(lawAskLast!=null?"지난번 "+lawAskLast+"원":(lawMacHtml()?"지금은 API · 100원쯤":"맥에서 0원 · 보통 1분"))+'</span>'
     + '</button>'
     + (lawHelpOpen?lawHelpHtml():'')
     + (items.length?lawGrpChipsHtml(manage)

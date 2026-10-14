@@ -299,3 +299,12 @@ AI(✦ 관련 조문 찾아줘)는 지금처럼 눌러야만 돈다 — 돈이 �
 사용자가 복사해 붙이기 위한 사본이다. **`check-dup.sh`가 둘이 같은지 검사한다.**
 사람에게 보이는 오류는 전부 **HTTP 200 + `{error}`** 로 돌려준다 —
 supabase-js가 200이 아닌 응답의 본문을 넘겨주지 않기 때문이다.
+
+## 맥 일꾼 로그인 풀림 알림 (v247 · 2026-10-14)
+
+10/9~10 OAuth 만료로 일감이 전부 실패했는데 서버가 조용히 Haiku API 로 가서 원인을 몰랐다. 이제 일꾼(`tools/ai_worker.py`)이
+실패 글에 로그인 말(`AUTH_RE`: oauth·login·authenticat·401·expired…)이 있거나 5분마다 도는 `claude auth status --json` 이 loggedIn:false 면
+심장박동 줄을 `status:"noauth"`·`err` 로 적고, 일감이 한 번 성공하면 `alive` 로 되돌린다. 법령 탭은 1분에 한 번 그 줄을 읽어
+(`lawMacCheck`, RLS 는 `is_owner()` 라 앱이 읽힌다) 맨 위 `#law-mac` 자리만 바꿔 끼우고, ✦ 단추 옆 글도 「지금은 API · 100원쯤」.
+심장박동이 10분 넘게 끊겼으면(맥이 잠) 알림을 안 띄운다. 서버 함수는 안 바꿨다 — noauth 여도 맥에 일감을 넣고 실패하면 Haiku 로 되받는다(전과 같다).
+시험대: `sh tools/harness.sh shot "laws&mac=noauth" 620`.

@@ -308,3 +308,10 @@ supabase-js가 200이 아닌 응답의 본문을 넘겨주지 않기 때문이�
 (`lawMacCheck`, RLS 는 `is_owner()` 라 앱이 읽힌다) 맨 위 `#law-mac` 자리만 바꿔 끼우고, ✦ 단추 옆 글도 「지금은 API · 100원쯤」.
 심장박동이 10분 넘게 끊겼으면(맥이 잠) 알림을 안 띄운다. 서버 함수는 안 바꿨다 — noauth 여도 맥에 일감을 넣고 실패하면 Haiku 로 되받는다(전과 같다).
 시험대: `sh tools/harness.sh shot "laws&mac=noauth" 620`.
+
+## 이전 유사 사례 상자 (v249 · 2026-11-01 · 지시서 4단계)
+
+law-pick 이 돌려주던 `similar`(answers.emb 유사도 0.5 이상 3건)를 쪽지 안 **상자**로 그린다(`lawCasesHtml`, 접혀 있어도 보임) — 유형 알약·제목(누르면 그 답변)·
+상황·그때 본 조문·판단 축·메모. 그 사례가 인용한 조문은 카드에 「이전 사례에서 인용」(`lawPastKeys`, 열쇠는 이름+조 번호 — `ansUsedKey`). 초안(`ansMake`)은
+본보기 2건에 `type·situation·axes·memo` 를 실어 보내고 law-draft 18판이 「그때 판단: 유형 … / 상황 … / 판단 축 … / 메모 …」 한 줄로 프롬프트에 넣는다
+(「이번 민원에 맞는지는 조문으로 다시 확인」). 사례 0건이면 아무것도 안 그린다. 시험 `tests/test_case_box.py`(시험대 ask=1 에 가짜 similar).

@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v248";
+var APP_VER="v249";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -3896,6 +3896,33 @@ function lawTriChipsHtml(q){
   if(lawAsk&&lawAsk.q===q&&lawAsk.focus) after+='<span class="triage-note">'+esc(lawFocusLabel(lawAsk.focus))+' 만으로 조문을 찾았어요 — 다른 갈래의 조문은 후보에 없어요.</span>';
   return {chips:chips,after:after};
 }
+/* 조문 찾기가 돌려준 비슷한 지난 답변(law-pick similar, 유사도 0.5 이상 3건) → 저장된 답변 객체 */
+function lawPastCases(d){
+  return ((d&&d.similar)||[]).map(function(x){ return (S.answers||[]).find(function(a){ return a.id===x.id; }); }).filter(Boolean).slice(0,3);
+}
+function lawAxisNames(ids){
+  return (ids||[]).map(function(k){ var ax=(S.judgment_axes||[]).find(function(x){ return x.id===k; }); return ax?ax.name:null; }).filter(Boolean);
+}
+/* 그 사례들이 인용한 조문 열쇠(이름+조 번호) — 카드에 「이전 사례에서 인용」을 붙이는 데 쓴다 */
+function lawPastKeys(){
+  var m={}; lawPastCases(lawAsk).forEach(function(a){ (a.cites||[]).forEach(function(c){ m[ansUsedKey(c.law,c.num||c.label)]=1; }); });
+  return m;
+}
+function lawCasesHtml(past){
+  return '<div class="ask-cases"><div class="ask-cases-h">이전 유사 사례 <small>— 그때 이렇게 봤어요</small></div>'
+    + past.map(function(a){
+        var axes=lawAxisNames(a.axis_ids), cites=(a.cites||[]).map(function(c){ return c.label||c.num; });
+        return '<div class="ask-case">'
+          + '<div class="ask-case-t">'+(a.question_type?'<span class="ans-row-tag">'+esc(a.question_type)+'</span>':'')
+          +   '<button class="link-btn ask-past-btn" data-act="ans-jump" data-id="'+esc(a.id)+'">'+esc(a.title||"(제목 없음)")+'</button></div>'
+          + (a.situation?'<div class="ask-case-l"><b>상황</b> '+esc(a.situation)+'</div>':'')
+          + (cites.length?'<div class="ask-case-l"><b>그때 본 조문</b> '+esc(cites.slice(0,4).join(" · "))+(cites.length>4?' 외 '+(cites.length-4)+'건':'')+'</div>':'')
+          + (axes.length?'<div class="ask-case-l"><b>판단 축</b> '+esc(axes.join(" · "))+'</div>':'')
+          + (a.memo?'<div class="ask-case-l"><b>메모</b> '+esc(a.memo)+'</div>':'')
+          + '</div>';
+      }).join("")
+    + '</div>';
+}
 var lawAskDetail=false;   /* 쪽지의 「자세히」 — 질문·범위·주관 근거·후보 보강·지난 답변·표시 뜻. 평소엔 결론 한 줄과 갈래 칩만(토스 결 시안 2) */
 function lawAskNoteHtml(){
   var d=lawAsk; if(!d) return "";
@@ -3928,15 +3955,12 @@ function lawAskNoteHtml(){
   if(d.skipped) extra.push("시행 전 조문 "+d.skipped+"개 제외");
   if(d.looked) extra.push("본문 읽음 "+d.looked+"개");
   if(extra.length) det.push('<p><b>후보 보강</b> '+esc(extra.join(" · "))+'</p>');
-  var past=(d.similar||[]).filter(function(x){ return S.answers.some(function(a){ return a.id===x.id; }); });
-  if(past.length) det.push('<p class="ask-past"><b>비슷한 지난 답변</b> — '+past.map(function(x){
-        return '<button class="link-btn ask-past-btn" data-act="ans-jump" data-id="'+esc(x.id)+'">'+esc(x.title||"(제목 없음)")+'</button>';
-      }).join(" · ")+' <span class="ask-dim">그때 인용한 조문을 후보에 먼저 넣었고, 초안의 말투 본보기로도 써요.</span></p>');
+  var past=lawPastCases(d);
+  if(past.length) det.push('<p class="ask-past"><span class="ask-dim">그때 인용한 조문을 후보에 먼저 넣었고(「이전 사례에서 인용」 표시), 초안의 말투·판단 본보기로도 써요.</span></p>');
   if(d.picks&&d.picks.length) det.push('<p class="ask-legend"><span class="ask-score n-1">인용 필수</span> 표시가 붙은 조는 처음부터 체크돼 있어요. '
     +   '<span>있으면 좋음</span><span>없어도 됨</span>은 보고 고르세요. 조문 원문은 카드를 누르면 열려요.</p>');
-  /* 지난 답변이 있으면 접힌 채로도 한 줄은 보인다 — 본보기가 있다는 건 알아야 한다 */
-  var pastLine=(!lawAskDetail&&past.length)?'<p class="ask-past"><b>비슷한 지난 답변</b> — '+past.map(function(x){
-        return '<button class="link-btn ask-past-btn" data-act="ans-jump" data-id="'+esc(x.id)+'">'+esc(x.title||"(제목 없음)")+'</button>'; }).join(" · ")+'</p>':"";
+  /* 유사 사례 상자(지시서 4단계, v249) — 접힌 채로도 늘 보인다. 상황·판단 축·메모·그때 조문이 「예전에 이런 유형은 이렇게 봤음」 */
+  var pastLine=past.length?lawCasesHtml(past):"";
   return '<div class="ask-box">'
     + '<div class="ask-meta"><span>'+esc(aiCostLabel(d))+'</span>'
     +   '<button class="link-btn quiet-link ask-x" data-act="ask-close" title="AI 결과 닫기">✕</button></div>'
@@ -5228,11 +5252,12 @@ function lawCards(){
   }
   if(lawAsk&&lawAsk.picks) lawAsk.picks.forEach(function(p){ get(p.id,p.lawId,p.label).ai=p; });
   (lawHits||[]).forEach(function(g){ var c=get(g.artId,g.lawId,g.art); c.hit=g; if(!c.art) c.art=g.art; });
-  var usedOf=ansUsedMap(), cards=order.map(function(k){ return by[k]; });
+  var usedOf=ansUsedMap(), pastOf=lawPastKeys(), cards=order.map(function(k){ return by[k]; });
   cards.forEach(function(c){
     var lo=S.laws.find(function(x){ return x.id===c.lawId; });
     c.kindN=lo?lawKindOf(lo).n:9; c.lawName=lawName(c.lawId);
     c.used=usedOf[ansUsedKey(c.lawName,c.art)]||0;
+    c.pastCase=!!pastOf[ansUsedKey(c.lawName,c.art)];
     c.rank=c.ai?askRank(c.ai.grade):9;
     c.sim=c.hit&&c.hit.sim!=null?c.hit.sim:0;
     c.page=c.hit?c.hit.page:0;
@@ -5501,7 +5526,10 @@ function lawArtHtml(label){
   if(i<0) return esc(t);
   return esc(t.slice(0,i))+'<span class="law-art-sep">|</span>'+esc(t.slice(i+3));
 }
-function ansUsedChip(n){ return n?'<span class="law-used" title="「민원 답변」에 근거로 담은 조문">답변에 '+(n>1?n+'번 ':'')+'씀</span>':''; }
+function ansUsedChip(n,pastCase){
+  if(pastCase) return '<span class="law-used past" title="위 「이전 유사 사례」에서 근거로 삼은 조문">이전 사례에서 인용</span>';
+  return n?'<span class="law-used" title="「민원 답변」에 근거로 담은 조문">답변에 '+(n>1?n+'번 ':'')+'씀</span>':'';
+}
 /* 고른 카드에서 근거 조문 묶음을 만든다. 발췌가 있는 카드(낱말 검색)는 검색어가 든 항 전문을,
  * 그 밖(AI · 뜻)은 조문 원문을 표에서 받아 온다. AI 근거 문장(quote)은 핵심 구절로 쓴다. */
 function ansCitesAll(then){
@@ -5569,7 +5597,9 @@ function ansMake(){
   /* 비슷한 지난 답변(조문 찾기가 찾아 둔 것)의 글을 본보기로 함께 보낸다 — 이랑님이 고친 글이 있으면 그것 */
   var examples=((lawAsk&&lawAsk.similar)||[]).map(function(x){
     var a=S.answers.find(function(y){ return y.id===x.id; }); if(!a) return null;
-    var t=String(a.final||a.draft||"").trim(); return t.length>=40?{title:a.title||"",text:t.slice(0,1800)}:null;
+    var t=String(a.final||a.draft||"").trim(); if(t.length<40) return null;
+    /* 사례 꼬리표(지시서 4단계) — 판단 축·메모가 「그때 어떻게 봤나」의 핵심. 조문 내용은 못 옮기게 서버가 막는다 */
+    return {title:a.title||"",text:t.slice(0,1800),type:a.question_type||"",situation:a.situation||"",axes:lawAxisNames(a.axis_ids),memo:a.memo||""};
   }).filter(Boolean).slice(0,2);
   /* 초안도 일감 방식(v228) — 시작 접수증을 받고 ai_jobs 줄을 2초마다 읽는다. 시작 요청이 끊겨도 줄을 읽어 보고, 20초 넘게 줄이 없으면 실패로. */
   var job=uuid(), t0=Date.now(), sawRow=false;
@@ -6672,7 +6702,7 @@ function renderLawResults(){
       +   '<div class="law-meta">'
       +     (p?'<span class="ask-score n-'+needRank(p.need)+'">'+esc(p.need||"있으면 좋음")+'</span>':'')
       +     '<span class="law-art">'+lawArtHtml(c.art)+'</span>'
-      +     ansUsedChip(c.used)
+      +     ansUsedChip(c.used,c.pastCase)
       +     (lawIsFuture(c.art)?'<span class="law-soon">아직 시행 전</span>':'')
       +     (function(){ if(!g||!g.page) return ''; var pg=(g.page===g.pageEnd?g.page+'쪽':g.page+'~'+g.pageEnd+'쪽'); return String(c.art||"").indexOf(pg)===0?'':'<span class="law-page">'+pg+'</span>'; })()
       +     (g&&g.total>1?'<span class="law-n">'+g.total+'건</span>':'')

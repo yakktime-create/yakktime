@@ -1791,3 +1791,14 @@ body.has-sheet .main{overflow:hidden;}
 .ans-row-tag{display:inline-block;font-size:var(--fs-xs);font-weight:700;color:var(--accent-ink);background:var(--accent-soft);border-radius:var(--r-full);padding:1px 8px;margin-right:6px;vertical-align:middle;}
 .ans-row-axes{font-size:var(--fs-sm);color:var(--t3);margin:6px 0 2px;}
 .ans-row-axes b{font-weight:600;color:var(--t2);}
+
+/* ---------- 이전 유사 사례 상자 (쪽지 안, v249 · 지시서 4단계) ---------- */
+.ask-cases{background:var(--bg);border-radius:var(--r-md);padding:var(--sp-3) var(--sp-4);margin:var(--sp-3) 0 0;display:grid;gap:var(--sp-3);}
+.ask-cases-h{font-size:var(--fs-sm);font-weight:800;color:var(--accent-ink);}
+.ask-cases-h small{font-weight:400;color:var(--t4);}
+.ask-case{display:grid;gap:3px;padding-top:var(--sp-2);border-top:1px solid var(--fill-2);}
+.ask-case:first-of-type{border-top:none;padding-top:0;}
+.ask-case-t{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.ask-case-l{font-size:var(--fs-sm);color:var(--t3);line-height:var(--lh-snug);}
+.ask-case-l b{color:var(--t2);font-weight:600;margin-right:4px;}
+.law-used.past{color:var(--accent-ink);background:var(--accent-soft);border-radius:var(--r-full);padding:1px 8px;}

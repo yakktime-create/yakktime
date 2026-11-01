@@ -11,9 +11,11 @@ set -e
 APP="$(cd "$(dirname "$0")/.." && pwd)"
 D="$HOME/.yakktime-uitest"
 mkdir -p "$D"
-cp "$APP/app.js" "$APP/style.css" "$APP/insp_template.json" "$D/"
+cp "$APP/app.js" "$APP/style.css" "$APP/pii.js" "$APP/insp_template.json" "$D/"
 cat > "$D/mocksb.js" <<'EOF'
-var MOCK={inspections:[],insp_items:[],schedule:[],events:[],articles:[],mfds:[],archive:[],docs:[],laws:[],refs:[],answers:[],settings:[]};
+var MOCK={inspections:[],insp_items:[],schedule:[],events:[],articles:[],mfds:[],archive:[],docs:[],laws:[],refs:[],answers:[],settings:[],judgment_axes:[
+  {id:"ax1",name:"제조소 단위 vs 품목 단위",description:"적합판정(제조소)과 사전 GMP 평가(품목)를 가른다",created_at:"2026-10-31T01:00:00Z"},{id:"ax2",name:"변경허가 vs 변경신고",description:"허가 사항 변경이 어느 절차인지",created_at:"2026-10-31T01:00:01Z"},
+  {id:"ax3",name:"재량 조항(할 수 있다) — 강제 아님",description:"「할 수 있다」 조문은 의무가 아니다",created_at:"2026-10-31T01:00:02Z"},{id:"ax4",name:"지방청 소관 vs 본부 소관",description:"제조소 단위 적합판정 = 지방청, 품목별 사전 GMP 평가 = 본부",created_at:"2026-10-31T01:00:03Z"},{id:"ax5",name:"사전 GMP 평가 대상 여부",description:"품목별 사전 GMP 평가(실태조사) 대상이 되는가",created_at:"2026-10-31T01:00:04Z"}]};
 function K(off){ var d=new Date(); d.setDate(d.getDate()+off); return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2); }
 MOCK.events=[{id:"t1",event_date:K(-2),event_time:null,title:"아스트라제네카 실태조사",place:null,until:K(3),memo:"가는 편 09:20 인천"},
              {id:"t2",event_date:K(0),event_time:"11:30",title:"채주영 선생님 점심",place:"오송",memo:null,done:true},
@@ -54,6 +56,10 @@ window.T=function(s){ document.title=s; };
 setTimeout(function(){ var p=new URLSearchParams(location.search);
   if(p.get("insp")){ active="insp"; inspOpenId="insp-1"; inspPage=p.get("page")||"board"; if(p.get("open")) inspExpand["b:"+p.get("open")]=true; if(p.get("day")) inspFilter.day=p.get("day"); if(p.get("mine")) inspFilter.mine=true; }
   else active=p.get("tab")||"today";
+  if(p.get("draft")){ ansDraft={q:"A사는 X품목(완제의약품)의 해외 제조소를 추가하려고 합니다. 변경허가 대상인지, 사전 GMP 평가를 받아야 하는지 문의드립니다.",
+      cites:[{law:"의약품 등의 안전에 관한 규칙",kind:"총리령",num:"제8조",label:"제8조(허가사항 등의 변경허가 신청 등)",text:"① 의약품등의 제조업자ㆍ수입자 또는 위탁제조판매업자가 그 허가받거나 신고한 사항을 변경하려는 경우에는 변경허가 신청서에 근거서류를 첨부하여 제출하여야 한다.",table:false,artId:1,lawId:"l2",key:"",missing:false}],
+      summary:"해외 제조소 추가 시 변경허가 대상인지에 관한 질의",title:"해외 제조소 추가 · 변경허가",topic:"해외 제조소 추가 변경허가",help:"",mode:"plain",busy:false,err:"",krw:0,made:true};
+    ansDraft.final=ansText("plain"); ansDraft.gen=ansDraft.final; MOCK.answers=[]; }
   if(p.get("when")){ quickWhen=p.get("when"); } if(p.get("ansopen")) ansOpenId=p.get("ansopen"); if(p.get("settings")) settingsOpen=true; if(p.get("list")) lawListOpen=true; if(p.get("nohelp")) lawHelpOpen=false;
   if(p.get("ask")){ lawHelpOpen=false; lawQuery="당사는 항체 기반 신약을 연구·개발하고 있는 바이오의약품 연구개발 기업으로서, 현재 연구개발 중인 후보물질의 임상시험 수행을 위해 기존 연구시설 내부에 임상시험용 의약품 제조시설을 설치하는 방안을 검토하고 있습니다.";
     lawTriage={q:lawQuery,data:{mine:"협조",owner:"바이오의약품정책과",ownerBasis:"분장 4호 허가 제도",coop:[{div:"바이오의약품품질관리과",why:"GMP 기준·시설기준 관리"}],local:true,

@@ -1765,3 +1765,29 @@ body.has-sheet .main{overflow:hidden;}
 .ans-body{max-height:none;}
 .rail,.page-head,.ans-row-head,.ans-sec-k,.ans-meta-row,.ans-row-acts,.row-acts,.ev-tail,.card-head,.law-grps,.insp-tabs,.insp-filters,.week,.stat-row,button{-webkit-user-select:none;user-select:none;}
 .ans-body,.law-snip,.lv-text,.ask-head-txt,.ask-why{-webkit-user-select:text;user-select:text;}
+
+/* ---------- 사례 꼬리표 판 (초안 창 「담기」 앞, v248 · 2026-11-01) — 선 대신 면, 칩은 채움 알약 ---------- */
+.ans-case{background:var(--paper);border-radius:var(--r-lg);padding:var(--sp-3) var(--sp-4);margin:var(--sp-3) 0;display:grid;gap:var(--sp-3);}
+.ans-case-h{font-size:var(--fs-base);font-weight:700;color:var(--t2);display:flex;align-items:baseline;gap:var(--sp-2);}
+.ans-case-h small{font-weight:400;color:var(--t4);font-size:var(--fs-sm);}
+.ans-case-k{font-size:var(--fs-xs);font-weight:700;color:var(--t3);margin-bottom:6px;letter-spacing:0;}
+.ans-case .chip-row{margin-bottom:0;}
+.ans-case .input{background:var(--bg);width:100%;box-sizing:border-box;}
+.ans-axes{display:grid;gap:4px;}
+.ans-axis{display:flex;align-items:center;gap:var(--sp-3);min-height:var(--tap);padding:4px 6px;border-radius:var(--r-md);cursor:pointer;}
+.ans-axis.on{background:var(--accent-soft);}
+.ans-axis .check{flex:none;}
+.ans-axis b{font-weight:600;color:var(--t2);}
+.ans-axis small{color:var(--t4);font-size:var(--fs-xs);margin-left:auto;text-align:right;max-width:42%;}
+.ans-axis-add{display:flex;gap:var(--sp-2);align-items:center;}
+.ans-axis-add .input{flex:1;}
+.ans-case-sug{background:var(--accent-soft);color:var(--accent-ink);border-radius:var(--r-md);padding:8px 12px;font-size:var(--fs-sm);display:flex;gap:var(--sp-2);align-items:center;flex-wrap:wrap;}
+.ans-case-sug .btn{margin-left:auto;}
+.ans-case-warn{background:var(--brick-soft);color:var(--brick);border-radius:var(--r-md);padding:10px 12px;font-size:var(--fs-sm);font-weight:600;}
+.ans-case-warn ul{margin:4px 0 0;padding-left:18px;font-weight:400;}
+.ans-case-foot{display:flex;gap:var(--sp-2);flex-wrap:wrap;align-items:center;}
+.ans-case-foot .btn.primary{background:var(--accent);color:#fff;font-weight:700;}
+.ans-case-foot .quiet-link{margin-left:auto;}
+.ans-row-tag{display:inline-block;font-size:var(--fs-xs);font-weight:700;color:var(--accent-ink);background:var(--accent-soft);border-radius:var(--r-full);padding:1px 8px;margin-right:6px;vertical-align:middle;}
+.ans-row-axes{font-size:var(--fs-sm);color:var(--t3);margin:6px 0 2px;}
+.ans-row-axes b{font-weight:600;color:var(--t2);}

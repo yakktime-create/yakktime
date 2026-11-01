@@ -157,7 +157,7 @@ document.getElementById("login-email").addEventListener("keydown",function(e){ i
 
 /* ========== DB 레이어 (Supabase) — OPUS SQL 스키마 ========== */
 /* archive·docs 는 화면이 없어졌지만 표는 남겨 둔다 — 데이터와 백업이 보존된다 */
-var TABLES=["schedule","events","articles","mfds","archive","docs","laws","refs","answers","settings","inspections","insp_items"];
+var TABLES=["schedule","events","articles","mfds","archive","docs","laws","refs","answers","settings","inspections","insp_items","judgment_axes"];
 
 /*
  * OPUS SQL 컬럼명 매핑:
@@ -279,7 +279,7 @@ function dbDelete(table,id){
 }
 
 /* ========== 전역 상태 ========== */
-var S={ schedule:[], events:[], articles:[], mfds:[], archive:[], docs:[], laws:[], refs:[], answers:[], settings:[], inspections:[], insp_items:[] };
+var S={ schedule:[], events:[], articles:[], mfds:[], archive:[], docs:[], laws:[], refs:[], answers:[], settings:[], inspections:[], insp_items:[], judgment_axes:[] };
 /* 설정 표 — 기기(아이패드·맥)가 달라도 같아야 하는 작은 값. 「AI에게 알려둔 우리 과 규칙」·답변 형식.
  * localStorage 는 기기마다 달라서 맥에서 적은 규칙이 아이패드엔 없었다(2026-09-10). */
 function setGet(k){ var r=(S.settings||[]).find(function(x){ return x.key===k; }); return r?String(r.value||""):""; }
@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v247";
+var APP_VER="v248";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -5820,7 +5820,7 @@ function ansSummaryOf(a){
        ||/민원의\s*내용은\s*['‘]([\s\S]{2,120}?)['’]에\s*대한\s*질의/.exec(t);
   return m?m[1].replace(/\s+/g," ").trim():String(a.title||"");
 }
-function ansSave(mode){
+function ansSave(mode,skipCase){
   var d=ansDraft; if(!d) return;
   var fin=(document.getElementById("ans-final")||{}).value;
   var item={
@@ -5831,6 +5831,15 @@ function ansSave(mode){
     draft:ansText(mode||d.mode||"plain"),
     final:(fin!=null&&String(fin).trim())?String(fin):null
   };
+  /* 사례 꼬리표(지시서 3단계, v248) — 유형·상황·판단 축·메모. 「꼬리표 없이 담기」면 안 건드린다 */
+  var cs=d.case;
+  if(cs&&!skipCase){
+    item.question_type=cs.type||null;
+    item.situation=String(cs.situation||"").trim()||null;
+    item.axis_ids=Object.keys(cs.axes||{}).filter(function(k){ return cs.axes[k]; });
+    item.memo=String(cs.memo||"").trim()||null;
+  }
+  var savedCase=!!(cs&&!skipCase&&(item.question_type||item.situation||(item.axis_ids||[]).length||item.memo));
   if(d.id){
     /* 다시 열어 고쳐 담을 때 **처음 초안은 그대로 둔다**(이랑님 2026-09-09 「고치기 전 글 어디서 확인?」).
        덮어쓰면 고치기 전 글이 사라진다. 처음 담을 때 초안이 비어 있었던 옛 답변만 채운다. 고친 글(final)은 늘 새것. */
@@ -5838,14 +5847,139 @@ function ansSave(mode){
     if(i>=0&&String(S.answers[i].draft||"").trim()) delete item.draft;
     if(i>=0){ var k; for(k in item) S.answers[i][k]=item[k]; }
     dbUpdate("answers",d.id,item);
-    showToast("✓ 저장했어요");
+    showToast(savedCase?"✓ 저장했어요 · 사례 꼬리표도":"✓ 저장했어요");
     ansDraft=null; active="answers"; render(); return;
   }
   dbInsert("answers",item).then(function(row){
     if(row){ S.answers.unshift(row); }
-    showToast("✓ 「민원 답변」에 담았어요");
+    showToast(savedCase?"✓ 담았어요 · 사례로도 남겼어요":"✓ 「민원 답변」에 담았어요");
     ansDraft=null; active="answers"; render();
   },function(e){ showToast("저장하지 못했어요: "+(e&&e.message||e),true); });
+}
+/* ---------- 사례 꼬리표 (지시서 3단계, v248 · 2026-11-01) ----------
+ * 「민원 답변에 담기」를 누르면 바로 저장하지 않고 작은 판이 먼저 열린다 — 유형(4종)·상황 한 줄·판단 축·메모.
+ * 유형과 상황은 앱이 먼저 채우고, 사람은 축만 고르고 메모 한 줄 치면 끝(하루 10초). 저장 직전에 업체명·사람 이름을 거른다(pii.js).
+ * 새 버튼을 만들지 않았다 — 있던 「담기」가 판을 열고, 판 안의 「담기」가 저장한다. */
+var ANS_TYPES=["대상여부","제출자료","문서작성","개정확인"];
+function ansCaseGuessType(q){
+  q=String(q||"");
+  var sc={"개정확인":/개정|바뀐|최근 변경|시행일|신설|변경된 규정/.test(q)?2:0,
+          "문서작성":/질의서|회신문|문안|작성해|초안을|공문/.test(q)?2:0,
+          "제출자료":/제출|자료|서류|첨부|구비|무엇을 내|어떤 자료/.test(q)?1:0,
+          "대상여부":/대상|해당|해야 하|받아야|필요한가|가능한가|되나요|되는지|허용/.test(q)?1:0};
+  var best="대상여부", n=-1; ANS_TYPES.forEach(function(t){ if(sc[t]>n){ n=sc[t]; best=t; } });
+  return best;
+}
+function ansCaseInit(d){
+  var a=d.id?(S.answers||[]).find(function(x){ return x.id===d.id; }):null;
+  var axes={}; ((a&&a.axis_ids)||[]).forEach(function(k){ axes[k]=true; });
+  return { open:false, mode:d.mode||"plain",
+           type:(a&&a.question_type)||ansCaseGuessType(d.q),
+           situation:(a&&a.situation)||String(d.topic||d.summary||"").replace(/에 (관한|대한) 질의$/,"").slice(0,80),
+           axes:axes, memo:(a&&a.memo)||"", sug:null, warn:[] };
+}
+function ansCaseOpen(mode){
+  var d=ansDraft; if(!d) return;
+  if(!d.case) d.case=ansCaseInit(d);
+  d.case.mode=mode||d.mode||"plain"; d.case.open=true; d.case.warn=[];
+  renderAnsModal(true);
+  var el=document.querySelector(".ans-case"); if(el&&el.scrollIntoView) el.scrollIntoView({block:"nearest"});
+}
+function ansCaseToggle(id){
+  var d=ansDraft; if(!d||!d.case) return;
+  d.case.axes[id]=!d.case.axes[id]; if(d.case.sug&&d.case.sug.id===id) d.case.sug=null;
+  renderAnsModal(true);
+}
+/* 업체명·제품명·사람 이름 — 패턴은 pii.js 에 */
+function piiFind(text){
+  var out=[], pats=window.PII_PATTERNS||[], allow=window.PII_ALLOW||[];
+  pats.forEach(function(p){
+    var m=p.re.exec(String(text||"")); if(!m) return;
+    if(allow.some(function(a){ return m[0].indexOf(a)>=0; })) return;
+    out.push({why:p.why,hit:m[0]});
+  });
+  return out;
+}
+/* 메모와 뜻이 같은 축이 있나 — AI 를 부르지 않고 낱말 겹침으로(0원·즉시). 두 낱말 이상 겹치면 제안 */
+function axisSuggest(memo){
+  var d=ansDraft; if(!d||!d.case) return null;
+  var toks=String(memo||"").toLowerCase().split(/[\s·,.;:()\[\]「」'"\/]+/).filter(function(t){ return t.length>=2; });
+  if(toks.length<2) return null;
+  var best=null, bn=1;
+  (S.judgment_axes||[]).forEach(function(ax){
+    if(d.case.axes[ax.id]) return;
+    var at=(String(ax.name||"")+" "+String(ax.description||"")).toLowerCase();
+    var n=0; toks.forEach(function(t){ if(at.indexOf(t)>=0) n++; });
+    if(n>bn){ bn=n; best=ax; }
+  });
+  return best?{id:best.id,name:best.name}:null;
+}
+function ansCaseAxisAdd(){
+  var d=ansDraft; if(!d||!d.case) return;
+  var inp=document.getElementById("ans-case-newaxis"); var name=inp?inp.value.trim():"";
+  if(!name) return;
+  var hits=piiFind(name); if(hits.length){ d.case.warn=hits.map(function(h){ return {why:h.why+"(새 축)",hit:h.hit}; }); renderAnsModal(true); return; }
+  var ax={id:uuid(),name:name,description:""};
+  S.judgment_axes.push(ax); d.case.axes[ax.id]=true; d.case.sug=null;
+  dbInsert("judgment_axes",ax);
+  renderAnsModal(true);
+}
+function ansCaseCommit(){
+  var d=ansDraft; if(!d||!d.case) return;
+  var si=document.getElementById("ans-case-sit"), mi=document.getElementById("ans-case-memo");
+  if(si) d.case.situation=si.value; if(mi) d.case.memo=mi.value;
+  var hits=piiFind(d.case.situation).concat(piiFind(d.case.memo));
+  if(hits.length){ d.case.warn=hits; renderAnsModal(true); return; }
+  d.case.warn=[]; ansSave(d.case.mode);
+}
+function ansCaseWire(){
+  var d=ansDraft; if(!d||!d.case) return;
+  var si=document.getElementById("ans-case-sit"); if(si) si.addEventListener("input",function(){ d.case.situation=si.value; });
+  var mi=document.getElementById("ans-case-memo");
+  if(mi) mi.addEventListener("input",function(){
+    d.case.memo=mi.value; var sug=axisSuggest(mi.value);
+    d.case.sug=sug; var box=document.getElementById("ans-case-sug");
+    if(box) box.innerHTML=sug?ansCaseSugHtml(sug):"";      /* 글자마다 render() 하지 않는다 — 한글 조합이 끊긴다 */
+  });
+  var ni=document.getElementById("ans-case-newaxis"); if(ni) ni.addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); ansCaseAxisAdd(); } });
+}
+function ansCaseSugHtml(sug){
+  return '<div class="ans-case-sug">「'+esc(sug.name)+'」 축과 같은 내용 같아요. <button class="btn sm" data-act="ans-case-sug-ok">그 축으로 묶기</button></div>';
+}
+function ansCaseHtml(d){
+  var cs=d.case; if(!cs||!cs.open) return "";
+  var axes=(S.judgment_axes||[]).slice().sort(function(a,b){ return String(a.created_at||"").localeCompare(String(b.created_at||"")); });
+  return '<div class="ans-case">'
+    + '<div class="ans-case-h">이 사례를 어떻게 봤나 <small>— 다음에 비슷한 민원이 오면 앱이 이 판단을 먼저 보여 줘요</small></div>'
+    + '<div><div class="ans-case-k">질문 유형</div><div class="chip-row">'
+    +   ANS_TYPES.map(function(t){ return '<button class="chip'+(cs.type===t?" on":"")+'" data-act="ans-case-type" data-id="'+t+'">'+t+'</button>'; }).join("")
+    + '</div></div>'
+    + '<div><div class="ans-case-k">상황 한 줄 <span class="ans-pane-note">(업체명·제품명 없이)</span></div>'
+    +   '<input class="input" id="ans-case-sit" value="'+esc(cs.situation||"")+'" placeholder="예: 해외 제조소 추가, 완제의약품" /></div>'
+    + '<div><div class="ans-case-k">판단 축</div><div class="ans-axes">'
+    +   axes.map(function(ax){ var on=!!cs.axes[ax.id];
+          return '<div class="ans-axis'+(on?" on":"")+'" data-act="ans-case-axis" data-id="'+esc(ax.id)+'"><span class="check'+(on?" on":"")+'">✓</span><b>'+esc(ax.name)+'</b>'+(ax.description?'<small>'+esc(ax.description)+'</small>':'')+'</div>'; }).join("")
+    +   '<div class="ans-axis-add"><input class="input" id="ans-case-newaxis" placeholder="새 축 추가 — 적고 Enter" /><button class="btn quiet sm" data-act="ans-case-axis-add">추가</button></div>'
+    + '</div></div>'
+    + '<div><div class="ans-case-k">메모 한 줄 <span class="ans-pane-note">(선택)</span></div>'
+    +   '<input class="input" id="ans-case-memo" value="'+esc(cs.memo||"")+'" placeholder="예: 재량 조항이지만 지침 기준이 있어 실태조사 대상으로 봄" />'
+    +   '<div id="ans-case-sug">'+(cs.sug?ansCaseSugHtml(cs.sug):"")+'</div></div>'
+    + ((cs.warn||[]).length?'<div class="ans-case-warn">저장을 막았어요 — 실제 이름이 들어 있는 것 같아요. 「A사」「X품목」처럼 바꿔 주세요.<ul>'
+        + cs.warn.map(function(w){ return '<li>'+esc(w.why)+': 「'+esc(w.hit)+'」</li>'; }).join("")+'</ul></div>':'')
+    + '<div class="ans-case-foot">'
+    +   '<button class="btn sm primary" data-act="ans-case-commit">'+(d.id?"저장":"민원 답변에 담기")+' →</button>'
+    +   '<button class="btn quiet sm" data-act="ans-case-skip">꼬리표 없이 '+(d.id?"저장":"담기")+'</button>'
+    +   '<button class="link-btn quiet-link" data-act="ans-case-close">닫기</button>'
+    + '</div></div>';
+}
+function ansCaseRowHtml(a){
+  var names=((a.axis_ids||[]).map(function(k){ var ax=(S.judgment_axes||[]).find(function(x){ return x.id===k; }); return ax?ax.name:null; }).filter(Boolean));
+  if(!a.situation&&!names.length&&!a.memo) return "";
+  return '<div class="ans-row-axes">'
+    + (a.situation?'<div><b>상황</b> '+esc(a.situation)+'</div>':'')
+    + (names.length?'<div><b>판단 축</b> '+esc(names.join(" · "))+'</div>':'')
+    + (a.memo?'<div><b>메모</b> '+esc(a.memo)+'</div>':'')
+    + '</div>';
 }
 /* 지우기는 기존 del() 을 그대로 쓴다 — 되돌리기까지 이미 들어 있다 */
 function ansDel(id){ if(ansOpenId===id) ansOpenId=null; del("answers",id); }
@@ -5882,6 +6016,7 @@ function ansReopen(id){
                appno:apm?apm[1]:"",
                mode:a.mode||"plain", busy:false, err:"", krw:0, id:a.id,
                made:true, final:a.final||"" };
+    ansDraft.case=ansCaseInit(ansDraft);
     /* 「다시 열어 고치기」에 글이 비어 있었다(이랑님 2026-09-09) — 옛 답변은 final 이 null 이라(고치지 않고 담으면
        null 로 저장했다) 빈 칸이 열렸다. 저장된 초안(draft)을, 그것도 없으면 조문으로 다시 만든 글을 넣는다. */
     if(!String(ansDraft.final||"").trim()) ansDraft.final=String(a.draft||"").trim()||ansText(ansDraft.mode);
@@ -5962,6 +6097,7 @@ function ansModalHtml(){
             : ' <span class="ans-pane-note">· AI 가 참고할 것이 없다고 판단했어요</span>')
       +   (d.dropped?' <span class="ans-pane-note">· 근거에 없는 법령을 든 문장은 뺐어요</span>':'')+'</div>'
       + '<textarea class="input ans-final" id="ans-final" rows="16">'+esc(d.final||"")+'</textarea>'
+      + ansCaseHtml(d)
       + '<div class="ans-pane-foot">'
       +   '<button class="btn quiet sm" data-act="ans-copy">복사</button>'
       +   '<button class="btn quiet sm" data-act="ans-txt">텍스트</button>'
@@ -6008,8 +6144,9 @@ function ansModalHtml(){
 var ansSigLast="";
 function ansSig(){
   var d=ansDraft; if(!d) return "";
+  var cs=d.case?[d.case.open,d.case.type,Object.keys(d.case.axes||{}).filter(function(k){ return d.case.axes[k]; }).join(","),(d.case.warn||[]).length,(S.judgment_axes||[]).length]:null;
   return JSON.stringify([d.made,d.mode,d.busy,d.err,d.krw,d.summary,d.help,d.dropped,d.id,
-    d.cites.map(function(c){ return c.law+"|"+c.label+"|"+(c.pick?"p":c.key?"k":"-"); }),ansFmtOpen,ansFmt]);
+    d.cites.map(function(c){ return c.law+"|"+c.label+"|"+(c.pick?"p":c.key?"k":"-"); }),ansFmtOpen,ansFmt,cs]);
 }
 function renderAnsModal(force){
   var el=document.getElementById("ans-modal"); if(!el) return;
@@ -6031,6 +6168,7 @@ function renderAnsModal(force){
   });
   var ap=document.getElementById("ans-appno");
   if(ap) ap.addEventListener("input",function(){ if(ansDraft){ ansDraft.appno=ap.value.trim(); ansRegen(true); var fa=document.getElementById("ans-final"); if(fa) fa.value=ansDraft.final; } });
+  ansCaseWire();
   ansSwipeWire();
 }
 /* 좁은 화면에서 두 판을 좌우로 넘긴다 — 버튼을 늘리지 않는다 */
@@ -6069,7 +6207,7 @@ function ansListHtml(items){
       /* 보냈음 체크 — 다른 목록의 동그라미와 같은 꼴(v239). 아직 안 보낸 민원이 무엇인지 앱이 안다 */
       +   '<input class="day-check" type="checkbox" data-act="ans-sent" data-id="'+esc(a.id)+'"'+(sent?' checked':'')+' title="'+(sent?"보냈음":"보냈으면 체크")+'" />'
       +   '<div class="ans-row-body">'
-      +     '<div class="ans-row-t">'+esc(a.title||"(제목 없음)")+'</div>'
+      +     '<div class="ans-row-t">'+(a.question_type?'<span class="ans-row-tag">'+esc(a.question_type)+'</span>':'')+esc(a.title||"(제목 없음)")+'</div>'
       +     (gist&&gist.slice(0,24)!==String(a.title||"").trim().slice(0,24)?'<div class="ans-row-g">'+esc(gist)+'</div>':'')
       +     '<div class="ans-row-s">'+ansDueTag(a)+esc(ansDateOf(a))+(nc?' · 근거 '+nc+'건':'')
       +       (a.mode==="help"?' · 참고 붙임':'')+(!sameTxt?' · <b>고친 글 있음</b>':'')+'</div>'
@@ -6079,6 +6217,7 @@ function ansListHtml(items){
       + (open?'<div class="ans-row-open">'
       +   '<div class="ans-meta-row"><label class="due-field"><span>회신 기한</span><input type="date" class="input ans-due-in" data-id="'+esc(a.id)+'" value="'+esc(a.due||"")+'" /></label>'
       +     '<button class="chip'+(sent?" on":"")+'" data-act="ans-sent" data-id="'+esc(a.id)+'">'+(sent?"보냈음 ✓":"보냈음으로 표시")+'</button></div>'
+      +   ansCaseRowHtml(a)
       +   (a.question?'<div class="ans-sec"><span class="ans-sec-k">민원 내용</span><pre class="ans-body sm">'+esc(a.question)+'</pre></div>':'')
       +   (sameTxt
             ? '<div class="ans-sec"><span class="ans-sec-k">답변</span><pre class="ans-body">'+esc(a.final||a.draft||"")+'</pre></div>'
@@ -6778,7 +6917,14 @@ document.getElementById("app").addEventListener("click",function(e){
     case "ans-copy": ansCopy(id); break;
     case "ans-txt": ansTxt(id); break;
     case "ans-hwpx": ansHwpx(id); break;
-    case "ans-save": ansSave(id); break;
+    case "ans-save": ansCaseOpen(id); break;
+    case "ans-case-type": if(ansDraft&&ansDraft.case){ ansDraft.case.type=id; renderAnsModal(true); } break;
+    case "ans-case-axis": ansCaseToggle(id); break;
+    case "ans-case-axis-add": ansCaseAxisAdd(); break;
+    case "ans-case-sug-ok": if(ansDraft&&ansDraft.case&&ansDraft.case.sug){ ansDraft.case.axes[ansDraft.case.sug.id]=true; ansDraft.case.sug=null; renderAnsModal(true); } break;
+    case "ans-case-commit": ansCaseCommit(); break;
+    case "ans-case-skip": ansSave(ansDraft&&ansDraft.case?ansDraft.case.mode:"plain",true); break;
+    case "ans-case-close": if(ansDraft&&ansDraft.case){ ansDraft.case.open=false; renderAnsModal(true); } break;
     case "ans-open": ansOpenId=(ansOpenId===id)?null:id; render(); break;
     case "ans-jump": ansOpenId=id; active="answers"; render(); break;
     /* 실태조사 노트 */

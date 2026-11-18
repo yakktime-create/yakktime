@@ -1,6 +1,7 @@
 #!/bin/sh
 # 법제처에서 법령·고시를 앱의 진짜 코드(lawApiImport)로 받아 저장한다 — 이랑님이 앱에서 「＋ 법제처에서 받기」를 누르는 것과 같다 (2026-10-01)
 #   sh tools/law_import.sh "인체세포등 및 첨단바이오의약품의 허가 및 안전 등에 관한 규정" "첨단바이오의약품 장기추적조사 관리기준"
+#   PENDING=1 sh tools/law_import.sh "…특별법"   ← 아직 시행 전(시행예정)인 법령. 앱 검색은 현행만 보여서 이 스위치가 필요하다(2026-11-06)
 # 어떻게: ~/.yakktime-uitest/real/ 에 index_real.html 을 만든다 — 진짜 supabase-js 를 service_role 열쇠로 띄우고(로그인 흉내),
 #   app.js 를 그대로 실행한 뒤 이름마다 lawApiSearchAll → lawApiImport. 진행은 localhost:8778/log 로 POST 해 run.log 에 쌓인다.
 # 함정: ① 반드시 --user-data-dir + --virtual-time-budget 으로 띄운다 — 없이 띄우면 떠 있는 크롬에 주소만 넘기고 멈춘다(10/1 실측).
@@ -27,10 +28,13 @@ h=h.replace('if("serviceWorker" in navigator){ try{ navigator.serviceWorker.regi
 h=h.replace("</body>",'''<script>
 function LOG(s){ return fetch("/log",{method:"POST",body:s}).catch(function(){}); }
 var NAMES=(new URLSearchParams(location.search).get("names")||"").split("|").filter(Boolean);
+var PENDING=new URLSearchParams(location.search).get("pending")==="1";   /* PENDING=1 sh tools/law_import.sh "이름" → 시행예정 법령도 받는다(11/6, CDMO 특별법) */
 function waitApp(n){ if(window.appStarted&&S&&S.laws&&S.laws.length) return Promise.resolve(); if(n>60) return Promise.reject(new Error("앱이 안 떴어요"));
   return new Promise(function(r){ setTimeout(r,1000); }).then(function(){ return waitApp(n+1); }); }
 setTimeout(function(){
   lawEmbedRun=function(){ return Promise.resolve(); }; showToast=function(m){ LOG("toast "+m); };
+  if(PENDING){ lawApiSearchAll=function(q){ return lawApiCall({op:"search",target:"eflaw",q:q}).then(function(r){ var seen={},out=[];
+    (r.rows||[]).forEach(function(x){ var k=lawBare(x.name); if(!k||seen[k]) return; seen[k]=1; out.push({name:nfc(x.name),kind:nfc(x.kind||""),eff:String(x.eff||""),admrul:false}); }); return out; }); }; LOG("시행예정 포함 모드"); }
   waitApp(0).then(function(){ LOG("앱 준비 · 법령 "+S.laws.length+"개");
     return NAMES.reduce(function(p,name){ return p.then(function(){
       if(S.laws.some(function(l){ return lawBare(l.name)===lawBare(name); })) return LOG("이미 있음 "+name);
@@ -62,7 +66,7 @@ NAMES=$(python3 -c "import sys,urllib.parse;print(urllib.parse.quote('|'.join(sy
 pkill -f "headless=new" 2>/dev/null || true; sleep 3   # set -e 라 pkill 이 아무것도 못 찾으면(1) 여기서 죽는다 — 10/6 두 번 헛돌았다
 # --screenshot 모드는 10/6 부터 페이지 스크립트가 돌기 전에 멈췄다 → --dump-dom 으로 띄우고, run.log 에 DONE 이 찍히면 크롬을 죽인다(최대 300초)
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu --user-data-dir=/tmp/claude-501/chromeprof \
-  --virtual-time-budget=120000 --dump-dom "http://localhost:8778/index_real.html?tab=laws&names=$NAMES" >/dev/null 2>&1 &
+  --virtual-time-budget=120000 --dump-dom "http://localhost:8778/index_real.html?tab=laws&names=$NAMES&pending=${PENDING:-0}" >/dev/null 2>&1 &
 CP=$!
 for i in $(seq 1 300); do sleep 1; grep -q "DONE" "$R/run.log" 2>/dev/null && break; kill -0 $CP 2>/dev/null || break; done
 kill $CP 2>/dev/null; sleep 1

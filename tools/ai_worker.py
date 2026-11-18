@@ -60,6 +60,11 @@ def check_auth():
         st = json.loads(p.stdout or "{}")
         if st.get("loggedIn") is False:
             set_auth("claude auth status: 로그인 안 됨")
+        elif st.get("loggedIn") is True and AUTH["bad"]:
+            # 11/8 한 번 「로그인 안 됨」이 뜬 뒤 다시 로그인돼도 표시가 안 꺼졌다 — 표시가 켜지면 앱이 일을 API 로 돌려서
+            # 맥이 일감을 못 받으니 「일감 성공 시 해제」도 영영 안 일어났다(11/10 발견). 다시 로그인되면 여기서 끈다.
+            # 진짜 문제가 남아 있으면 다음 일감이 실패하며 다시 켜진다.
+            set_auth(None)
     except Exception as e:
         log("로그인 확인 실패: " + str(e)[:120])
 

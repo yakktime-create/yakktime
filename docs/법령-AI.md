@@ -315,3 +315,10 @@ law-pick 이 돌려주던 `similar`(answers.emb 유사도 0.5 이상 3건)를 �
 상황·그때 본 조문·판단 축·메모. 그 사례가 인용한 조문은 카드에 「이전 사례에서 인용」(`lawPastKeys`, 열쇠는 이름+조 번호 — `ansUsedKey`). 초안(`ansMake`)은
 본보기 2건에 `type·situation·axes·memo` 를 실어 보내고 law-draft 18판이 「그때 판단: 유형 … / 상황 … / 판단 축 … / 메모 …」 한 줄로 프롬프트에 넣는다
 (「이번 민원에 맞는지는 조문으로 다시 확인」). 사례 0건이면 아무것도 안 그린다. 시험 `tests/test_case_box.py`(시험대 ask=1 에 가짜 similar).
+
+## 「로그인이 풀렸어요」가 안 꺼지던 것 (2026-11-10)
+
+11/8 20:24 일꾼의 `claude auth status` 가 한 번 loggedIn:false 를 돌려줘 심장박동이 `noauth` 가 됐다. 그 뒤 로그인은 정상이었는데
+`check_auth()` 가 false 일 때 켜기만 하고 true 일 때 끄지 않았다. 표시가 켜지면 앱이 일을 Haiku API 로 돌리므로 맥에 일감이 안 와서
+「일감 성공 시 해제」도 영영 안 일어났다(이틀간 API 로 돈). `loggedIn:true` 면 표시를 끄도록 고치고 일꾼을 다시 띄웠다(`launchctl kickstart -k`).
+일꾼만 고칠 땐 `setup_mac_worker.sh` 전체(함수 재배포·토큰 필요) 대신 `cp tools/ai_worker.py ~/.yakktime/ && launchctl kickstart -k gui/$(id -u)/com.yakktime.aiworker` 로 충분하다.

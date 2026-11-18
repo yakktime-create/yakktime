@@ -2,7 +2,7 @@
  * 늘 네트워크 먼저(network-first). 성공하면 캐시를 갈아 두고, 실패(오프라인)하면 캐시로 답한다.
  * 그래서 「고쳤는데 그대로」가 생기지 않는다. Supabase 요청은 건드리지 않는다. */
 var CACHE="yakktime-shell-v1";
-var SHELL=["/","/index.html","/app.js","/style.css","/insp_template.json","https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"];
+var SHELL=["/","/index.html","/app.js","/style.css","/insp_template.json","/insp_tpl_es.json","https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"];
 self.addEventListener("install",function(e){
   e.waitUntil(caches.open(CACHE).then(function(c){ return Promise.all(SHELL.map(function(u){ return c.add(u).catch(function(){}); })); }).then(function(){ return self.skipWaiting(); }));
 });

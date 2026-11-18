@@ -338,7 +338,7 @@ function parseNL(input){
 
 /* ========== 렌더링 ========== */
 function view(){ return document.getElementById("view"); }
-var APP_VER="v249";
+var APP_VER="v251";
 function renderTabs(){
   var v=document.getElementById("ver"); if(v) v.textContent=APP_VER;
   document.getElementById("tabs").innerHTML=TAB_LIST.map(function(t){
@@ -2639,6 +2639,9 @@ var BULLET_M0=/(^|\n)[ \t]*m[ \t]+(?=[가-힣]{2})/g;
  * 실제로 쓰인 자리는 두 가지뿐이라 둘 다 가운뎃점이 맞다:
  *   「 유전자변형생물체의 취급」(글머리표) · 「위  수탁」(사이점) */
 var PUA_RE=/[\uE000-\uF8FF]/g;
+/* \uC81C\uC5B4\uBB38\uC790(\uD0ED\u00B7\uC904\uBC14\uAFC8 \uBE7C\uACE0) \u2192 \uBE48\uCE78. \uD06C\uB86C\uC774 \uCC0D\uC740 PDF \uB294 \uBE48\uCE78 \uAE00\uB9AC\uD504\uAC00 \uC720\uB2C8\uCF54\uB4DC\uC5D0 \uC548 \uBB36\uC5EC \uC788\uC5B4 pdf.js \uAC00 \u0001 \uB85C \uBC49\uB294\uB2E4
+ * \u2014 2026-11-08 \uC2DC\uD589\uADDC\uCE59\uC548 70\uCABD \uC804\uBD80\uAC00 \uADF8\uB7AC\uB2E4(\uB0B1\uB9D0 \uC0AC\uC774\uAC00 \uC804\uBD80 \u0001 \uC774\uB77C \uB450 \uB0B1\uB9D0 \uAC80\uC0C9\uC774 \uC548 \uB410\uB2E4). \uC81C\uC5B4\uBB38\uC790\uB294 \uAE00\uC5D0 \uC62C \uC77C\uC774 \uC5C6\uC5B4 \uC9C0\uC6CC\uB3C4 \uC783\uB294 \uAC8C \uC5C6\uB2E4. */
+var CTRL_RE=/[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
 
 /* 국가법령정보센터 PDF는 쪽마다 「법제처 N 국가법령정보센터 + 법령 이름」이 찍힌다.
  * 쪽을 이어 붙이면 이 머리글이 문장 한복판에 끼어서, 「…의료기기에 해당하는」이
@@ -2742,7 +2745,7 @@ function nameHeadRe(name){
 }
 
 function cleanPdfText(t,hre){
-  t=nfc(t);
+  t=nfc(t).replace(CTRL_RE," ");
   /* 지우개를 여럿 받는다 — 「법제처…센터+이름」과 「이름만」을 함께 쓴다 */
   var hs=(hre&&hre.length!=null)?hre:[hre||runHeadRe(t)];
   hs.forEach(function(rx){ if(rx) t=t.replace(rx," "); });
@@ -7145,13 +7148,23 @@ var inspOpenId=null, inspPage="board", inspTpl=null, inspNewOpen=false, inspExpa
 var inspNewAreas=["압축공기·가스"], inspAreasTouched=false;
 
 function inspItems(id){ return (S.insp_items||[]).filter(function(x){ return x.insp_id===id; }).sort(function(a,b){ return (a.seq||0)-(b.seq||0); }); }
-function inspLoadTpl(){
-  if(inspTpl) return Promise.resolve(inspTpl);
-  return fetch("insp_template.json?v="+APP_VER).then(function(r){ return r.json(); }).then(function(t){
-    inspTpl=t; if(t.mine&&t.mine.length&&!inspAreasTouched) inspNewAreas=t.mine.slice();
-    try{ localStorage.setItem("insp_tpl",JSON.stringify(t)); }catch(e){} return t;
+/* 체크리스트(본)는 실사마다 하나 (v251 · 2026-11-18). 본이 하나뿐이면 새 노트가 지난 AZ 원액 본(633·636 줄)을 그대로 복사한다.
+ * 노트의 tpl(판 이름) 앞머리로 파일을 고르고, 새 노트는 맨 앞 본을 복사한다. 옛 노트는 자기 본 그대로라 「새 체크리스트로 바꾸기」 띠도 안 뜬다.
+ * 새 실사 본을 더할 땐 맨 앞에 한 줄 + sw.js SHELL 에 파일 이름. 본의 version 이 앞머리(es- …)로 시작해야 한다. */
+var INSP_TPLS=[{pre:"es-",file:"insp_tpl_es.json"},{pre:"",file:"insp_template.json"}];
+var inspTplOf={};   /* 파일 → 받아 둔 본 */
+function inspTplFile(ver){ for(var i=0;i<INSP_TPLS.length;i++) if(String(ver||"").indexOf(INSP_TPLS[i].pre)===0) return INSP_TPLS[i].file; return INSP_TPLS[INSP_TPLS.length-1].file; }
+function inspWantTpl(){ var cur=inspOpenId&&(S.inspections||[]).find(function(x){ return x.id===inspOpenId; }); return cur?inspTplFile(cur.tpl):INSP_TPLS[0].file; }
+function inspLoadTpl(file){
+  file=file||inspWantTpl();
+  var keep=function(t){ t._file=file; inspTplOf[file]=t; if(file===inspWantTpl()) inspTpl=t;
+    if(file===INSP_TPLS[0].file&&t.mine&&t.mine.length&&!inspAreasTouched) inspNewAreas=t.mine.slice(); return t; };
+  if(inspTplOf[file]) return Promise.resolve(keep(inspTplOf[file]));
+  return fetch(file+"?v="+APP_VER).then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }).then(function(t){
+    try{ localStorage.setItem("insp_tpl:"+file,JSON.stringify(t)); }catch(e){} return keep(t);
   }).catch(function(){
-    try{ var c=localStorage.getItem("insp_tpl"); if(c){ inspTpl=JSON.parse(c); return inspTpl; } }catch(e){}
+    /* 통신이 없으면 기기에 적어 둔 본 — 옛 판(v250 까지)은 「insp_tpl」 한 칸에 AZ 본을 적었다 */
+    try{ var c=localStorage.getItem("insp_tpl:"+file)||(file==="insp_template.json"?localStorage.getItem("insp_tpl"):null); if(c) return keep(JSON.parse(c)); }catch(e){}
     throw new Error("체크리스트 본을 못 불러왔어요. 통신이 되는 곳에서 한 번 열어 주세요.");
   });
 }
@@ -7228,7 +7241,7 @@ function inspDedupe(){
 }
 function inspRefill(insp){
   if(inspBusy) return; inspBusy=true;
-  inspLoadTpl().then(function(t){
+  inspLoadTpl(inspTplFile(insp.tpl)).then(function(t){
     var old=inspItems(insp.id), norm=function(x){ return String(x||"").replace(/\s+/g,""); };
     var carry={}; old.forEach(function(x){ if(x.src&&(x.done||x.memo)) carry[norm(x.text)]={done:x.done,memo:x.memo}; });
     /* 새 본에 같은 글이 없는데 체크·메모가 달린 줄은 지우지 않는다 — 현장에서 적은 것이 조용히 사라진다.
@@ -7272,12 +7285,12 @@ function inspBuildingTags(insp){
 }
 function inspNewHtml(){
   var areas=(inspTpl&&inspTpl.areas)||["제조소 연혁","작업소","시설·환경","압축공기·가스","기준서·SOP","공정밸리데이션","적격성평가","세척밸리데이션","제조기록서","위탁제조","일탈·변경","작업원 위생"];
-  if(!inspNewOpen) return '<div class="add-row quick"><button class="btn" data-act="insp-new">＋ 새 실사 노트</button><span class="muted">체크리스트(바이오 원액 5일)를 복사해서 시작해요</span></div>';
+  if(!inspNewOpen) return '<div class="add-row quick"><button class="btn" data-act="insp-new">＋ 새 실사 노트</button><span class="muted">체크리스트'+(inspTpl&&inspTpl.name?'('+esc(inspTpl.name)+')':'')+'를 복사해서 시작해요</span></div>';
   return '<div class="card composer insp-new">'
     + '<input class="input" id="insp-title" placeholder="업체 · 제조소 (예: ○○바이오 오송)" />'
     + '<div class="insp-new-row"><label>시작일 <input class="input" type="date" id="insp-start" value="'+keyOf(new Date())+'" /></label>'
-    +   '<label>일수 <input class="input insp-days" type="number" id="insp-days" value="5" min="1" max="10" /></label></div>'
-    + '<input class="input" id="insp-buildings" placeholder="건물 (예: 633 변경만, 636 전체)" value="633 변경만, 636 전체, 630 창고, 660 시험실" />'
+    +   '<label>일수 <input class="input insp-days" type="number" id="insp-days" value="'+((inspTpl&&inspTpl.new_days)||5)+'" min="1" max="10" /></label></div>'
+    + '<input class="input" id="insp-buildings" placeholder="건물 (예: 633 변경만, 636 전체)" value="'+esc((inspTpl&&inspTpl.new_buildings)||"")+'" />'
     + '<input class="input" id="insp-partner" placeholder="같이 가는 사람 (예: 김해인 선생님 — 3일차 공유)" />'
     + '<div class="insp-areas"><span class="muted">내 담당</span>'+inspAreaChips(areas,inspNewAreas,"insp-newarea")+'</div>'
     + '<div class="composer-foot"><span class="muted">캘린더에 일정이 같이 들어가요</span><button class="btn quiet sm" data-act="insp-new">닫기</button><button class="btn sm" data-act="insp-create">노트 만들기</button></div>'
@@ -7534,8 +7547,10 @@ function inspNoteHtml(insp){
 function renderInsp(){
   var list=(S.inspections||[]).slice().sort(function(a,b){ return String(b.start_date||"").localeCompare(String(a.start_date||"")); });
   var cur=inspOpenId?list.find(function(x){ return x.id===inspOpenId; }):null;
-  /* 본이 아직 안 왔으면 오는 대로 한 번 더 그린다 — 노트를 열어 둔 채여도(타임 스케줄이 본에 있다) */
-  if(!inspTpl) inspLoadTpl().then(function(){ if(active==="insp") render(); },function(){});
+  /* 노트마다 본이 다르다(v251) — 열린 노트의 본(없으면 새 노트가 복사할 본)으로 바꾸고, 아직 안 왔으면 오는 대로 한 번 더 그린다.
+   * 다른 노트의 본을 잠깐이라도 그리지 않는다 — AZ 타임 스케줄이 스페인 노트에 뜨면 안 된다 */
+  var want=cur?inspTplFile(cur.tpl):INSP_TPLS[0].file;
+  if(!inspTpl||inspTpl._file!==want){ inspTpl=inspTplOf[want]||null; if(!inspTpl) inspLoadTpl(want).then(function(){ if(active==="insp") render(); },function(){}); }
   if(!cur){
     inspOpenId=null;
     view().innerHTML='<div class="page">'+pageHead2("실태조사",list.length?"":"실사 한 건이 노트 한 권이에요. 현장에서 통신이 끊겨도 체크와 메모는 되고, 돌아오면 저장돼요.",null)
@@ -7622,7 +7637,7 @@ function inspCreate(){
   var d=new Date(start+"T00:00:00"); d.setDate(d.getDate()+days-1); var end=keyOf(d);
   var buildings=(val("insp-buildings")||"").split(/[,、]/).map(function(s){ s=s.trim(); if(!s) return null; var m=/^(\S+)\s*(.*)$/.exec(s); return {name:m[1],mode:m[2]||""}; }).filter(Boolean);
   var partner=(val("insp-partner")||"").trim()||null;
-  inspLoadTpl().then(function(t){
+  inspLoadTpl(INSP_TPLS[0].file).then(function(t){
     var insp={id:uuid(),title:title,site:null,start_date:start,end_date:end,buildings:buildings,areas:inspNewAreas.slice(),partner:partner,status:"진행",notes:null,tpl:null};
     insp.tpl=t.version;
     var items=t.items.map(function(x,i){ return {id:uuid(),insp_id:insp.id,page:x.page,section:x.section||null,seq:i+1,kind:x.kind||"task",text:x.text,hint:x.hint||null,building:x.building||null,area:x.area||null,day:x.day||null,done:false,memo:null,grade:null,ref:null,src:x.src||"본"}; });

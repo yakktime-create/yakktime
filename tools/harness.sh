@@ -11,7 +11,7 @@ set -e
 APP="$(cd "$(dirname "$0")/.." && pwd)"
 D="$HOME/.yakktime-uitest"
 mkdir -p "$D"
-cp "$APP/app.js" "$APP/style.css" "$APP/pii.js" "$APP/insp_template.json" "$D/"
+cp "$APP/app.js" "$APP/style.css" "$APP/pii.js" "$APP/insp_template.json" "$APP/insp_tpl_es.json" "$D/"
 cat > "$D/mocksb.js" <<'EOF'
 var MOCK={inspections:[],insp_items:[],schedule:[],events:[],articles:[],mfds:[],archive:[],docs:[],laws:[],refs:[],answers:[],settings:[],judgment_axes:[
   {id:"ax1",name:"제조소 단위 vs 품목 단위",description:"적합판정(제조소)과 사전 GMP 평가(품목)를 가른다",created_at:"2026-10-31T01:00:00Z"},{id:"ax2",name:"변경허가 vs 변경신고",description:"허가 사항 변경이 어느 절차인지",created_at:"2026-10-31T01:00:01Z"},
@@ -30,7 +30,7 @@ MOCK.answers=[{id:"an1",title:"임상시험용 제조시설 · GMP 적합성 평
  {id:"an2",title:"백신 제조소 증축 · 변경적합판정",question:"백신 자사 적합판정과 유전자재조합 CMO 적합판정을 받은 제조소의 증축…",cites:[{law:"약사법",label:"제38조의2"}],mode:"plain",draft:"1. 안녕하십니까.\n2. 제조소 증축에 따른 변경적합판정에 대한 질의로 이해됩니다.",final:null,created_at:"2026-10-10T09:00:00Z",due:K(3),sent_at:null},
  {id:"an3",title:"보툴리눔 · 다른 의약품 · 2차 포장 공용",question:"보툴리눔 독소 제제와 다른 의약품의 2차 포장 작업소 공용…",cites:[],mode:"plain",draft:"1. 안녕하십니까.\n2. 보툴리눔 독소 제제의 포장작업소 공용에 대한 질의로 이해됩니다.",final:"1. 안녕하십니까.\n2. (고친 글)",created_at:"2026-09-10T09:00:00Z",due:K(-20),sent_at:"2026-09-12T02:00:00Z"}];
 MOCK.articles=[{id:"a1",title:"반려동물 항생제 오남용",status:"기획",memo:"10월호"},{id:"a2",title:"동물용 백신 콜드체인",status:"작성중",memo:""},{id:"a3",title:"수의사 처방전 제도",status:"기고완료",memo:"9월호"}];
-(function(){ var TPL=window.__TPL; if(!TPL) return; var id="insp-1";
+(function(){ var TPL=/[?&]tpl=es/.test(location.search)?window.__TPL_ES:window.__TPL; if(!TPL) return; var id="insp-1";   /* &tpl=es → 스페인 본 노트(v251) */
   MOCK.inspections=[{id:id,title:"AstraZeneca Pharmaceuticals LP",site:null,start_date:"2026-09-14",end_date:"2026-09-18",buildings:[{name:"633",mode:"변경만"},{name:"636",mode:"전체"}],areas:TPL.mine.slice(),partner:"김해인 선생님",status:"진행",notes:null,tpl:TPL.version}];
   MOCK.insp_items=TPL.items.map(function(x,i){ return {id:"it"+i,insp_id:id,page:x.page,section:x.section||null,seq:i+1,kind:x.kind||"task",text:x.text,hint:x.hint||null,building:x.building||null,area:x.area||null,day:x.day||null,done:i%7===0,memo:null,grade:null,ref:null,src:"본"}; });
   MOCK.insp_items.push({id:"tr1",insp_id:id,page:"board",section:null,seq:9001,kind:"track",text:"압축공기·가스",hint:null,building:null,area:"압축공기·가스",day:null,done:false,memo:"담당 Mike · 636 사용점 OQ/PQ 요청",grade:"보는 중",ref:"4-E (633만), 1-G",src:null});
@@ -47,9 +47,9 @@ window.supabase={createClient:function(){ return { from:q,
 EOF
 python3 - "$APP/index.html" "$D" <<'PY'
 import io,sys
-h=io.open(sys.argv[1],encoding='utf-8').read(); tpl=io.open(sys.argv[2]+'/insp_template.json',encoding='utf-8').read()
+h=io.open(sys.argv[1],encoding='utf-8').read(); tpl=io.open(sys.argv[2]+'/insp_template.json',encoding='utf-8').read(); tpl_es=io.open(sys.argv[2]+'/insp_tpl_es.json',encoding='utf-8').read()
 h=h.replace('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>',
-  '<script>window.onerror=function(m,s,l,c){ document.title="ERR "+m+" @"+l+":"+c; };</script>\n<script>window.__TPL='+tpl+';</script>\n<script src="mocksb.js"></script>')
+  '<script>window.onerror=function(m,s,l,c){ document.title="ERR "+m+" @"+l+":"+c; };</script>\n<script>window.__TPL='+tpl+'; window.__TPL_ES='+tpl_es+';</script>\n<script src="mocksb.js"></script>')
 h=h.replace('if("serviceWorker" in navigator){ try{ navigator.serviceWorker.register("sw.js"); }catch(e){} }','')
 h=h.replace('</body>','''<script>
 window.T=function(s){ document.title=s; };
